@@ -8,7 +8,7 @@ Engineering judgment for AI coding agents, for people who build by prompting and
 | --- | --- | --- | --- | --- |
 | [guard](skills/guard/SKILL.md) | One change | Judges how risky a change is, keeps what must stay true working, and reuses what already exists | On its own whenever code changes | In use, not yet validated |
 | [forge](skills/forge/SKILL.md) | One feature | Plans, builds and reviews an important feature end to end, then opens a pull request | You type `/forge <what to build>`; `/forge` alone resumes an unfinished run | In use, not yet validated |
-| ground | Whole product | Sets up a new product's foundations, or checks an existing one before release | — | Planned |
+| [ground](skills/ground/SKILL.md) | Whole product | Sets up a new product's foundations, or checks an existing one, fixes what you approve, and checks again | You type `/ground`; `/ground release` before launch | In use, not yet validated |
 
 Where this is going (three skills: guard, forge, ground) and why: [docs/proposals/skillset.md](docs/proposals/skillset.md).
 
@@ -17,6 +17,10 @@ Where this is going (three skills: guard, forge, ground) and why: [docs/proposal
 For Claude Code, copy `skills/guard/` to your project's `.claude/skills/guard/`. For Codex, copy it to `.agents/skills/guard/`. Ask your agent to confirm where it looks for skills before you copy.
 
 The skill is general-purpose. Your project's own rules (architecture, wording, design system, deployment) stay in your project's documentation. Do not replace them with this repository.
+
+## Install ground
+
+Claude Code only. Copy `skills/ground/` to `.claude/skills/ground/`, with guard installed too. Its optional safety hooks need Python 3; ground installs them only if you agree.
 
 ## Install forge
 

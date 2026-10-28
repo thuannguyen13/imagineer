@@ -25,10 +25,10 @@ Every phase ends with the clean bar and follows the validated-status rule, both 
 - [x] Seeded scenarios with expected findings: ground G1–G5, forge F1, F2, F4, F5, F6, F8, F9, F10, guard low / medium / high (F3 and F7 retired; see `bench/README.md`).
 - [ ] Baseline results for the P1 forge and current guard. Deferred by the user to before P5 (2026-10-28).
 
-## P3 — ground
+## P3 — ground — skill done 2026-10-28
 
-- [ ] Set up and check modes; checklist owned by ground; check → user approves → fix → re-check; `release` adds launch items.
-- [ ] Opt-in hooks: destructive commands, prod access, Stop hook running the project's checks; hook scripts tested.
+- [x] Set up and check modes; checklist owned by ground; check → user approves → fix → re-check; `release` adds launch items.
+- [x] Opt-in hooks: destructive commands, prod access, Stop hook running the project's checks; hook scripts tested.
 - [ ] Passes G1–G5 and one real-project run; marked validated.
 
 ## P4 — guard
