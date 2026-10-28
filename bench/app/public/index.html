@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Expenses</title>
+</head>
+<body>
+  <label>Signed in as
+    <select id="user">
+      <option value="1">Alice (member, A)</option>
+      <option value="2">Bob (member, A)</option>
+      <option value="3">Carol (approver, A)</option>
+      <option value="4">Dave (approver, B)</option>
+      <option value="5">Erin (admin)</option>
+      <option value="6">Frank (member, B)</option>
+    </select>
+  </label>
+  <form id="new">
+    <input name="amount" type="number" min="1" placeholder="Amount (cents)" required>
+    <input name="description" placeholder="Description" required>
+    <button>Add expense</button>
+  </form>
+  <p id="error" role="alert"></p>
+  <table id="list"></table>
+  <script src="/config.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

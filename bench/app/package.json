@@ -1,0 +1,18 @@
+{
+  "name": "bench-expenses",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.ts",
+    "test": "node --test",
+    "typecheck": "tsc --noEmit",
+    "backup": "node ops/backup.ts"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "0.5.13"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "5.9.3"
+  }
+}

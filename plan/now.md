@@ -19,11 +19,11 @@ Every phase ends with the clean bar and follows the validated-status rule, both 
 - [x] Project-specific hard rules move to a `constraints` setup key; "plan review gate" → "plan review".
 - [x] Run state moves from the session scratchpad into the repo so a new session can resume; worktree agents are named.
 
-## P2 — Bench fixture and baseline
+## P2 — Bench fixture and baseline — fixture done 2026-10-28
 
-- [ ] `bench/app/`: small TypeScript app, 3 roles, one record lifecycle, server-side permission checks, Postgres.
-- [ ] Seeded scenarios with expected findings: ground G1–G5, forge F1–F10, guard low / medium / high.
-- [ ] Baseline results for the P1 forge and current guard.
+- [x] `bench/app/`: small TypeScript app, 3 roles, one record lifecycle, server-side permission checks, Postgres.
+- [x] Seeded scenarios with expected findings: ground G1–G5, forge F1, F2, F4, F5, F6, F8, F9, F10, guard low / medium / high (F3 and F7 retired; see `bench/README.md`).
+- [ ] Baseline results for the P1 forge and current guard. Deferred by the user to before P5 (2026-10-28).
 
 ## P3 — ground
 
@@ -40,7 +40,7 @@ Every phase ends with the clean bar and follows the validated-status rule, both 
 ## P5 — forge redesign
 
 - [ ] Requirements contract, risk tiers, permission and state tables, proof seen failing, re-run evidence, traceability, exit criteria, tiered reviewers, `--verify <branch|PR>`.
-- [ ] Each change kept only if bench F1–F10 catches at least the baseline with fewer spawns.
+- [ ] Each change kept only if the forge bench scenarios catch at least the baseline with fewer spawns.
 - [ ] One real-project run; marked validated.
 
 ## P6 — Cross-skill cleanup
