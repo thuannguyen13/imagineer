@@ -31,9 +31,9 @@ Every phase ends with the clean bar and follows the validated-status rule, both 
 - [x] Opt-in hooks: destructive commands, prod access, Stop hook running the project's checks; hook scripts tested.
 - [ ] Passes G1–G5 and one real-project run; marked validated.
 
-## P4 — guard
+## P4 — guard — edit done 2026-10-28
 
-- [ ] Reads grounding docs; escalates consequence first; points to `/forge` and `/ground`.
+- [x] Reads grounding docs; escalates consequence first; points to `/forge` and `/ground`.
 - [ ] Passes the low / medium / high scenarios: no planning on low-risk changes, relevant patterns found on medium, missing lifecycle or security requirements raised before coding on high.
 - [ ] One real-project run; marked validated.
 
