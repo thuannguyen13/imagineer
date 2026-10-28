@@ -8,16 +8,16 @@ Every phase ends with the clean bar and follows the validated-status rule, both 
 
 - [x] Record decisions, README, plan, proposal (2026-10-28, branch `plan/skillset-v2`).
 
-## P1 — forge: rename and fix defects (same design)
+## P1 — forge: rename and fix defects (same design) — done 2026-10-28
 
-- [ ] Rename `skills/feature-review-loop/` to `skills/forge/`; `disable-model-invocation: true`.
-- [ ] Dry run exits before any worktree, issue or state file is created.
-- [ ] Lifecycle `awaiting_merge` → `merged`; the merge closes the issue.
-- [ ] Severity by impact; define default roles; custom-role leaks no longer Minor.
-- [ ] Stable `F<k>` finding IDs; escalation uses them; pass condition uses validated findings.
-- [ ] `deps` in every worktree; tester c verifies through the app only; drop tester d's blind-spot claim.
-- [ ] Project-specific hard rules move to a `constraints` setup key; "plan review gate" → "plan review".
-- [ ] Run state moves from the session scratchpad into the repo so a new session can resume; worktree agents are named.
+- [x] Rename `skills/feature-review-loop/` to `skills/forge/`; `disable-model-invocation: true`.
+- [x] Dry run exits before any worktree, issue or state file is created.
+- [x] Lifecycle `awaiting_merge` → `merged`; the merge closes the issue.
+- [x] Severity by impact; define default roles; custom-role leaks no longer Minor.
+- [x] Stable `F<k>` finding IDs; escalation uses them; pass condition uses validated findings.
+- [x] `deps` in every worktree; tester c verifies through the app only; drop tester d's blind-spot claim.
+- [x] Project-specific hard rules move to a `constraints` setup key; "plan review gate" → "plan review".
+- [x] Run state moves from the session scratchpad into the repo so a new session can resume; worktree agents are named.
 
 ## P2 — Bench fixture and baseline
 

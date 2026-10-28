@@ -7,7 +7,7 @@ Engineering judgment for AI coding agents, for people who build by prompting and
 | Skill | Covers | What it does | How it starts | Status |
 | --- | --- | --- | --- | --- |
 | [guard](skills/guard/SKILL.md) | One change | Judges how risky a change is, keeps what must stay true working, and reuses what already exists | On its own whenever code changes | In use, not yet validated |
-| [feature-review-loop](skills/feature-review-loop/SKILL.md) | One feature | Plans, builds and reviews an important feature end to end, then opens a pull request | You type `/feature-review-loop <what to build>` | In use, not yet validated; becoming **forge** |
+| [forge](skills/forge/SKILL.md) | One feature | Plans, builds and reviews an important feature end to end, then opens a pull request | You type `/forge <what to build>`; `/forge` alone resumes an unfinished run | In use, not yet validated |
 | ground | Whole product | Sets up a new product's foundations, or checks an existing one before release | — | Planned |
 
 Where this is going (three skills: guard, forge, ground) and why: [docs/proposals/skillset.md](docs/proposals/skillset.md).
@@ -18,9 +18,9 @@ For Claude Code, copy `skills/guard/` to your project's `.claude/skills/guard/`.
 
 The skill is general-purpose. Your project's own rules (architecture, wording, design system, deployment) stay in your project's documentation. Do not replace them with this repository.
 
-## Install feature-review-loop
+## Install forge
 
-Claude Code only: it runs several helper agents, each working in its own copy of your repository. Copy `skills/feature-review-loop/` to `.claude/skills/feature-review-loop/`. Then add the values its **Project setup** table lists (how to run your checks, the test server and port, your issue board, a name prefix for test records) to your project's CLAUDE.md. The skill asks for any that are missing.
+Claude Code only: it runs several helper agents; the ones that build or test work in their own copy of your repository. It keeps its run files in `.claude/forge/` in your project, hidden from git. Copy `skills/forge/` to `.claude/skills/forge/`. If you installed it under its old name, delete `.claude/skills/feature-review-loop/`. Then add the values its **Project setup** table lists (how to run your checks, the test server and port, your issue board, a name prefix for test records) to your project's CLAUDE.md. The skill asks for any that are missing.
 
 It is costly by design: several large-model agents per review round. Use it for features where a missed rule or permission is expensive, not for routine work.
 
