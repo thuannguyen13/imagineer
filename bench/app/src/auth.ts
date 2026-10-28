@@ -1,4 +1,5 @@
 import type { Db } from './db.ts';
+import { config } from './config.ts';
 
 export type Role = 'member' | 'approver' | 'admin';
 export type User = { id: number; name: string; role: Role; team: string };
@@ -11,8 +12,9 @@ export class HttpError extends Error {
   }
 }
 
-/** Dev sign-in: the x-user-id header names the user. */
+/** Dev sign-in: the x-user-id header names the user. Refused outside dev; real sign-in is out of scope. */
 export async function currentUser(db: Db, header: string | undefined): Promise<User> {
+  if (config.env !== 'dev') throw new HttpError(401, 'Sign-in is not available here.');
   const id = Number(header);
   if (!Number.isInteger(id)) throw new HttpError(401, 'Sign in first.');
   const { rows } = await db.query<User>('select id, name, role, team from users where id = $1', [id]);

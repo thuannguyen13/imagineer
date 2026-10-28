@@ -10,7 +10,11 @@ type Route = (db: Db, req: IncomingMessage, params: string[]) => Promise<unknown
 async function body(req: IncomingMessage): Promise<Record<string, unknown>> {
   let text = '';
   for await (const chunk of req) text += chunk;
-  return text ? JSON.parse(text) : {};
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    throw new HttpError(400, 'Send valid JSON.');
+  }
 }
 
 const user = (db: Db, req: IncomingMessage) => currentUser(db, req.headers['x-user-id'] as string | undefined);

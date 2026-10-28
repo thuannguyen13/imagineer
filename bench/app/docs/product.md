@@ -11,4 +11,4 @@
 
 ## Out of scope
 
-Payments, receipts, currencies other than one, editing after submission.
+Payments, receipts, currencies other than one, editing after submission. Real sign-in: the development sign-in is refused outside dev.

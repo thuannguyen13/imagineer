@@ -2,6 +2,8 @@ const { apiBase } = window.APP_CONFIG;
 const userSelect = document.getElementById('user');
 const errorBox = document.getElementById('error');
 
+const escape = (text) => String(text).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
 async function api(method, path, body) {
   const res = await fetch(apiBase + path, {
     method,
@@ -20,7 +22,7 @@ async function render() {
   document.getElementById('list').innerHTML = expenses
     .map((e) => {
       const submit = e.owner_id === me && e.status === 'draft' ? `<button data-submit="${e.id}">Submit</button>` : '';
-      return `<tr><td>${e.description}</td><td>${(e.amount_cents / 100).toFixed(2)}</td><td>${e.status}</td><td>${submit}</td></tr>`;
+      return `<tr><td>${escape(e.description)}</td><td>${(e.amount_cents / 100).toFixed(2)}</td><td>${e.status}</td><td>${submit}</td></tr>`;
     })
     .join('');
 }
