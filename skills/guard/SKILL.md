@@ -11,7 +11,7 @@ Protect the system while delivering the smallest complete change. Use existing p
 
 - **Low:** Copy, styling, presentation with no behavior or data impact. Find the nearby pattern, change it, run an appropriate check. No plan.
 - **Medium:** Forms, workflows, validation, business behavior. Inspect the owning feature, dependencies, relevant rules and tests; implement and verify.
-- **High:** Schema, deletion, authorization, authentication, shared contracts, migration, deployment, recovery. Identify invariants and risks first. Present a concise approach and request approval for destructive, security-sensitive, or difficult-to-reverse decisions.
+- **High:** Schema, deletion, authorization, authentication, shared contracts, migration, deployment, recovery. Identify invariants and risks first. Before writing any code, present a concise approach, including what it destroys, exposes or makes hard to reverse, and wait for the user's approval.
 
 If a seemingly small change crosses a high-risk boundary, treat it as high risk.
 
