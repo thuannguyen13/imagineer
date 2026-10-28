@@ -35,7 +35,8 @@ insert into users values
 on conflict do nothing;
 
 grant select (id, name, role, team) on users to app_user;
-grant select, insert, update on expenses to app_user;
+grant select, insert on expenses to app_user;
+grant update (status) on expenses to app_user;
 grant usage on sequence expenses_id_seq to app_user;
 
 -- Who can see an expense: its owner; an approver of its team once submitted; any admin.
@@ -55,11 +56,18 @@ drop policy if exists expenses_read on expenses;
 create policy expenses_read on expenses for select to app_user
   using (can_see_expense(owner_id, team, status));
 
+-- New expenses: your own, in your own team, as a draft.
 drop policy if exists expenses_insert on expenses;
 create policy expenses_insert on expenses for insert to app_user
-  with check (owner_id = current_setting('app.uid')::int);
+  with check (
+    owner_id = current_setting('app.uid')::int
+    and status = 'draft'
+    and team = (select u.team from users u where u.id = current_setting('app.uid')::int)
+  );
 
+-- Owners move their own drafts to submitted; nothing else changes through the app role.
 drop policy if exists expenses_update on expenses;
-create policy expenses_update on expenses for update to app_user
-  using (can_see_expense(owner_id, team, status))
-  with check (can_see_expense(owner_id, team, status));
+drop policy if exists expenses_submit on expenses;
+create policy expenses_submit on expenses for update to app_user
+  using (owner_id = current_setting('app.uid')::int and status = 'draft')
+  with check (owner_id = current_setting('app.uid')::int and status in ('draft', 'submitted'));
