@@ -13,7 +13,7 @@ Approvers decide their team's submitted expenses; admins decide any team's. Deci
 - **R2** An admin can approve or reject a submitted expense of any team.
 - **R3** Members cannot decide expenses, and no one can decide their own expense.
 - **R4** Only submitted expenses can be decided, and a decision is final.
-- **R5** The approval queue lists submitted expenses the user may decide, with owner name, amount, description and date; no email or bank details.
+- **R5** The approval queue (`GET /api/queue`) lists submitted expenses the user may decide, with owner name, amount, description and date; no email or bank details.
 - **R6** The Approve and Reject buttons appear exactly where the server would accept the action.
 
 ## Where it applies
@@ -24,7 +24,7 @@ Approvers decide their team's submitted expenses; admins decide any team's. Deci
 | Tests | `test/approval.test.ts` |
 | Docs | `docs/product.md`, `docs/permissions.md`, `docs/data-model.md`, `docs/glossary.md` |
 
-Excluded: editing after a decision, notifications (out of scope in `docs/product.md`).
+Excluded: editing after a decision, notifications (out of scope in `docs/product.md`), and a separate queue screen (the expense list already shows approvers what they can decide).
 
 ## Shared mechanism
 Reuse `asUser` for scope and the check-then-conditional-write pattern from `submitExpense`. No new permission mechanism.
