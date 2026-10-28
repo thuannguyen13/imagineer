@@ -13,3 +13,8 @@
 ## Acceptance
 
 Guard is useful if it catches consequential omissions and drift while leaving routine changes nearly as fast as before. Do not declare success from a drafted skill alone.
+
+## Feature-review-loop — generalization
+
+- [x] Move app-specific values into a Project setup table.
+- [ ] Run it once in a second project; confirm the setup table is complete and `n/a` keys skip their checks without hiding unproven requirements.

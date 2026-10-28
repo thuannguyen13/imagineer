@@ -15,3 +15,7 @@ Imagineer describes the review method. A consuming project's architecture, busin
 ## 2026-10-13 — Enforcement over reminders
 
 When an issue recurs, first consider automated checks, tests, constraints, or improved code ownership. Only add more skill text if it solves a verified gap.
+
+## 2026-10-28 — Feature-review-loop as an opt-in exception
+
+Add feature-review-loop despite "no multi-agent ceremony by default". It is used in practice for end-to-end feature work, and it runs only on explicit request, so routine work keeps Guard's cost. App-specific values (commands, ports, board, test prefix) moved out of the skill into a Project setup table that each consuming project fills in.
