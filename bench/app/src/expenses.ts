@@ -40,14 +40,16 @@ export async function createExpense(db: Db, user: User, input: { amount_cents: u
 /** Owner submits their own draft for approval. */
 export function submitExpense(db: Db, user: User, id: number): Promise<Expense> {
   return asUser(db, user.id, async (tx) => {
-    const { rows } = await tx.query<Expense>(`select ${columns} from expenses where id = $1 for update`, [id]);
+    const { rows } = await tx.query<Expense>(`select ${columns} from expenses where id = $1`, [id]);
     const expense = rows[0];
     if (!expense || expense.owner_id !== user.id) throw notFound();
     if (expense.status !== 'draft') throw new HttpError(409, 'Only drafts can be submitted.');
+    // Writes only while still a draft, so two submits at once cannot both succeed.
     const updated = await tx.query<Expense>(
-      `update expenses set status = 'submitted' where id = $1 returning ${columns}`,
+      `update expenses set status = 'submitted' where id = $1 and status = 'draft' returning ${columns}`,
       [id],
     );
-    return updated.rows[0]!;
+    if (!updated.rows[0]) throw new HttpError(409, 'Only drafts can be submitted.');
+    return updated.rows[0];
   });
 }

@@ -1,6 +1,6 @@
 # Expenses (bench fixture)
 
-Team members record expenses and submit them for approval. Docs: `docs/product.md`, `docs/permissions.md`, `docs/data-model.md`.
+Team members record expenses and submit them for approval. Docs: `docs/product.md`, `docs/permissions.md`, `docs/data-model.md`, `docs/decisions.md`, `docs/glossary.md`.
 
 ## Commands
 
