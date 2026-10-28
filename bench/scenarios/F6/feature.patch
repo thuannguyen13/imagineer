@@ -1,0 +1,214 @@
+diff --git a/docs/permissions.md b/docs/permissions.md
+index c714953..35d30c7 100644
+--- a/docs/permissions.md
++++ b/docs/permissions.md
+@@ -11,6 +11,10 @@ Roles shipped by default: **member**, **approver**, **admin**. Each user belongs
+ | Create an expense (as owner) | yes | yes | yes |
+ | Submit own draft | yes | yes | yes |
+ | Submit someone else's expense | no | no | no |
++| See the approval queue | no | own team | all teams |
++| Approve or reject a submitted expense | no | own team | any team |
++| Approve or reject own expense | no | no | no |
++| Change a decision | no | no | no |
+ 
+ The server enforces each rule; the database enforces visibility with row-level security as a second line. A refused action on a record the user cannot see gets the same "Expense not found." as a missing record.
+ 
+diff --git a/docs/product.md b/docs/product.md
+index 0950a09..fefa12c 100644
+--- a/docs/product.md
++++ b/docs/product.md
+@@ -7,7 +7,7 @@
+ 
+ 1. A member records an expense as a draft.
+ 2. The member submits the draft for approval.
+-3. An approver of the member's team approves or rejects it. *(planned)*
++3. An approver of the member's team, or an admin, approves or rejects it. The decision is final.
+ 
+ ## Out of scope
+ 
+diff --git a/public/app.js b/public/app.js
+index 9902d06..535b964 100644
+--- a/public/app.js
++++ b/public/app.js
+@@ -19,10 +19,14 @@ async function render() {
+   errorBox.textContent = '';
+   const expenses = await api('GET', '/expenses');
+   const me = Number(userSelect.value);
++  const canDecide = userSelect.selectedOptions[0].dataset.role !== 'member';
+   document.getElementById('list').innerHTML = expenses
+     .map((e) => {
+       const submit = e.owner_id === me && e.status === 'draft' ? `<button data-submit="${e.id}">Submit</button>` : '';
+-      return `<tr><td>${escape(e.description)}</td><td>${(e.amount_cents / 100).toFixed(2)}</td><td>${e.status}</td><td>${submit}</td></tr>`;
++      const decide = canDecide && e.owner_id !== me && e.status === 'submitted'
++        ? `<button data-approve="${e.id}">Approve</button><button data-reject="${e.id}">Reject</button>`
++        : '';
++      return `<tr><td>${escape(e.description)}</td><td>${(e.amount_cents / 100).toFixed(2)}</td><td>${e.status}</td><td>${submit}${decide}</td></tr>`;
+     })
+     .join('');
+ }
+@@ -39,8 +43,10 @@ document.getElementById('new').addEventListener('submit', (event) => {
+ });
+ 
+ document.getElementById('list').addEventListener('click', (event) => {
+-  const id = event.target.dataset.submit;
+-  if (id) run(() => api('POST', `/expenses/${id}/submit`));
++  const { submit, approve, reject } = event.target.dataset;
++  if (submit) run(() => api('POST', `/expenses/${submit}/submit`));
++  if (approve) run(() => api('POST', `/expenses/${approve}/approve`));
++  if (reject) run(() => api('POST', `/expenses/${reject}/reject`));
+ });
+ 
+ userSelect.addEventListener('change', () => run(async () => {}));
+diff --git a/public/index.html b/public/index.html
+index 4c68778..736bfc0 100644
+--- a/public/index.html
++++ b/public/index.html
+@@ -7,12 +7,12 @@
+ <body>
+   <label>Signed in as
+     <select id="user">
+-      <option value="1">Alice (member, A)</option>
+-      <option value="2">Bob (member, A)</option>
+-      <option value="3">Carol (approver, A)</option>
+-      <option value="4">Dave (approver, B)</option>
+-      <option value="5">Erin (admin)</option>
+-      <option value="6">Frank (member, B)</option>
++      <option value="1" data-role="member">Alice (member, A)</option>
++      <option value="2" data-role="member">Bob (member, A)</option>
++      <option value="3" data-role="approver">Carol (approver, A)</option>
++      <option value="4" data-role="approver">Dave (approver, B)</option>
++      <option value="5" data-role="admin">Erin (admin)</option>
++      <option value="6" data-role="member">Frank (member, B)</option>
+     </select>
+   </label>
+   <form id="new">
+diff --git a/src/approvals.ts b/src/approvals.ts
+new file mode 100644
+index 0000000..4e1c14e
+--- /dev/null
++++ b/src/approvals.ts
+@@ -0,0 +1,41 @@
++import { asUser, type Db } from './db.ts';
++import { HttpError, type User } from './auth.ts';
++import type { Expense } from './expenses.ts';
++
++export type Decision = 'approved' | 'rejected';
++export type QueueItem = { id: number; owner_name: string; amount_cents: number; description: string; created_at: string };
++
++const columns = 'id, owner_id, team, amount_cents, description, status';
++
++/** Submitted expenses the user may decide; row-level security limits approvers to their team. */
++export async function listQueue(db: Db, user: User): Promise<QueueItem[]> {
++  if (user.role === 'member') throw new HttpError(403, 'Only approvers and admins have an approval queue.');
++  return asUser(db, user.id, async (tx) => {
++    const { rows } = await tx.query<QueueItem>(
++      `select e.id, u.name as owner_name, e.amount_cents, e.description, e.created_at
++         from expenses e join users u on u.id = e.owner_id
++        where e.status = 'submitted' and e.owner_id <> $1
++        order by e.created_at`,
++      [user.id],
++    );
++    return rows;
++  });
++}
++
++/** Approves or rejects a submitted expense. Permission, then record scope, then the rule, under lock. */
++export async function decideExpense(db: Db, user: User, id: number, decision: Decision): Promise<Expense> {
++  if (user.role === 'member') throw new HttpError(403, 'Only approvers and admins can decide expenses.');
++  return asUser(db, user.id, async (tx) => {
++    const { rows } = await tx.query<Expense>(`select ${columns} from expenses where id = $1 for update`, [id]);
++    const expense = rows[0];
++    if (!expense) throw new HttpError(404, 'Expense not found.');
++    if (expense.owner_id === user.id) throw new HttpError(403, 'You cannot decide your own expense.');
++    if (expense.status !== 'submitted') throw new HttpError(409, 'Only submitted expenses can be decided.');
++    const updated = await tx.query<Expense>(
++      `update expenses set status = $2, decided_by = $3, decided_at = now()
++        where id = $1 and status = 'submitted' returning ${columns}`,
++      [id, decision, user.id],
++    );
++    return updated.rows[0]!;
++  });
++}
+diff --git a/src/server.ts b/src/server.ts
+index 2114801..c03658d 100644
+--- a/src/server.ts
++++ b/src/server.ts
+@@ -4,6 +4,7 @@ import { config } from './config.ts';
+ import { openDb, type Db } from './db.ts';
+ import { currentUser, HttpError } from './auth.ts';
+ import { createExpense, listExpenses, submitExpense } from './expenses.ts';
++import { decideExpense, listQueue } from './approvals.ts';
+ 
+ type Route = (db: Db, req: IncomingMessage, params: string[]) => Promise<unknown>;
+ 
+@@ -26,6 +27,9 @@ const routes: [string, RegExp, Route][] = [
+     return createExpense(db, await user(db, req), { amount_cents: input.amount_cents, description: input.description });
+   }],
+   ['POST', /^\/api\/expenses\/(\d+)\/submit$/, async (db, req, [id]) => submitExpense(db, await user(db, req), Number(id))],
++  ['GET', /^\/api\/queue$/, async (db, req) => listQueue(db, await user(db, req))],
++  ['POST', /^\/api\/expenses\/(\d+)\/approve$/, async (db, req, [id]) => decideExpense(db, await user(db, req), Number(id), 'approved')],
++  ['POST', /^\/api\/expenses\/(\d+)\/reject$/, async (db, req, [id]) => decideExpense(db, await user(db, req), Number(id), 'rejected')],
+ ];
+ 
+ const staticFiles: Record<string, string> = { '/': 'index.html', '/app.js': 'app.js', '/config.js': 'config.js' };
+diff --git a/test/approval.test.ts b/test/approval.test.ts
+new file mode 100644
+index 0000000..5dbe2c0
+--- /dev/null
++++ b/test/approval.test.ts
+@@ -0,0 +1,55 @@
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import { openDb } from '../src/db.ts';
++import type { User } from '../src/auth.ts';
++import { createExpense, submitExpense } from '../src/expenses.ts';
++import { decideExpense, listQueue } from '../src/approvals.ts';
++
++const alice: User = { id: 1, name: 'Alice', role: 'member', team: 'A' };
++const carol: User = { id: 3, name: 'Carol', role: 'approver', team: 'A' };
++const erin: User = { id: 5, name: 'Erin', role: 'admin', team: 'A' };
++const frank: User = { id: 6, name: 'Frank', role: 'member', team: 'B' };
++
++async function submitted(db: Awaited<ReturnType<typeof openDb>>, owner: User, description: string) {
++  const expense = await createExpense(db, owner, { amount_cents: 1000, description });
++  return submitExpense(db, owner, expense.id);
++}
++
++test('R1: an approver approves or rejects a submitted expense of their team', async () => {
++  const db = await openDb();
++  const one = await submitted(db, alice, 'Train');
++  const two = await submitted(db, alice, 'Taxi');
++  assert.equal((await decideExpense(db, carol, one.id, 'approved')).status, 'approved');
++  assert.equal((await decideExpense(db, carol, two.id, 'rejected')).status, 'rejected');
++});
++
++test('R2: an admin decides expenses of any team', async () => {
++  const db = await openDb();
++  const expense = await submitted(db, frank, 'Flight');
++  assert.equal((await decideExpense(db, erin, expense.id, 'approved')).status, 'approved');
++});
++
++test('R3: members cannot decide, and no one decides their own expense', async () => {
++  const db = await openDb();
++  const expense = await submitted(db, alice, 'Hotel');
++  await assert.rejects(decideExpense(db, alice, expense.id, 'approved'), { status: 403 });
++  const own = await submitted(db, carol, 'Own');
++  await assert.rejects(decideExpense(db, carol, own.id, 'approved'), { status: 403 });
++});
++
++test('R4: only submitted expenses can be decided, and a decision is final', async () => {
++  const db = await openDb();
++  const draft = await createExpense(db, alice, { amount_cents: 500, description: 'Draft' });
++  await assert.rejects(decideExpense(db, erin, draft.id, 'approved'), { status: 409 });
++  const expense = await submitted(db, alice, 'Meal');
++  await decideExpense(db, carol, expense.id, 'rejected');
++  await assert.rejects(decideExpense(db, carol, expense.id, 'approved'), { status: 409 });
++});
++
++test('R5: the queue shows submitted expenses without personal or bank details', async () => {
++  const db = await openDb();
++  await submitted(db, alice, 'Books');
++  const queue = await listQueue(db, carol);
++  assert.deepEqual(Object.keys(queue[0]!).sort(), ['amount_cents', 'created_at', 'description', 'id', 'owner_name']);
++  await assert.rejects(listQueue(db, alice), { status: 403 });
++});

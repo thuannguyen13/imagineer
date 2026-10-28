@@ -1,0 +1,23 @@
+{
+ "round": 1,
+ "streak": 1,
+ "rounds": [
+  {
+   "round": 1,
+   "sha": "same as state.sha",
+   "verdict": "PASS",
+   "critical": 0,
+   "major": 0,
+   "not_proven": 0,
+   "drift_files": 0,
+   "drift_findings": 0,
+   "dropped_false_positives": 0,
+   "spawns": 5,
+   "models": [
+    "opus",
+    "sonnet"
+   ],
+   "tokens": null
+  }
+ ]
+}

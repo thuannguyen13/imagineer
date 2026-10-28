@@ -1,0 +1,11 @@
+diff --git a/public/config.js b/public/config.js
+index 6e8f74f..6945cc9 100644
+--- a/public/config.js
++++ b/public/config.js
+@@ -1,2 +1,5 @@
+ // Values the browser may see. Never put secrets here.
+-window.APP_CONFIG = { apiBase: '/api' };
++window.APP_CONFIG = {
++  apiBase: '/api',
++  paymentApiKey: '9f2c7a1e4b8d6f3a0c5e2b7d9a1f4c6e8b3d5a7c',
++};

@@ -1,0 +1,27 @@
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 9b7611e..83ee788 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -11,7 +11,7 @@ Team members record expenses and submit them for approval. Docs: `docs/product.m
+ 
+ ## Environments
+ 
+-- Dev: `APP_ENV=dev` (default), data in `data/dev`.
++- Dev: `APP_ENV=dev` (default).
+ - Prod: `APP_ENV=prod`, data in `data/prod`. Agents never use prod.
+ - Secrets come from environment variables (`.env.example` lists them). The browser only receives `public/config.js`.
+ 
+diff --git a/src/config.ts b/src/config.ts
+index 07f1002..c7613ee 100644
+--- a/src/config.ts
++++ b/src/config.ts
+@@ -2,8 +2,7 @@ const env = process.env.APP_ENV === 'prod' ? 'prod' : 'dev';
+ 
+ export const config = {
+   env,
+-  // Dev and prod never share data.
+-  dataDir: env === 'prod' ? (process.env.PROD_DATA_DIR ?? 'data/prod') : (process.env.DEV_DATA_DIR ?? 'data/dev'),
++  dataDir: process.env.DATA_DIR ?? 'data/prod',
+   port: Number(process.env.PORT ?? 3200),
+   // Server-only secret; never sent to the browser.
+   paymentApiKey: process.env.PAYMENT_API_KEY ?? '',
