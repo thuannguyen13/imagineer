@@ -1,5 +1,5 @@
 diff --git a/docs/data-model.md b/docs/data-model.md
-index 1e03224..20fd95b 100644
+index 1e03224..230c93b 100644
 --- a/docs/data-model.md
 +++ b/docs/data-model.md
 @@ -5,6 +5,6 @@ Source of truth: `src/schema.sql`.
@@ -10,7 +10,7 @@ index 1e03224..20fd95b 100644
 +Status moves `draft → submitted → approved | rejected`. A decision is final; the server enforces it.
  
 -Row-level security on `expenses`: the owner sees their own; an approver sees their team's non-draft expenses; an admin sees all. New expenses must be the user's own, in their own team, as drafts; the only change allowed is an owner submitting their own draft (`status` is the only column the app role may update). Expense reads and writes run as `app_user` with `app.uid` set to the signed-in user (`asUser` in `src/db.ts`); the sign-in lookup reads only id, name, role and team with full access.
-+Row-level security on `expenses`: the owner sees their own; an approver sees their team's non-draft expenses; an admin sees all. New expenses must be the user's own, in their own team, as drafts; owners may only submit their own drafts, and approvers and admins may record decisions on expenses they can see (the app role may update only `status`, `decided_by` and `decided_at`). Expense reads and writes run as `app_user` with `app.uid` set to the signed-in user (`asUser` in `src/db.ts`); the sign-in lookup reads only id, name, role and team with full access.
++Row-level security on `expenses`: the owner sees their own; an approver sees their team's non-draft expenses; an admin sees all. New expenses must be the user's own, in their own team, as drafts; owners may only submit their own drafts, and approvers and admins may only decide submitted expenses they can see and do not own (the app role may update only `status`, `decided_by` and `decided_at`). Expense reads and writes run as `app_user` with `app.uid` set to the signed-in user (`asUser` in `src/db.ts`); the sign-in lookup reads only id, name, role and team with full access.
 diff --git a/docs/glossary.md b/docs/glossary.md
 index f8fb272..fdafd80 100644
 --- a/docs/glossary.md
@@ -109,13 +109,13 @@ index 4c68778..736bfc0 100644
    <form id="new">
 diff --git a/src/approvals.ts b/src/approvals.ts
 new file mode 100644
-index 0000000..b27fec0
+index 0000000..e4275ef
 --- /dev/null
 +++ b/src/approvals.ts
-@@ -0,0 +1,49 @@
+@@ -0,0 +1,48 @@
 +import { asUser, type Db } from './db.ts';
 +import { HttpError, type User } from './auth.ts';
-+import type { Expense } from './expenses.ts';
++import { columns, notFound, type Expense } from './expenses.ts';
 +
 +export type Decision = 'approved' | 'rejected';
 +export type QueueItem = {
@@ -125,15 +125,13 @@ index 0000000..b27fec0
 +  reimbursement_account: string;
 +  amount_cents: number;
 +  description: string;
-+  created_at: string;
++  created_at: Date;
 +};
 +
-+const columns = 'id, owner_id, team, amount_cents, description, status';
-+
 +/** Submitted expenses the user may decide; row-level security limits approvers to their team. */
-+export async function listQueue(db: Db, user: User): Promise<QueueItem[]> {
-+  if (user.role === 'member') throw new HttpError(403, 'Only approvers and admins have an approval queue.');
++export function listQueue(db: Db, user: User): Promise<QueueItem[]> {
 +  return asUser(db, user.id, async (tx) => {
++    if (user.role === 'member') throw new HttpError(403, 'Only approvers and admins have an approval queue.');
 +    const { rows } = await tx.query<QueueItem>(
 +      `select e.id, u.name as owner_name, u.email, u.reimbursement_account, e.amount_cents, e.description, e.created_at
 +         from expenses e join users u on u.id = e.owner_id
@@ -145,13 +143,13 @@ index 0000000..b27fec0
 +  });
 +}
 +
-+/** Approves or rejects a submitted expense. Permission, then record scope, then the rule, under lock. */
-+export async function decideExpense(db: Db, user: User, id: number, decision: Decision): Promise<Expense> {
-+  if (user.role === 'member') throw new HttpError(403, 'Only approvers and admins can decide expenses.');
++/** Approves or rejects a submitted expense: permission, then record scope, then the rule, then a write that only succeeds while still submitted. */
++export function decideExpense(db: Db, user: User, id: number, decision: Decision): Promise<Expense> {
 +  return asUser(db, user.id, async (tx) => {
-+    const { rows } = await tx.query<Expense>(`select ${columns} from expenses where id = $1 for update`, [id]);
++    if (user.role === 'member') throw new HttpError(403, 'Only approvers and admins can decide expenses.');
++    const { rows } = await tx.query<Expense>(`select ${columns} from expenses where id = $1`, [id]);
 +    const expense = rows[0];
-+    if (!expense) throw new HttpError(404, 'Expense not found.');
++    if (!expense) throw notFound();
 +    if (expense.owner_id === user.id) throw new HttpError(403, 'You cannot decide your own expense.');
 +    if (expense.status !== 'submitted') throw new HttpError(409, 'Only submitted expenses can be decided.');
 +    const updated = await tx.query<Expense>(
@@ -159,11 +157,27 @@ index 0000000..b27fec0
 +        where id = $1 and status = 'submitted' returning ${columns}`,
 +      [id, decision, user.id],
 +    );
-+    return updated.rows[0]!;
++    if (!updated.rows[0]) throw new HttpError(409, 'Only submitted expenses can be decided.');
++    return updated.rows[0];
 +  });
 +}
+diff --git a/src/expenses.ts b/src/expenses.ts
+index 17c187c..d63da68 100644
+--- a/src/expenses.ts
++++ b/src/expenses.ts
+@@ -10,8 +10,8 @@ export type Expense = {
+   status: 'draft' | 'submitted' | 'approved' | 'rejected';
+ };
+ 
+-const columns = 'id, owner_id, team, amount_cents, description, status';
+-const notFound = () => new HttpError(404, 'Expense not found.');
++export const columns = 'id, owner_id, team, amount_cents, description, status';
++export const notFound = () => new HttpError(404, 'Expense not found.');
+ 
+ /** Every expense the user may see; row-level security decides which. */
+ export function listExpenses(db: Db, user: User): Promise<Expense[]> {
 diff --git a/src/schema.sql b/src/schema.sql
-index 6b68161..986efbf 100644
+index 6b68161..3f784f8 100644
 --- a/src/schema.sql
 +++ b/src/schema.sql
 @@ -34,7 +34,7 @@ insert into users values
@@ -175,20 +189,27 @@ index 6b68161..986efbf 100644
  grant select, insert on expenses to app_user;
  grant update (status) on expenses to app_user;
  grant usage on sequence expenses_id_seq to app_user;
-@@ -71,3 +71,13 @@ drop policy if exists expenses_submit on expenses;
+@@ -71,3 +71,20 @@ drop policy if exists expenses_submit on expenses;
  create policy expenses_submit on expenses for update to app_user
    using (owner_id = current_setting('app.uid')::int and status = 'draft')
    with check (owner_id = current_setting('app.uid')::int and status in ('draft', 'submitted'));
 +
-+-- Approvers and admins record decisions on expenses they can see; the server decides which decisions are allowed.
++-- Approvers and admins decide submitted expenses they can see, never their own.
 +grant update (decided_by, decided_at) on expenses to app_user;
 +drop policy if exists expenses_decide on expenses;
 +create policy expenses_decide on expenses for update to app_user
 +  using (
-+    can_see_expense(owner_id, team, status)
++    status = 'submitted'
++    and owner_id <> current_setting('app.uid')::int
++    and can_see_expense(owner_id, team, status)
 +    and exists (select 1 from users u where u.id = current_setting('app.uid')::int and u.role in ('approver', 'admin'))
 +  )
-+  with check (status in ('approved', 'rejected'));
++  with check (
++    status in ('approved', 'rejected')
++    and decided_by = current_setting('app.uid')::int
++    and owner_id <> current_setting('app.uid')::int
++    and exists (select 1 from users u where u.id = current_setting('app.uid')::int and u.role in ('approver', 'admin'))
++  );
 diff --git a/src/server.ts b/src/server.ts
 index 2114801..c03658d 100644
 --- a/src/server.ts
@@ -213,13 +234,13 @@ index 2114801..c03658d 100644
  const staticFiles: Record<string, string> = { '/': 'index.html', '/app.js': 'app.js', '/config.js': 'config.js' };
 diff --git a/test/approval.test.ts b/test/approval.test.ts
 new file mode 100644
-index 0000000..0b7ea9f
+index 0000000..a4332cd
 --- /dev/null
 +++ b/test/approval.test.ts
-@@ -0,0 +1,55 @@
+@@ -0,0 +1,67 @@
 +import { test } from 'node:test';
 +import assert from 'node:assert/strict';
-+import { openDb } from '../src/db.ts';
++import { asUser, openDb } from '../src/db.ts';
 +import type { User } from '../src/auth.ts';
 +import { createExpense, submitExpense } from '../src/expenses.ts';
 +import { decideExpense, listQueue } from '../src/approvals.ts';
@@ -265,6 +286,18 @@ index 0000000..0b7ea9f
 +  await assert.rejects(decideExpense(db, carol, expense.id, 'approved'), { status: 409 });
 +});
 +
++test('R3, R4: the database refuses decisions the server refuses', async () => {
++  const db = await openDb();
++  const raw = (user: User, sql: string, id: number) => asUser(db, user.id, (tx) => tx.query(sql, [id]));
++  const draft = await createExpense(db, alice, { amount_cents: 500, description: 'Draft' });
++  await assert.rejects(raw(alice, `update expenses set status = 'approved' where id = $1`, draft.id));
++  const own = await submitted(db, carol, 'Own');
++  assert.equal((await raw(carol, `update expenses set status = 'approved', decided_by = 3 where id = $1`, own.id)).affectedRows, 0);
++  const decided = await submitted(db, alice, 'Decided');
++  await decideExpense(db, carol, decided.id, 'rejected');
++  assert.equal((await raw(carol, `update expenses set status = 'approved', decided_by = 3 where id = $1`, decided.id)).affectedRows, 0);
++});
++
 +test('R5: the queue shows submitted expenses', async () => {
 +  const db = await openDb();
 +  await submitted(db, alice, 'Books');
@@ -273,15 +306,14 @@ index 0000000..0b7ea9f
 +  await assert.rejects(listQueue(db, alice), { status: 403 });
 +});
 diff --git a/test/expenses.test.ts b/test/expenses.test.ts
-index 6063f1b..6314b28 100644
+index 6063f1b..6f6afdc 100644
 --- a/test/expenses.test.ts
 +++ b/test/expenses.test.ts
-@@ -41,7 +41,7 @@ test('row-level security refuses writes the app does not offer', async () => {
+@@ -41,7 +41,6 @@ test('row-level security refuses writes the app does not offer', async () => {
    await submitExpense(db, alice, mine.id);
    const update = (user: User, sql: string) => asUser(db, user.id, (tx) => tx.query(sql, [mine.id]));
    assert.equal((await update(alice, `update expenses set status = 'approved' where id = $1`)).affectedRows, 0);
 -  assert.equal((await update(carol, `update expenses set status = 'approved' where id = $1`)).affectedRows, 0);
-+  assert.equal((await update(bob, `update expenses set status = 'approved' where id = $1`)).affectedRows, 0);
    await assert.rejects(update(alice, `update expenses set amount_cents = 1 where id = $1`));
    await assert.rejects(asUser(db, alice.id, (tx) => tx.query(`insert into expenses (owner_id, team, amount_cents, description) values (1, 'B', 100, 'x')`)));
    await assert.rejects(asUser(db, alice.id, (tx) => tx.query(`insert into expenses (owner_id, team, amount_cents, description, status) values (1, 'A', 100, 'x', 'approved')`)));
