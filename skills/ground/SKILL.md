@@ -56,7 +56,7 @@ Each item gets **PASS**, **FAIL** or **NOT_PROVEN** (could not be checked), neve
 3. Report each finding as what can happen to users, why (file:line), and the fix. Then **go**, or **no-go** while any blocking item is FAIL or NOT_PROVEN.
 4. Ask in one message which findings to fix. Fix each approved one, re-check only those items, and report the new go or no-go.
 
-Never do these yourself; give the user the steps instead: replace a leaked key with a new one (deleting it from the code is not enough), change production, restore a backup (a test restore goes to a scratch location), or rewrite git history.
+Never do these yourself; give the user the steps instead: replace a leaked key with a new one (deleting it from the code is not enough), change production, restore a backup anywhere but a scratch location, or rewrite git history.
 
 ## Hooks
 
