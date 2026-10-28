@@ -1,5 +1,7 @@
 # Feature Review Loop — Research Against Industry Patterns
 
+> **2026-10-28:** feature-review-loop is renamed **forge**. Decisions: `plan/decisions.md`; skillset: `docs/proposals/skillset.md`.
+
 **Target:** `skills/feature-review-loop/SKILL.md` (227 lines, `main` at `cc713c4`).
 **Inputs:** reviews A and B in this folder; line references below were checked against the skill text.
 **Date:** 2026-10-28.

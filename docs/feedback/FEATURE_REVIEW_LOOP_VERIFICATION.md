@@ -1,5 +1,7 @@
 # Feature Review Loop — Verification Techniques
 
+> **2026-10-28:** feature-review-loop is renamed **forge**. Decisions: `plan/decisions.md`; skillset: `docs/proposals/skillset.md`.
+
 **Question:** which software-engineering techniques make sure a feature meets its scope and expectations, and how should the skill use them?
 **Companion to:** [FEATURE_REVIEW_LOOP_RESEARCH.md](FEATURE_REVIEW_LOOP_RESEARCH.md).
 **Date:** 2026-10-28.

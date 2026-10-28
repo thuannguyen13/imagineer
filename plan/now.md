@@ -1,20 +1,48 @@
 # Now
 
-## Guard v0.1 — initial release
+Imagineer v2: three skills (guard, forge, ground). Design: [docs/proposals/skillset.md](../docs/proposals/skillset.md). One branch and PR per phase.
 
-- [x] Define a lightweight, reusable `guard` skill.
-- [x] Keep project-specific architecture and copy rules out of the shared skill.
-- [ ] Test on one low-risk copy or style change; confirm no unnecessary planning.
-- [ ] Test on a medium-risk form/business-logic change; confirm relevant patterns and checks are discovered.
-- [ ] Test on a high-risk data/delete/permission change; confirm missing lifecycle or security requirements are raised before coding.
-- [ ] Record actual elapsed time, unnecessary tool calls, missed concerns, and false positives.
-- [ ] Refine only rules that fail these tests.
+Every phase ends with the clean bar and follows the validated-status rule, both in [decisions.md](decisions.md).
 
-## Acceptance
+## P0 — Decisions and docs
 
-Guard is useful if it catches consequential omissions and drift while leaving routine changes nearly as fast as before. Do not declare success from a drafted skill alone.
+- [x] Record decisions, README, plan, proposal (2026-10-28, branch `plan/skillset-v2`).
 
-## Feature-review-loop — generalization
+## P1 — forge: rename and fix defects (same design)
 
-- [x] Move app-specific values into a Project setup table.
-- [ ] Run it once in a second project; confirm the setup table is complete and `n/a` keys skip their checks without hiding unproven requirements.
+- [ ] Rename `skills/feature-review-loop/` to `skills/forge/`; `disable-model-invocation: true`.
+- [ ] Dry run exits before any worktree, issue or state file is created.
+- [ ] Lifecycle `awaiting_merge` → `merged`; the merge closes the issue.
+- [ ] Severity by impact; define default roles; custom-role leaks no longer Minor.
+- [ ] Stable `F<k>` finding IDs; escalation uses them; pass condition uses validated findings.
+- [ ] `deps` in every worktree; tester c verifies through the app only; drop tester d's blind-spot claim.
+- [ ] Project-specific hard rules move to a `constraints` setup key; "plan review gate" → "plan review".
+- [ ] Run state moves from the session scratchpad into the repo so a new session can resume; worktree agents are named.
+
+## P2 — Bench fixture and baseline
+
+- [ ] `bench/app/`: small TypeScript app, 3 roles, one record lifecycle, server-side permission checks, Postgres.
+- [ ] Seeded scenarios with expected findings: ground G1–G5, forge F1–F10, guard low / medium / high.
+- [ ] Baseline results for the P1 forge and current guard.
+
+## P3 — ground
+
+- [ ] Set up and check modes; checklist owned by ground; check → user approves → fix → re-check; `release` adds launch items.
+- [ ] Opt-in hooks: destructive commands, prod access, Stop hook running the project's checks; hook scripts tested.
+- [ ] Passes G1–G5 and one real-project run; marked validated.
+
+## P4 — guard
+
+- [ ] Reads grounding docs; escalates consequence first; points to `/forge` and `/ground`.
+- [ ] Passes the low / medium / high scenarios: no planning on low-risk changes, relevant patterns found on medium, missing lifecycle or security requirements raised before coding on high.
+- [ ] One real-project run; marked validated.
+
+## P5 — forge redesign
+
+- [ ] Requirements contract, risk tiers, permission and state tables, proof seen failing, re-run evidence, traceability, exit criteria, tiered reviewers, `--verify <branch|PR>`.
+- [ ] Each change kept only if bench F1–F10 catches at least the baseline with fewer spawns.
+- [ ] One real-project run; marked validated.
+
+## P6 — Cross-skill cleanup
+
+- [ ] Clean bar across all three skills together; every scenario re-run and no worse than P5.
