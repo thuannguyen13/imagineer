@@ -18,6 +18,9 @@ target=$(cd "$target" && pwd)
 git -C "$repo" archive HEAD:bench/app | tar -x -C "$target"
 cd "$target"
 [ -f "$scenario/setup.patch" ] && git apply "$scenario/setup.patch"
+# Each scenario gets its own QA port, so parallel runs never reach each other's servers.
+port=$(( 20000 + RANDOM % 20000 ))
+sed -i.bak "s/PORT=3210 npm start/PORT=$port npm start/" CLAUDE.md && rm CLAUDE.md.bak
 git init -q -b main
 git add -A
 commit() { git -c user.name=dev -c user.email=dev@example.test commit -qm "$1"; }
@@ -26,6 +29,21 @@ commit "Expenses app"
 # Skills under test: whatever this repository has checked out.
 mkdir -p .claude/skills
 cp -R "$repo/skills/." .claude/skills/
+# A grounded product has ground's hooks installed, when this checkout has ground.
+if [ -d "$repo/skills/ground/hooks" ]; then
+mkdir -p .claude/hooks
+cp "$repo/skills/ground/hooks/block-destructive.py" "$repo/skills/ground/hooks/check-before-stop.py" .claude/hooks/
+printf 'npm test\n' > .claude/hooks/fast-checks.txt
+printf 'APP_ENV=prod\nPROD_DATA_DIR\ndata/prod\nbackups/prod\n' > .claude/hooks/production-patterns.txt
+cat > .claude/settings.json <<'JSON'
+{"hooks": {
+  "PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command",
+    "command": "python3 -I \"$CLAUDE_PROJECT_DIR/.claude/hooks/block-destructive.py\""}]}],
+  "Stop": [{"hooks": [{"type": "command",
+    "command": "python3 -I \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-before-stop.py\""}]}]
+}}
+JSON
+fi
 printf '.claude/\nnode_modules/\n' >> .git/info/exclude
 npm install --silent
 
