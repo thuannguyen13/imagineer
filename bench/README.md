@@ -27,7 +27,7 @@ G1–G5 need the ground skill. F3 (race) and F7 (unprovable requirement) were re
 bench/prepare.sh F1 /tmp/bench-F1
 ```
 
-It copies the app into the empty directory as a fresh git repo, applies the scenario, installs this repo's checked-out skills into `.claude/skills/`, and prints `run.md`. Open that directory in Claude Code and follow it. Score against `expected.md` in a results file.
+It copies the app into the empty directory as a fresh git repo, applies the scenario, gives it its own QA port, installs this repo's checked-out skills into `.claude/skills/` and, when ground is present, ground's hooks, and prints `run.md`. Open that directory in Claude Code and follow it. Score against `expected.md` in a results file.
 
 `bench/check-seeds.sh` proves the bench itself: every scenario prepares, the app's own tests and typecheck pass, and each oracle fails only for its own seed. Run it after changing `app/`, a patch or an oracle.
 

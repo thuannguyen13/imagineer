@@ -5,7 +5,7 @@ Approvers decide their team's submitted expenses; admins decide any team's. Deci
 
 ## Facts verified (file:line)
 - Visibility is enforced by row-level security through `asUser` (`src/db.ts`), policies in `src/schema.sql`.
-- `submitExpense` (`src/expenses.ts`) shows the house pattern: lock the row, check scope, check the rule, then write, in one transaction.
+- `submitExpense` (`src/expenses.ts`) shows the house pattern: check scope, check the rule, then a write that only succeeds while the row is still in the expected state, in one transaction.
 - The app role can read only `id, name, role, team` of `users` (`src/schema.sql`).
 
 ## Brief requirements
@@ -19,15 +19,15 @@ Approvers decide their team's submitted expenses; admins decide any team's. Deci
 ## Where it applies
 | Row | Files |
 |---|---|
-| Decide and queue | `src/approvals.ts`, `src/server.ts` |
+| Decide and queue | `src/approvals.ts`, `src/server.ts`, `src/schema.sql` (decision rule) |
 | Buttons | `public/app.js`, `public/index.html` |
 | Tests | `test/approval.test.ts` |
-| Docs | `docs/product.md`, `docs/permissions.md` |
+| Docs | `docs/product.md`, `docs/permissions.md`, `docs/data-model.md`, `docs/glossary.md` |
 
 Excluded: editing after a decision, notifications (out of scope in `docs/product.md`).
 
 ## Shared mechanism
-Reuse `asUser` for scope and the lock-then-check pattern from `submitExpense`. No new permission mechanism.
+Reuse `asUser` for scope and the check-then-conditional-write pattern from `submitExpense`. No new permission mechanism.
 
 ## Behaviour rules
 Permission, then record scope, then the rule, inside one transaction, before any write. A record the user cannot see gets "Expense not found."

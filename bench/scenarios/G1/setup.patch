@@ -1,8 +1,8 @@
 diff --git a/src/schema.sql b/src/schema.sql
-index a1da1b1..a633098 100644
+index 6b68161..c9c5935 100644
 --- a/src/schema.sql
 +++ b/src/schema.sql
-@@ -49,7 +49,6 @@ language sql stable as $$
+@@ -50,7 +50,6 @@ language sql stable as $$
      )
  $$;
  
@@ -11,7 +11,7 @@ index a1da1b1..a633098 100644
  drop policy if exists expenses_read on expenses;
  create policy expenses_read on expenses for select to app_user
 diff --git a/test/expenses.test.ts b/test/expenses.test.ts
-index 3a52d0e..57afebd 100644
+index 6063f1b..57afebd 100644
 --- a/test/expenses.test.ts
 +++ b/test/expenses.test.ts
 @@ -1,31 +1,11 @@
@@ -48,7 +48,25 @@ index 3a52d0e..57afebd 100644
  
  test('only the owner can submit, and only a draft', async () => {
    const db = await openDb();
-@@ -41,9 +21,3 @@ test('amount must be whole cents above zero', async () => {
+@@ -35,27 +15,9 @@ test('only the owner can submit, and only a draft', async () => {
+   await assert.rejects(submitExpense(db, alice, expense.id), { status: 409 });
+ });
+ 
+-test('row-level security refuses writes the app does not offer', async () => {
+-  const db = await openDb();
+-  const mine = await createExpense(db, alice, { amount_cents: 400, description: 'Mine' });
+-  await submitExpense(db, alice, mine.id);
+-  const update = (user: User, sql: string) => asUser(db, user.id, (tx) => tx.query(sql, [mine.id]));
+-  assert.equal((await update(alice, `update expenses set status = 'approved' where id = $1`)).affectedRows, 0);
+-  assert.equal((await update(carol, `update expenses set status = 'approved' where id = $1`)).affectedRows, 0);
+-  await assert.rejects(update(alice, `update expenses set amount_cents = 1 where id = $1`));
+-  await assert.rejects(asUser(db, alice.id, (tx) => tx.query(`insert into expenses (owner_id, team, amount_cents, description) values (1, 'B', 100, 'x')`)));
+-  await assert.rejects(asUser(db, alice.id, (tx) => tx.query(`insert into expenses (owner_id, team, amount_cents, description, status) values (1, 'A', 100, 'x', 'approved')`)));
+-});
+-
+ test('amount must be whole cents above zero', async () => {
+   const db = await openDb();
+   await assert.rejects(createExpense(db, alice, { amount_cents: 0, description: 'Zero' }), { status: 400 });
    await assert.rejects(createExpense(db, alice, { amount_cents: 1.5, description: 'Half' }), { status: 400 });
  });
  

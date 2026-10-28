@@ -35,6 +35,18 @@ test('only the owner can submit, and only a draft', async () => {
   await assert.rejects(submitExpense(db, alice, expense.id), { status: 409 });
 });
 
+test('row-level security refuses writes the app does not offer', async () => {
+  const db = await openDb();
+  const mine = await createExpense(db, alice, { amount_cents: 400, description: 'Mine' });
+  await submitExpense(db, alice, mine.id);
+  const update = (user: User, sql: string) => asUser(db, user.id, (tx) => tx.query(sql, [mine.id]));
+  assert.equal((await update(alice, `update expenses set status = 'approved' where id = $1`)).affectedRows, 0);
+  assert.equal((await update(carol, `update expenses set status = 'approved' where id = $1`)).affectedRows, 0);
+  await assert.rejects(update(alice, `update expenses set amount_cents = 1 where id = $1`));
+  await assert.rejects(asUser(db, alice.id, (tx) => tx.query(`insert into expenses (owner_id, team, amount_cents, description) values (1, 'B', 100, 'x')`)));
+  await assert.rejects(asUser(db, alice.id, (tx) => tx.query(`insert into expenses (owner_id, team, amount_cents, description, status) values (1, 'A', 100, 'x', 'approved')`)));
+});
+
 test('amount must be whole cents above zero', async () => {
   const db = await openDb();
   await assert.rejects(createExpense(db, alice, { amount_cents: 0, description: 'Zero' }), { status: 400 });
