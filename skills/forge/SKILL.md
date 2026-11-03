@@ -83,11 +83,13 @@ Update it after every spawn batch and every round. Append to `rounds` one entry 
 
 Set `tokens` to the reported total when the harness exposes usage, or to `null` when it does not. Never estimate tokens.
 
+**Agents.** Forge's roles are agent definitions shipped with this plugin in `agents/`: `forge-scout`, `forge-plan-reviewer`, `forge-implementer`, `forge-logic-reviewer`, `forge-data-reviewer`, `forge-app-tester`, `forge-diff-reviewer` and `forge-validator`. Spawn each by its type, `imagineer:<agent>` (the bare name when the agents were copied into `.claude/agents/`). Each definition owns its role's model, tools, turn limit, isolation and checklist; this skill owns the order, the inputs and the verdicts. The plugin's hook stops the review agents from committing, pushing or calling GitHub.
+
 **Agent names.** Give every spawned agent a `name`: `<name>-<role>`, with `-r<N>` in review rounds (for example `checkout-r2-authz`), so the user can follow and message it.
 
 ## 1. Audit and plan
 
-- Spawn a read-only Explore agent (`model: "sonnet"`) to list every component, form, action, permission, and test the feature touches, with file:line and facts only. Limit it to 25 tool calls. If it reaches the limit, record what it did not cover in the plan's Open questions.
+- Spawn `forge-scout` with the feature request. Record its **Not covered** list in the plan's Open questions.
 - Ask at most 4 spec questions in one message, recommended option first. Decide everything else and state each decision in the plan.
 - Write the plan to the run folder with these sections: **Outcome**, **Facts verified (file:line)**, **Where it applies** (included rows, excluded rows with reasons), **Shared mechanism** (each piece defined once, and what it replaces), **Behaviour rules**, **Docs** (per the project's documentation rules), **Tests** (unit, server-refusal, real-app flows), **Order of work**, **Open questions**. Each brief requirement gets a stable ID (R1, R2, …) so testers can mark it PASS, FAIL, or NOT_PROVEN. The **Where it applies** table must list the files each included row is expected to touch, because the drift check uses it.
 - Hard requirements:
@@ -97,22 +99,14 @@ Set `tokens` to the reported total when the harness exposes usage, or to `null` 
 
 ## 2. Plan review
 
-Pass condition: **zero Critical and zero Major findings** from an Opus reviewer (`model: "opus"`) using the BASELINE METHOD. The reviewer has a limit of 30 tool calls. If it reaches the limit, its unverified facts are reported as NOT_PROVEN.
+Pass condition: **zero Critical and zero Major findings** from `forge-plan-reviewer`, given the plan, the brief, `constraints` and the BASELINE METHOD.
 
-- The reviewer verifies every fact against the code and checks completeness against the brief, the permissions model, business rules, framework mechanics, reuse, `constraints`, and the docs rules.
 - Fold every finding into the plan. Ask the user only the spec questions the reviewer raises, in one batched message.
 - Increment `plan_pass` in state.json. If `plan_pass` reaches `--max-plan-passes` with Critical or Major findings still open, stop with status `stopped`. Report the open findings and ask, recording the question as `stop_question`: narrow the scope, accept the risk, or abandon.
 
 ## 3. Implement
 
-Spawn an Opus implementer (`model: "opus"`) in the existing worktree with the final plan. It has a limit of 80 tool calls for each feature step. If it reaches the limit, it must commit what passes, report what remains, and stop. It must:
-
-- Commit in coherent steps, in repo style, with no AI attribution.
-- End the last commit with `Closes #N`.
-- Update docs in the same commits as the code.
-- Pass every `checks` command before every commit.
-
-It reports: commits, a row-by-row checklist against the plan (by R-ID), deviations with reasons, and what QA should check first. Record the sha in state.json.
+Spawn `forge-implementer` with the worktree path, the final plan, the issue number and the `checks` commands. Record the sha it reports in state.json.
 
 ## 4. Review rounds
 
@@ -122,7 +116,7 @@ Each brief requirement and each finding gets one verdict:
 
 - **PASS:** verified by a test, a run, or a reading that cites file:line.
 - **FAIL:** verified as broken.
-- **NOT_PROVEN:** could not be verified. Examples: the test could not run, the spec is ambiguous, or the agent hit its tool-call or scope limit. NOT_PROVEN is never reported as PASS.
+- **NOT_PROVEN:** could not be verified. Examples: the test could not run, the spec is ambiguous, or the agent hit its turn or scope limit. NOT_PROVEN is never reported as PASS.
 
 ### Pass condition (per round)
 
@@ -151,7 +145,7 @@ Every "Stop" below sets status `stopped` and records `stop_reason` and `stop_que
 | Any tester reports a write to a record not named with `test-prefix`, or a change to an existing record or role | Stop all testing immediately. Report it. Clean up only through the app. Ask: continue once the user confirms the data is restored, or abandon |
 | Local database lacks a migration the code needs | Stop and report. Ask: continue once the migration is applied, or abandon |
 
-The budget is a soft limit. The Agent tool does not enforce a hard timeout, so each agent's prompt carries its own tool-call or scope limit, and the orchestrator checks elapsed time between spawn batches.
+The budget is a soft limit. The Agent tool does not enforce a hard timeout, so each agent definition carries its own turn limit, and the orchestrator checks elapsed time between spawn batches.
 
 ### Each round
 
@@ -159,29 +153,20 @@ The budget is a soft limit. The Agent tool does not enforce a hard timeout, so e
 
 **2. Mechanical drift check.** The orchestrator runs `git diff --name-only <base>..<sha>` and compares the file list with the files named in the plan's Where-it-applies table. Each changed file outside that list is a DRIFT finding. No agent is needed for this step. Record the count in `drift_files`.
 
-**3. Parallel review.** Spawn these in one batch, each with `isolation: "worktree"`, checked out with `git checkout --detach <sha>`, and set up as `deps` describes:
+**3. Parallel review.** Spawn these in one batch. Give every one the sha, the base, the `deps` setup and the BASELINE METHOD, plus the input in the table:
 
-| Reviewer | Angle | Model | Input | Scope and limit |
-|---|---|---|---|---|
-| a | Business logic and authorization | opus | Plan and code | Check order in every server-side handler (permission, then record scope, then business rule, under lock). Races. Business rule edge cases (limits, state transitions, duplicates, rounding, time zones). Leaks and payload over-exposure. Role × control matrix as unit test files. Database results as integration tests. Limit: 60 tool calls |
-| b | Data, docs, reuse, and drift | opus | Plan and code | Duplication and layering. Regressions in standalone flows. Data integrity (migrations, constraints, cascades) as integration tests. Docs against code and the project's documentation rules. Do the tests prove what they claim? Review the content of in-scope changes for drift the file list cannot show. Limit: 60 tool calls |
-| c | Real-app functional flows | sonnet | Plan and running app | Start `qa-server` (never the developer's usual port). Drive it with `qa-driver`. Sign in per role with `qa-sign-in`. Walk every brief flow to its end state and confirm the result through the app, as each role sees it. Also check: double submit creates one record, cancel mid-save leaves no partial record, server errors surface and do not silently succeed, and a refused action is refused on the server, not only hidden in the UI. Save screenshots only as evidence that a check ran. Limit: 60 tool calls |
-| d | Diff review, fresh context | opus | Plan and `git diff <base>..<sha>` only | Does not receive any tester report, prior round, baseline, or regression file. Looks for business-logic and code-quality defects without having seen how the code was written or what other reviewers think. Limit: 40 tool calls |
+| Reviewer | Agent | Angle | Also receives |
+|---|---|---|---|
+| a | `forge-logic-reviewer` | Business logic and authorization | Plan, fast-checks output, `regression/` files |
+| b | `forge-data-reviewer` | Data, docs, reuse and drift | Plan, fast-checks output, drift check output, `regression/` files |
+| c | `forge-app-tester` | Real-app functional flows | Plan, `qa-server`, `qa-driver`, `qa-sign-in`, `test-prefix`, `regression/` files |
+| d | `forge-diff-reviewer` | Diff review, fresh context | Plan only: no tester report, prior round, baseline or regression file |
 
-If tester c reports a suspected Critical it cannot confirm, the orchestrator spawns one fresh Opus confirmer (`model: "opus"`, `isolation: "worktree"` at the same sha, set up as `deps` describes) for that single finding. Do not rerun the whole tester.
+Copy back to the run folder's `regression/` the files testers a, b and c report they changed or added.
 
-Tester c database rules: create only records named with `test-prefix`. Never change existing records or roles. No SQL, migrations, or seeds; database state is proven by reviewers a and b, not by tester c. Clean up through the app in dependency order.
+If tester c reports a suspected Critical it cannot confirm, spawn `forge-validator` with `model: "opus"` for that single finding at the same sha. Do not rerun the whole tester.
 
-The orchestrator copies the run folder's `regression/` files into the worktrees of testers a, b and c. They re-run them, adapt them only where an API legitimately changed, and list the files they changed or added; the orchestrator copies those back to the run folder. Tester d receives none of them.
-
-Each reviewer ends its report with a **Not reached** section. Any brief requirement it did not reach is NOT_PROVEN, not PASS.
-
-**4. Validation.** The orchestrator merges the four reports and the drift check output, and dedupes them. Then it spawns one Sonnet validator (`model: "sonnet"`, `isolation: "worktree"` at the same sha, set up as `deps` describes) with the full list of findings. The validator does not see the reviewers' reasoning. For each Critical and Major finding, it first tries to reproduce the problem with a failing test. For each finding it returns:
-
-- **CONFIRMED-BY-TEST:** a failing test reproduces the problem.
-- **CONFIRMED-BY-READING:** the code at file:line shows the problem, but no test was written.
-- **FALSE POSITIVE:** with a one-line reason.
-- **UNSURE:** could not be confirmed or disproved. An UNSURE Critical or Major blocks the round as if confirmed; an UNSURE Minor is listed with the known minors.
+**4. Validation.** Merge the four reports and the drift check output, and dedupe them. Then spawn `forge-validator` with the full list of findings and none of the reviewers' reasoning. An UNSURE Critical or Major blocks the round as if confirmed; an UNSURE Minor is listed with the known minors.
 
 Drop false positives and record each one with its reason in `baselines.md`. Spot-check every Critical and Major finding confirmed by reading only, before acting on it. Findings confirmed by test need no further check.
 
@@ -233,4 +218,4 @@ Not reached: ... (each brief requirement here is NOT_PROVEN)
 
 **Validator output:** one line per finding: ID, CONFIRMED-BY-TEST / CONFIRMED-BY-READING / FALSE POSITIVE / UNSURE, file:line, and the reason.
 
-**Reviewer rules:** never edit or check out anything in the main checkout or the implementer's worktree. No commits, pushes, or GitHub writes. Touch the database only through the project's test commands. No app server, except tester c. Never report a requirement as PASS without a cited test, run, or reading. Tester d receives no other reviewer's output.
+**Reviewer rules:** never edit or check out anything in the main checkout or the implementer's worktree. Touch the database only through the project's test commands. No app server, except tester c. Never report a requirement as PASS without a cited test, run, or reading. Tester d receives no other reviewer's output.

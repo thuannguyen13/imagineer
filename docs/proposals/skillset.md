@@ -87,9 +87,9 @@ Skills never call each other. They hand off through project docs, which people a
 
 ## 5. Install
 
-Copy `skills/<name>/` into the project's `.claude/skills/` (or `~/.claude/skills/` for every project). Forge also ships `agents/`, copied into `.claude/agents/`, because turn limits, tool limits and scoped hooks live in agent definitions. Guard also works in Codex (`.agents/skills/`); forge and ground rely on Claude Code subagents and hooks.
+The repository is a Claude Code plugin, `imagineer`. It ships the three skills, forge's agents in `agents/` (model, tools, turn limit and worktree isolation per role) and one plugin hook. Agents shipped in a plugin ignore their own `hooks`, so the reviewer guard is a plugin-level `PreToolUse` hook that acts only when `agent_type` names a forge review agent. Ground's hooks are not plugin hooks: they change what every session in a project may do, so ground installs them only with the user's approval.
 
-No plugin yet: agents shipped in a plugin ignore their `hooks`, so the reviewer guards would not apply.
+Copying folders still works: `skills/<name>/` into `.claude/skills/`, and for forge also `agents/` into `.claude/agents/` and the reviewer hook into the project's settings. Guard also works in Codex (`.agents/skills/`); forge and ground rely on Claude Code subagents and hooks.
 
 ---
 

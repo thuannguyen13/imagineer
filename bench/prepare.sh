@@ -26,24 +26,25 @@ git add -A
 commit() { git -c user.name=dev -c user.email=dev@example.test commit -qm "$1"; }
 commit "Expenses app"
 
-# Skills under test: whatever this repository has checked out.
-mkdir -p .claude/skills
+# Skills, forge's agents and the plugin's reviewer hook under test: whatever this repository has checked out,
+# copied in the way a project without the plugin installs them, so the commands stay /forge, /ground, /guard.
+mkdir -p .claude/skills .claude/agents .claude/hooks
 cp -R "$repo/skills/." .claude/skills/
-# A grounded product has ground's hooks installed, when this checkout has ground.
-if [ -d "$repo/skills/ground/hooks" ]; then
-mkdir -p .claude/hooks
+cp "$repo"/agents/*.md .claude/agents/
+cp "$repo/hooks/forge-reviewer-guard.py" .claude/hooks/
+# A grounded product has ground's hooks installed too.
 cp "$repo/skills/ground/hooks/block-destructive.py" "$repo/skills/ground/hooks/check-before-stop.py" .claude/hooks/
 printf 'npm test\n' > .claude/hooks/fast-checks.txt
 printf 'APP_ENV=prod\nPROD_DATA_DIR\ndata/prod\nbackups/prod\n' > .claude/hooks/production-patterns.txt
 cat > .claude/settings.json <<'JSON'
 {"hooks": {
-  "PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command",
-    "command": "python3 -I \"$CLAUDE_PROJECT_DIR/.claude/hooks/block-destructive.py\""}]}],
+  "PreToolUse": [{"matcher": "Bash", "hooks": [
+    {"type": "command", "command": "python3 -I \"$CLAUDE_PROJECT_DIR/.claude/hooks/block-destructive.py\""},
+    {"type": "command", "command": "python3 -I \"$CLAUDE_PROJECT_DIR/.claude/hooks/forge-reviewer-guard.py\""}]}],
   "Stop": [{"hooks": [{"type": "command",
     "command": "python3 -I \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-before-stop.py\""}]}]
 }}
 JSON
-fi
 printf '.claude/\nnode_modules/\n' >> .git/info/exclude
 npm install --silent
 

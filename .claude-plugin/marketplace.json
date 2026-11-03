@@ -1,0 +1,16 @@
+{
+  "name": "imagineer",
+  "owner": {
+    "name": "thuannguyen13"
+  },
+  "metadata": {
+    "description": "Imagineer: engineering judgment for AI coding agents."
+  },
+  "plugins": [
+    {
+      "name": "imagineer",
+      "source": "./",
+      "description": "Engineering judgment for AI coding agents: guard, forge and ground."
+    }
+  ]
+}
