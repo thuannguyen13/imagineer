@@ -2,12 +2,6 @@
 
 These are **candidates**, not commitments.
 
-## Plugin packaging
-
-**Trigger:** installing skill folders and forge's agent files by hand proves error-prone, and plugin agents can enforce their hooks.
-
-Possible scope: one plugin carrying guard, forge, ground, forge's agents and ground's hooks.
-
 ## Run-stage skill
 
 **Trigger:** repeated failures in incidents or upkeep that guard, ground's check and Claude Code's built-in debugging miss.

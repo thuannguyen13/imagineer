@@ -36,5 +36,5 @@ If a seemingly small change crosses a high-risk boundary, treat it as high risk.
 - No repository-wide audit, extensive planning, or multi-agent ceremony by default.
 - Do not duplicate project-specific rules or specialized skills.
 - Do not change unrelated code simply because it can be improved.
-- In Claude Code, suggest `/forge <request>` for High-risk feature work that has no plan, and `/ground` when the product's docs or foundations are missing. Say why in one line; only the user starts them.
+- In Claude Code, suggest `/forge <request>` for High-risk feature work that has no plan, and `/ground` when the product's docs or foundations are missing (`/imagineer:forge` and `/imagineer:ground` when Imagineer is installed as a plugin). Say why in one line; only the user starts them.
 - An instruction is not an enforcement mechanism: critical guarantees belong in tests, constraints and CI.
