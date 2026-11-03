@@ -37,6 +37,15 @@ Every phase ends with the clean bar and follows the validated-status rule, both 
 - [ ] Passes the low / medium / high scenarios: no planning on low-risk changes, relevant patterns found on medium, missing lifecycle or security requirements raised before coding on high.
 - [ ] One real-project run; marked validated.
 
+## P4.5 — Plugin packaging — done 2026-11-03
+
+- [x] The repository is the `imagineer` plugin: `.claude-plugin/plugin.json` and a one-plugin `marketplace.json`; `claude plugin validate .` passes.
+- [x] Forge's roles become agent files in `agents/` (scout, plan reviewer, implementer, reviewers a–d, validator); each owns its model, tools, turn limit and isolation, and the implementer preloads guard.
+- [x] Plugin hook `hooks/forge-reviewer-guard.py` blocks commits, pushes and GitHub calls from forge's review agents; tests in `hooks/test_forge_reviewer_guard.py`.
+- [x] Checked in a live session: the plugin loads 8 agents, 3 skills and the hook; the hook denied `git commit` from `imagineer:forge-diff-reviewer`; `imagineer:forge-implementer` preloaded guard.
+- [ ] Re-run the forge bench scenarios: the review prompts changed shape (definitions plus orchestrator inputs), so P5's baseline is taken on this version.
+- [ ] Choose a license before submitting to a plugin directory (`claude plugin validate` reports it missing).
+
 ## P5 — forge redesign
 
 - [ ] Requirements contract, risk tiers, permission and state tables, proof seen failing, re-run evidence, traceability, exit criteria, tiered reviewers, `--verify <branch|PR>`.
