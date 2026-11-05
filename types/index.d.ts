@@ -1,0 +1,52 @@
+// The values the Imagineer mod keeps in $.state, and the shape of the
+// results file it reads (.claude/imagineer/results.json, schema 1).
+// The file format is documented in docs/results-file.md.
+
+export type GradeState = 'strong' | 'weak' | 'failing' | 'unchecked'
+
+/** The overall grade adds "not proven yet": a trust dimension is unchecked. */
+export type OverallState = GradeState | 'not-proven'
+
+export type Measured = 'repo' | 'default' | 'none'
+
+export type Dimension = {
+  id: string
+  name: string
+  group: 'trust' | 'care'
+  state: GradeState
+  measured: Measured
+  summary: string
+  isStale: boolean
+  isClaimed: boolean
+}
+
+export type RunStatus = 'running' | 'waiting' | 'done' | 'stopped'
+
+export type Run = {
+  command: 'inspect' | 'build'
+  status: RunStatus
+  round: number
+  commit: string
+}
+
+export type Results = {
+  kind: 'results'
+  imagineer: string
+  scale: number
+  run: Run
+  overall: { state: OverallState; reason: string }
+  dimensions: Dimension[]
+  questions: { waiting: number; resolved: number }
+}
+
+/** What the mod knows about the repo's results file. */
+export type Summary =
+  | { kind: 'none' }
+  | { kind: 'unreadable'; reason: string }
+  | Results
+
+declare module 'claude-code' {
+  interface PluginState {
+    imagineer: { summary: Shaped<Summary> }
+  }
+}

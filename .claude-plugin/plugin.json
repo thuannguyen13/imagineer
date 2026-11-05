@@ -1,11 +1,18 @@
 {
   "name": "imagineer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Engineering judgment for AI coding agents: guard for every change, forge for one consequential feature, ground for the whole product.",
   "author": {
     "name": "thuannguyen13",
     "url": "https://github.com/thuannguyen13"
   },
   "repository": "https://github.com/thuannguyen13/imagineer",
-  "keywords": ["engineering", "review", "safety", "risk", "verification"]
+  "keywords": [
+    "engineering",
+    "review",
+    "safety",
+    "risk",
+    "verification"
+  ],
+  "types": "./types/index.d.ts"
 }

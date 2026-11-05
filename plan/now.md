@@ -18,12 +18,12 @@ Evidence gathered 2026-11-05: Stryker on `bench/app` kills 30.5% of mutants (`se
 
 ## B1 — Skeleton and status
 
-- [ ] Versioning (`0.y.z` until B6): tag today's `main` as `v0.1.0`, the bench baseline; `CHANGELOG.md`; a check that fails a pull request changing plugin files without a version bump and changelog entry; release `v0.2.0` when B1 merges.
-
-- [ ] `skills/inspect`, `skills/build`, `skills/status`; Inspect and Build not model-invocable.
-- [ ] Results file format in the run folder: tool results, questions and answers, findings, grade inputs.
-- [ ] The mod: answers `/imagineer:status` with the grade pane; opens the pane and band on `/imagineer:inspect` and `/imagineer:build`; text reply where it cannot draw; quiet in repos with no results file.
-- [ ] `claude plugin validate` shows the mod only reads files and draws; `claude plugin test` covers the pane from a sample results file.
+- [x] Versioning (`0.y.z` until B6): `v0.1.0` tagged on `79fda05` as the bench baseline (local tag, not pushed yet); `CHANGELOG.md`; `scripts/check-version.sh` and a pull-request workflow that fail when plugin files change without a version bump and changelog entry (checked both ways, 2026-11-05); version `0.2.0`, released when this phase merges.
+- [x] `skills/status`, not model-invocable; its text runs only where mods are off. `skills/inspect` and `skills/build` arrive with B2 and B4; the mod already watches their commands.
+- [x] Results file format 1: [docs/results-file.md](../docs/results-file.md).
+- [x] The mod (`hooks/register.tsx`): answers `/imagineer:status` with the grade pane, or text where nothing draws; opens the pane and band on `/imagineer:inspect` and `/imagineer:build`; quiet without a results file. Evidence (2026-11-05): `claude plugin validate .` lists only `fs.exists`, `fs.stat`, `fs.read`, `clock.every`, state and drawing calls; 9 tests pass under `claude plugin test .`; headless `/imagineer:status` answered with and without a results file at 0 turns and $0.
+- [ ] Seen in an interactive session: the pane and band drawn in the terminal and the Desktop app.
+- [ ] `claude plugin test .` also picks up the bench's `node:test` files (5 fail to load). Decide: move the plugin into its own folder, which also stops shipping `bench/`, `docs/` and `plan/` to users, or rename the bench tests.
 
 ## B2 — Inspect on the bench app
 
