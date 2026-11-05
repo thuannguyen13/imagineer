@@ -18,6 +18,8 @@ Evidence gathered 2026-11-05: Stryker on `bench/app` kills 30.5% of mutants (`se
 
 ## B1 — Skeleton and status
 
+- [ ] Versioning (`0.y.z` until B6): tag today's `main` as `v0.1.0`, the bench baseline; `CHANGELOG.md`; a check that fails a pull request changing plugin files without a version bump and changelog entry; release `v0.2.0` when B1 merges.
+
 - [ ] `skills/inspect`, `skills/build`, `skills/status`; Inspect and Build not model-invocable.
 - [ ] Results file format in the run folder: tool results, questions and answers, findings, grade inputs.
 - [ ] The mod: answers `/imagineer:status` with the grade pane; opens the pane and band on `/imagineer:inspect` and `/imagineer:build`; text reply where it cannot draw; quiet in repos with no results file.

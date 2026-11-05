@@ -298,6 +298,52 @@ For the owner, in the Imagineer repository, not shipped in the plugin, so users 
 
 Triage runs on request or on a schedule. The plugin never edits its own skills or agents in place; every change is a pull request the owner reviews.
 
+## Versioning
+
+### Why it matters now
+
+Claude Code decides whether an installed plugin has an update from its version: the `version` in `plugin.json` first, then the marketplace entry's, then the git commit. `plugin.json` pins `0.1.0`, so anyone who installs Imagineer stays on that cached copy, however many commits are pushed, until the version string changes ([plugin loading reference](https://code.claude.com/docs/en/plugins/loading#versions-and-updates)).
+
+### The plugin version
+
+Semantic versioning in `plugin.json`, bumped in the pull request that changes what users get. The repo is new, so it stays at `0.y.z` until it is validated.
+
+**Now: `0.y.z`.**
+
+| Bump | When |
+|---|---|
+| `y` (0.**2**.0) | Anything that breaks or changes how Imagineer is used, and any new command, dimension, check or option. The changelog marks breaking changes |
+| `z` (0.2.**1**) | Fixes and wording that do not change behaviour users rely on |
+
+- `v0.1.0` is the three-skill plugin as it is on `main` today: tagged once, as the baseline the bench compares against.
+- `v0.2.0` is the first release of the two-command design, when B1 merges.
+
+**From `1.0.0`**, after B6 validates Inspect and Build on a real project, the usual rules apply:
+
+| Bump | When |
+|---|---|
+| MAJOR | A command, skill or agent is renamed or removed; the results file or grade can no longer be read the old way; the grade scale changes meaning |
+| MINOR | A new command, dimension, check or option |
+| PATCH | Fixes and wording |
+
+### Releases
+
+- `CHANGELOG.md` gets one entry per version, in plain language, with what changes for users and any breaking change first.
+- Each release is a git tag `vX.Y.Z` and a GitHub release with the changelog entry. Users can pin a version with `/plugin marketplace add thuannguyen13/imagineer#vX.Y.Z`.
+- A check fails a pull request that changes `skills/`, `agents/`, `hooks/` or `.claude-plugin/` without bumping the version and adding a changelog entry.
+- Releases are made by the owner, never by the plugin itself.
+
+### What else carries a version
+
+| What | Why |
+|---|---|
+| The results file (`schema` field) | The mod and `/imagineer:status` read old runs, or say the run must be redone |
+| The grade (`scale` field, starting at 1) | A change to the scale does not look like the repo getting better or worse |
+| Feedback records | Triage knows which release a report is about |
+| Bench results | Before-and-after comparisons name the Imagineer version, the Claude Code version and the models |
+
+The mod needs Claude Code 2.1.287 or later. It checks the running version and, on an older one, falls back to text replies and says why.
+
 ## Open
 
 - Confirm the stop bar numbers (80%, 2 rounds).
