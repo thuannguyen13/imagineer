@@ -19,11 +19,11 @@ Evidence gathered 2026-11-05: Stryker on `bench/app` kills 30.5% of mutants (`se
 ## B1 — Skeleton and status
 
 - [x] Versioning (`0.y.z` until B6): `v0.1.0` tagged on `79fda05` as the bench baseline (local tag, not pushed yet); `CHANGELOG.md`; `scripts/check-version.sh` and a pull-request workflow that fail when plugin files change without a version bump and changelog entry (checked both ways, 2026-11-05); version `0.2.0`, released when this phase merges.
-- [x] `skills/status`, not model-invocable; its text runs only where mods are off. `skills/inspect` and `skills/build` arrive with B2 and B4; the mod already watches their commands.
+- [x] `plugin/skills/status`, not model-invocable; its text runs only where mods are off. `skills/inspect` and `skills/build` arrive with B2 and B4; the mod already watches their commands.
 - [x] Results file format 1: [docs/results-file.md](../docs/results-file.md).
-- [x] The mod (`hooks/register.tsx`): answers `/imagineer:status` with the grade pane, or text where nothing draws; opens the pane and band on `/imagineer:inspect` and `/imagineer:build`; quiet without a results file. Evidence (2026-11-05): `claude plugin validate .` lists only `fs.exists`, `fs.stat`, `fs.read`, `clock.every`, state and drawing calls; 9 tests pass under `claude plugin test .`; headless `/imagineer:status` answered with and without a results file at 0 turns and $0.
+- [x] The mod (`plugin/hooks/register.tsx`): answers `/imagineer:status` with the grade pane, or text where nothing draws; opens the pane and band on `/imagineer:inspect` and `/imagineer:build`; quiet without a results file. Evidence (2026-11-05): `claude plugin validate .` lists only `fs.exists`, `fs.stat`, `fs.read`, `clock.every`, state and drawing calls; 9 tests pass under `claude plugin test plugin`; headless `/imagineer:status` answered with and without a results file at 0 turns and $0.
 - [ ] Seen in an interactive session: the pane and band drawn in the terminal and the Desktop app.
-- [ ] `claude plugin test .` also picks up the bench's `node:test` files (5 fail to load). Decide: move the plugin into its own folder, which also stops shipping `bench/`, `docs/` and `plan/` to users, or rename the bench tests.
+- [x] The plugin moved into `plugin/`, and the marketplace points there, so installs no longer carry `bench/`, `docs/` and `plan/`, and `claude plugin test plugin` runs only the mod's tests (2026-11-05, chosen by the owner). Marketplace and plugin validate, 9 mod tests and both Python hook test suites pass after the move.
 
 ## B2 — Inspect on the bench app
 

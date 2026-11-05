@@ -330,7 +330,7 @@ Semantic versioning in `plugin.json`, bumped in the pull request that changes wh
 
 - `CHANGELOG.md` gets one entry per version, in plain language, with what changes for users and any breaking change first.
 - Each release is a git tag `vX.Y.Z` and a GitHub release with the changelog entry. Users can pin a version with `/plugin marketplace add thuannguyen13/imagineer#vX.Y.Z`.
-- A check fails a pull request that changes `skills/`, `agents/`, `hooks/` or `.claude-plugin/` without bumping the version and adding a changelog entry.
+- A check fails a pull request that changes anything under `plugin/` without bumping the version and adding a changelog entry.
 - Releases are made by the owner, never by the plugin itself.
 
 ### What else carries a version
@@ -350,5 +350,5 @@ The mod needs Claude Code 2.1.287 or later. It checks the running version and, o
 - Who reviews Dev's code for design and duplication beyond Fallow. Proposed: the Architect reviews each round's diff against its own design, in a fresh spawn.
 - What decides when Dev runs on Opus. Proposed: the Architect marks each task that touches data, money or permissions.
 - How existing parts fold in. Proposed: forge's run folder, state file, finding IDs and reviewer hook into Build; ground's checklist and the Inspector idea into Inspect; guard's rules into Dev's practices. The old skills and agents are retired once their parts have moved.
-- Mods could replace the plugin's Python settings hook (`hooks/forge-reviewer-guard.py`, run on every Bash call) with an in-process `tool.call` hook, and give ground's destructive-command guard proceed and cancel buttons. A mod loads in every session once the plugin is installed, so an opt-in guard needs its own switch.
+- Mods could replace the plugin's Python settings hook (`plugin/hooks/forge-reviewer-guard.py`, run on every Bash call) with an in-process `tool.call` hook, and give ground's destructive-command guard proceed and cancel buttons. A mod loads in every session once the plugin is installed, so an opt-in guard needs its own switch.
 - Re-plan `plan/now.md` around these two commands; the bench stays the way each command is proven.

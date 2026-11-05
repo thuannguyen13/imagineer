@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "imagineer",
-      "source": "./",
+      "source": "./plugin",
       "description": "Engineering judgment for AI coding agents: guard, forge and ground."
     }
   ]

@@ -1,4 +1,4 @@
-"""Run: python3 -I hooks/test_forge_reviewer_guard.py"""
+"""Run: python3 -I plugin/hooks/test_forge_reviewer_guard.py"""
 import json
 import os
 import subprocess

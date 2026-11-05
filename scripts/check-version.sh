@@ -6,11 +6,13 @@
 set -euo pipefail
 
 base="${1:-origin/main}"
-manifest=".claude-plugin/plugin.json"
-shipped='^(skills/|agents/|hooks/|types/|\.claude-plugin/plugin\.json$)'
+manifest="plugin/.claude-plugin/plugin.json"
+shipped='^plugin/'
 
 version_at() {
-  git show "$1:$manifest" | python3 -I -c 'import json, sys; print(json.load(sys.stdin)["version"])'
+  # Before 0.2.0 the manifest sat at the repository root.
+  { git show "$1:$manifest" 2>/dev/null || git show "$1:.claude-plugin/plugin.json"; } |
+    python3 -I -c 'import json, sys; print(json.load(sys.stdin)["version"])'
 }
 
 changed=$(git diff --name-only "$base"...HEAD | grep -E "$shipped" || true)

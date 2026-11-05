@@ -6,9 +6,9 @@ Engineering judgment for AI coding agents, for people who build by prompting and
 
 | Skill | Covers | What it does | How it starts | Status |
 | --- | --- | --- | --- | --- |
-| [guard](skills/guard/SKILL.md) | One change | Judges how risky a change is, keeps what must stay true working, and reuses what already exists | On its own whenever code changes | In use, not yet validated |
-| [forge](skills/forge/SKILL.md) | One feature | Plans, builds and reviews an important feature end to end, then opens a pull request | You type `/forge <what to build>` (`/imagineer:forge` as the plugin); `/forge` alone resumes an unfinished run | In use, not yet validated |
-| [ground](skills/ground/SKILL.md) | Whole product | Sets up a new product's foundations, or checks an existing one, fixes what you approve, and checks again | You type `/ground` (`/imagineer:ground` as the plugin); `/ground release` before launch | In use, not yet validated |
+| [guard](plugin/skills/guard/SKILL.md) | One change | Judges how risky a change is, keeps what must stay true working, and reuses what already exists | On its own whenever code changes | In use, not yet validated |
+| [forge](plugin/skills/forge/SKILL.md) | One feature | Plans, builds and reviews an important feature end to end, then opens a pull request | You type `/forge <what to build>` (`/imagineer:forge` as the plugin); `/forge` alone resumes an unfinished run | In use, not yet validated |
+| [ground](plugin/skills/ground/SKILL.md) | Whole product | Sets up a new product's foundations, or checks an existing one, fixes what you approve, and checks again | You type `/ground` (`/imagineer:ground` as the plugin); `/ground release` before launch | In use, not yet validated |
 
 Where this is going (three skills: guard, forge, ground) and why: [docs/proposals/skillset.md](docs/proposals/skillset.md).
 
@@ -16,7 +16,7 @@ Where this is going (three skills: guard, forge, ground) and why: [docs/proposal
 
 ### As a Claude Code plugin (recommended)
 
-This repository is a Claude Code plugin, `imagineer`: the three skills, forge's agents in `agents/`, and a hook in `hooks/` that stops forge's reviewers from committing, pushing or calling GitHub.
+This repository is a Claude Code plugin, `imagineer`: the three skills, forge's agents in `plugin/agents/`, and a hook in `plugin/hooks/` that stops forge's reviewers from committing, pushing or calling GitHub.
 
 ```
 /plugin install imagineer --marketplace thuannguyen13/imagineer
@@ -24,13 +24,13 @@ This repository is a Claude Code plugin, `imagineer`: the three skills, forge's 
 
 On Claude Code before 2.1.275, run `/plugin marketplace add thuannguyen13/imagineer`, then `/plugin install imagineer@imagineer`.
 
-Plugin skills carry the plugin's name: type `/imagineer:forge <what to build>` and `/imagineer:ground`. Guard still starts on its own. To try a local checkout, run `claude --plugin-dir <path to this repository>`.
+Plugin skills carry the plugin's name: type `/imagineer:forge <what to build>` and `/imagineer:ground`. Guard still starts on its own. To try a local checkout, run `claude --plugin-dir <path to this repository>/plugin`.
 
 ### By copying folders
 
-- **guard**, for Claude Code or Codex: copy `skills/guard/` to your project's `.claude/skills/guard/` (Claude Code) or `.agents/skills/guard/` (Codex). Ask your agent to confirm where it looks for skills before you copy.
-- **ground**, Claude Code only: copy `skills/ground/` to `.claude/skills/ground/`, with guard installed too.
-- **forge**, Claude Code only: copy `skills/forge/` to `.claude/skills/forge/` and `agents/*.md` to `.claude/agents/`, with guard installed too. Copy `hooks/forge-reviewer-guard.py` to `.claude/hooks/` and add it as a `PreToolUse` hook on `Bash` in `.claude/settings.json`, as `bench/prepare.sh` does. If you installed forge under its old name, delete `.claude/skills/feature-review-loop/`.
+- **guard**, for Claude Code or Codex: copy `plugin/skills/guard/` to your project's `.claude/skills/guard/` (Claude Code) or `.agents/skills/guard/` (Codex). Ask your agent to confirm where it looks for skills before you copy.
+- **ground**, Claude Code only: copy `plugin/skills/ground/` to `.claude/skills/ground/`, with guard installed too.
+- **forge**, Claude Code only: copy `plugin/skills/forge/` to `.claude/skills/forge/` and `plugin/agents/*.md` to `.claude/agents/`, with guard installed too. Copy `plugin/hooks/forge-reviewer-guard.py` to `.claude/hooks/` and add it as a `PreToolUse` hook on `Bash` in `.claude/settings.json`, as `bench/prepare.sh` does. If you installed forge under its old name, delete `.claude/skills/feature-review-loop/`.
 
 ### Either way
 

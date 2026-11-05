@@ -6,6 +6,10 @@ Imagineer's releases, newest first. Below 1.0, a `0.y.0` release may change how 
 
 The first step of the two-command design: a grade you can see.
 
+### Changes you need to know
+
+- The plugin now lives in `plugin/`, and the marketplace points there. Installing Imagineer no longer downloads the bench app, docs and plans. To try a local checkout, use `claude --plugin-dir <repository>/plugin`.
+
 ### New
 
 - `/imagineer:status` shows the repo's grade from Imagineer's results file. It answers at once, with no Claude turn and no usage.
