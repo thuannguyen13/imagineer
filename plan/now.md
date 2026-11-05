@@ -1,57 +1,70 @@
 # Now
 
-Imagineer v2: three skills (guard, forge, ground). Design: [docs/proposals/skillset.md](../docs/proposals/skillset.md). One branch and PR per phase.
+Imagineer: two commands, `/imagineer:inspect` and `/imagineer:build`, plus `/imagineer:status` for the grade. Design: [docs/proposals/inspect-and-build.md](../docs/proposals/inspect-and-build.md). Decided 2026-11-05 in [decisions.md](decisions.md). One branch and PR per phase.
 
-Every phase ends with the clean bar and follows the validated-status rule, both in [decisions.md](decisions.md).
+Every phase ends with the clean bar and follows the validated-status rule, both in [decisions.md](decisions.md). A phase is done only with evidence: a bench run, a test, or a real-project run, named here with its date.
 
-## P0 — Decisions and docs
+## Before this plan
 
-- [x] Record decisions, README, plan, proposal (2026-10-28, branch `plan/skillset-v2`).
+The three-skill plan (guard, forge, ground) built: the plugin packaging, the bench fixture app and scenarios, guard, forge and ground skills, forge's agents and reviewer hook, and ground's opt-in hooks (through 2026-11-03, PRs #1–#7). None was marked validated. Those parts are inputs to the phases below; the three skills stop being entry points.
 
-## P1 — forge: rename and fix defects (same design) — done 2026-10-28
+Evidence gathered 2026-11-05: Stryker on `bench/app` kills 30.5% of mutants (`server.ts` and `config.ts` 0%); `npx fallow health` scores it 81 (B). A mod answering `/imagineer-…:status` from a plugin skill ran with 0 turns and no cost.
 
-- [x] Rename `skills/feature-review-loop/` to `skills/forge/`; `disable-model-invocation: true`.
-- [x] Dry run exits before any worktree, issue or state file is created.
-- [x] Lifecycle `awaiting_merge` → `merged`; the merge closes the issue.
-- [x] Severity by impact; define default roles; custom-role leaks no longer Minor.
-- [x] Stable `F<k>` finding IDs; escalation uses them; pass condition uses validated findings.
-- [x] `deps` in every worktree; tester c verifies through the app only; drop tester d's blind-spot claim.
-- [x] Project-specific hard rules move to a `constraints` setup key; "plan review gate" → "plan review".
-- [x] Run state moves from the session scratchpad into the repo so a new session can resume; worktree agents are named.
+## B0 — Design
 
-## P2 — Bench fixture and baseline — fixture done 2026-10-28
+- [ ] Design doc, decisions entry and this plan reviewed by the owner; committed.
+- [x] Grading scale researched and chosen (2026-11-05): six dimensions, four states, weakest link, care dimensions capped at Weak, claims never Strong, every survivor in critical code explained. Research: [docs/research/grading.md](../docs/research/grading.md).
+- [ ] Stop bar numbers confirmed (proposed: Stryker 80% on inspected code, 2 clean attack rounds).
 
-- [x] `bench/app/`: small TypeScript app, 3 roles, one record lifecycle, server-side permission checks, Postgres.
-- [x] Seeded scenarios with expected findings: ground G1–G5, forge F1, F2, F4, F5, F6, F8, F9, F10, guard low / medium / high (F3 and F7 retired; see `bench/README.md`).
-- [ ] Baseline results for the P1 forge and current guard. Deferred by the user to before P5 (2026-10-28).
+## B1 — Skeleton and status
 
-## P3 — ground — skill done 2026-10-28
+- [ ] `skills/inspect`, `skills/build`, `skills/status`; Inspect and Build not model-invocable.
+- [ ] Results file format in the run folder: tool results, questions and answers, findings, grade inputs.
+- [ ] The mod: answers `/imagineer:status` with the grade pane; opens the pane and band on `/imagineer:inspect` and `/imagineer:build`; text reply where it cannot draw; quiet in repos with no results file.
+- [ ] `claude plugin validate` shows the mod only reads files and draws; `claude plugin test` covers the pane from a sample results file.
 
-- [x] Set up and check modes; checklist owned by ground; check → user approves → fix → re-check; `release` adds launch items.
-- [x] Opt-in hooks: destructive commands, prod access, Stop hook running the project's checks; hook scripts tested.
-- [ ] Passes G1–G5 and one real-project run; marked validated.
+## B2 — Inspect on the bench app
 
-## P4 — guard — edit done 2026-10-28
+- [ ] Tool detection: the repo's own Fallow and Stryker version and config when present; otherwise `npx fallow` and Stryker in a throwaway copy.
+- [ ] Questions in the YOUR EXPECTATION / ACTUAL IMPLEMENTATION / EXAMPLE / SUGGESTIONS format, ranked by consequence, a few per round; each confirmed answer becomes a test.
+- [ ] Attack rounds; stop at the bar.
+- [ ] No-docs path: big-picture interview first, code reconstructed and marked inferred until confirmed, confirmed answers saved as docs with the user's agreement. Evidence: a run on a copy of `bench/app` with its `docs/`, `CLAUDE.md` and README removed.
+- [ ] Evidence: on `bench/app`, Inspect raises the gaps Stryker found on 2026-11-05 (dev-only sign-in, prod/dev data folder, double-submit race, owner check, empty description, untested HTTP layer), and the bench app's kill rate rises to the bar. The bench app stays unchanged; Inspect runs on a copy.
 
-- [x] Reads grounding docs; escalates consequence first; points to `/forge` and `/ground`.
-- [ ] Passes the low / medium / high scenarios: no planning on low-risk changes, relevant patterns found on medium, missing lifecycle or security requirements raised before coding on high.
-- [ ] One real-project run; marked validated.
+## B3 — Grade
 
-## P4.5 — Plugin packaging — done 2026-11-03
+- [ ] Grade computed from the results file only, per the chosen scale.
+- [ ] Pane shows the overall grade, each dimension with how it was measured, and open questions.
+- [ ] The same grade goes into the final report and the pull request.
 
-- [x] The repository is the `imagineer` plugin: `.claude-plugin/plugin.json` and a one-plugin `marketplace.json`; `claude plugin validate .` passes.
-- [x] Forge's roles become agent files in `agents/` (scout, plan reviewer, implementer, reviewers a–d, validator); each owns its model, tools, turn limit and isolation, and the implementer preloads guard.
-- [x] Plugin hook `hooks/forge-reviewer-guard.py` blocks commits, pushes and GitHub calls from forge's review agents; tests in `hooks/test_forge_reviewer_guard.py`.
-- [x] Checked in a live session: the plugin loads 8 agents, 3 skills and the hook; the hook denied `git commit` from `imagineer:forge-diff-reviewer`; `imagineer:forge-implementer` preloaded guard.
-- [ ] Re-run the forge bench scenarios: the review prompts changed shape (definitions plus orchestrator inputs), so P5's baseline is taken on this version.
-- [ ] Choose a license before submitting to a plugin directory (`claude plugin validate` reports it missing).
+## B4 — Build
 
-## P5 — forge redesign
+- [ ] Agents: architect, dev, qa, each with its default model; the user's preset (Recommended, Budget, Maximum, or their own) saved per user and passed at spawn.
+- [ ] QA writes tests from the Architect's spec before or apart from Dev's code; Dev runs them and never edits tests.
+- [ ] Done when QA's tests pass and the change meets Inspect's bar.
+- [ ] Reuse from forge: run folder, state file and resume, finding IDs, reviewer hook.
+- [ ] Evidence: Build catches at least what forge's baseline catches on the forge bench scenarios.
 
-- [ ] Requirements contract, risk tiers, permission and state tables, proof seen failing, re-run evidence, traceability, exit criteria, tiered reviewers, `--verify <branch|PR>`.
-- [ ] Each change kept only if the forge bench scenarios catch at least the baseline with fewer spawns.
-- [ ] One real-project run; marked validated.
+## B5 — Retire the old entry points
 
-## P6 — Cross-skill cleanup
+- [ ] Guard's rules in Dev's practices, ground's checklist in Inspect; old skills and agents removed.
+- [ ] Decide whether the mod replaces the Python reviewer hook and gives ground's destructive-command guard buttons.
+- [ ] README rewritten around the three commands.
 
-- [ ] Clean bar across all three skills together; every scenario re-run and no worse than P5.
+## B5.5 — Learning from runs
+
+- [ ] Self-check in the mod: rule broken, stuck, tool trouble, grade contradiction, poor questions, mod fault, cost.
+- [ ] `/imagineer:feedback` and the end-of-run retro write feedback records with a fingerprint to a local log.
+- [ ] Sharing: the user reviews the record, then a pre-filled GitHub issue or a saved file.
+- [ ] Owner-side triage and learn skills in the Imagineer repo (not in the plugin): label, group, rank, decide, turn an accepted issue into a bench scenario with an oracle.
+- [ ] Evidence: one real miss turned into a scenario that fails before the fix and passes after; one self-check flag raised on purpose in a test.
+
+## B6 — Real project
+
+- [ ] `/imagineer:inspect` on one of the owner's real projects, starting from the incident of 2026-11-05.
+- [ ] Marked validated only after that run.
+
+## Still open from before
+
+- [ ] Choose a license before submitting to a plugin directory.
+- [ ] Decide what happens to `plan/guard-low-risk-test` (unpushed guard test notes) and `forge/p5` (Bench v4).
