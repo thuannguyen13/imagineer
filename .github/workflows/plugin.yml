@@ -12,3 +12,13 @@ jobs:
           fetch-depth: 0
       - name: Version bumped when plugin files change
         run: scripts/check-version.sh "origin/${{ github.base_ref }}"
+
+  inspect-scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Inspect's grading and detection scripts
+        run: node --test 'plugin/skills/inspect/scripts/*.test.mjs'

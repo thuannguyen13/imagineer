@@ -1,0 +1,189 @@
+#!/usr/bin/env node
+// Measures a repository in a throwaway copy, so the repository itself is
+// never changed. Each step writes its evidence to the run folder.
+//
+//   node measure.mjs prepare  --repo <repo> --out <run folder>
+//   node measure.mjs checks   --out <run folder>
+//   node measure.mjs fallow   --out <run folder>
+//   node measure.mjs stryker  --out <run folder> [--estimate]
+//   node measure.mjs cleanup  --out <run folder>
+
+import { mkdtempSync, rmSync, writeFileSync, existsSync, copyFileSync } from 'node:fs'
+import { availableParallelism, tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { detect } from './detect.mjs'
+import { arg, PINNED, readJson, run, tail, writeJson } from './lib.mjs'
+
+const INSTALL = {
+  npm: lock => (lock ? ['npm', 'ci', '--no-audit', '--no-fund'] : ['npm', 'install', '--no-audit', '--no-fund']),
+  pnpm: () => ['pnpm', 'install', '--frozen-lockfile'],
+  yarn: () => ['yarn', 'install', '--frozen-lockfile'],
+  bun: () => ['bun', 'install', '--frozen-lockfile'],
+}
+
+const RUNNER = { npm: ['npm', 'run'], pnpm: ['pnpm', 'run'], yarn: ['yarn', 'run'], bun: ['bun', 'run'] }
+
+const ADD = {
+  npm: pkg => ['npm', 'install', '--no-save', '--no-audit', '--no-fund', pkg],
+  pnpm: pkg => ['pnpm', 'add', '-D', pkg],
+  yarn: pkg => ['yarn', 'add', '-D', pkg],
+  bun: pkg => ['bun', 'add', '-d', pkg],
+}
+
+function state(out) {
+  const copy = readJson(join(out, 'copy.json'))
+  return { copy, repoFacts: readJson(join(out, 'detect.json')) }
+}
+
+function prepare(repo, out) {
+  const facts = detect(repo)
+  writeJson(join(out, 'detect.json'), facts)
+
+  const head = run(['git', '-C', repo, 'rev-parse', '--short', 'HEAD'])
+  if (!head.ok) throw new Error(`Not a git repository with a commit: ${repo}`)
+  const dirty = run(['git', '-C', repo, 'status', '--porcelain']).stdout.trim() !== ''
+
+  // The committed state only: what was measured is exactly a commit.
+  const path = mkdtempSync(join(tmpdir(), 'imagineer-'))
+  const archive = run(['sh', '-c', `git -C "$1" archive HEAD | tar -x -C "$2"`, 'sh', repo, path])
+  if (!archive.ok) throw new Error(`Could not copy the repository: ${tail(archive.stderr)}`)
+
+  const install = facts.isNodeProject
+    ? run(INSTALL[facts.manager](facts.lockfile), { cwd: path, timeoutMs: 15 * 60_000 })
+    : { ok: false, seconds: 0, stderr: 'No package.json.' }
+  writeJson(join(out, 'copy.json'), {
+    path,
+    commit: head.stdout.trim(),
+    dirty,
+    install: { ok: install.ok, seconds: install.seconds, output: install.ok ? '' : tail(install.stderr || install.stdout) },
+  })
+  console.log(`Copied ${head.stdout.trim()}${dirty ? ' (uncommitted changes not included)' : ''} to ${path}; install ${install.ok ? 'passed' : 'failed'}.`)
+}
+
+function checks(out) {
+  const { copy, repoFacts } = state(out)
+  const runner = RUNNER[repoFacts.manager]
+  const step = (script, name) => {
+    if (!repoFacts.scripts[name]) return { present: false }
+    const result = run([...runner, script], { cwd: copy.path, timeoutMs: 20 * 60_000 })
+    return { present: true, ok: result.ok, seconds: result.seconds, output: tail(result.stdout + '\n' + result.stderr) }
+  }
+  const result = { typecheck: step('typecheck', 'typecheck'), test: step('test', 'test') }
+  writeJson(join(out, 'checks.json'), result)
+  console.log(`Typecheck: ${describe(result.typecheck)}. Tests: ${describe(result.test)}.`)
+}
+
+const describe = step => (!step.present ? 'none' : step.ok ? `passed in ${step.seconds}s` : 'failed')
+
+function fallow(out) {
+  const { copy, repoFacts } = state(out)
+  const own = repoFacts.tools.fallow.inRepo && repoFacts.tools.fallow.version !== null
+  const command = own ? ['npx', 'fallow'] : ['npx', '-y', `fallow@${PINNED.fallow}`]
+  const health = run([...command, 'health', '--format', 'json', '--quiet'], { cwd: copy.path })
+  const check = run([...command, 'check', '--format', 'json', '--quiet'], { cwd: copy.path })
+  const parse = result => {
+    try {
+      return JSON.parse(result.stdout)
+    } catch {
+      return null
+    }
+  }
+  const healthJson = parse(health)
+  const checkJson = parse(check)
+  writeJson(join(out, 'fallow.json'), {
+    ok: healthJson !== null,
+    measured: repoFacts.tools.fallow.inRepo ? 'repo' : 'default',
+    version: healthJson?.version ?? null,
+    health: healthJson,
+    check: checkJson,
+    error: healthJson === null ? tail(health.stderr || health.stdout) : null,
+  })
+  console.log(healthJson ? `Fallow ${healthJson.version}: health ${healthJson.health_score?.score} ${healthJson.health_score?.grade}.` : 'Fallow did not run.')
+}
+
+function stryker(out, isEstimate) {
+  const { copy, repoFacts } = state(out)
+  const concurrency = Math.max(1, Math.min(8, availableParallelism() - 2))
+  const own = repoFacts.tools.stryker.inRepo
+  if (!own && !existsSync(join(copy.path, 'node_modules/@stryker-mutator/core'))) {
+    // Into the throwaway copy only: Stryker has to resolve the project's own
+    // packages (TypeScript, test runners), which it cannot do from npx's cache.
+    const add = ADD[repoFacts.manager](`@stryker-mutator/core@${PINNED.stryker}`)
+    const installed = run(add, { cwd: copy.path, timeoutMs: 10 * 60_000 })
+    if (!installed.ok) {
+      writeJson(join(out, isEstimate ? 'stryker-estimate.json' : 'stryker.json'), { ok: false, error: `Could not install Stryker in the copy: ${tail(installed.stderr)}` })
+      console.log('Stryker could not be installed in the copy.')
+      return
+    }
+  }
+  const command = ['npx', 'stryker', 'run']
+
+  let config = repoFacts.tools.stryker.config
+  if (!own || config === null) {
+    if (!repoFacts.scripts.test) {
+      writeJson(join(out, 'stryker.json'), { ok: false, skipped: 'The repository has no test command, so no test would notice a break.' })
+      console.log('Stryker skipped: no test command.')
+      return
+    }
+    // Imagineer's defaults: run the repository's own tests for every mutant.
+    config = 'stryker.imagineer.json'
+    writeFileSync(
+      join(copy.path, config),
+      JSON.stringify({
+        testRunner: 'command',
+        commandRunner: { command: `${RUNNER[repoFacts.manager].join(' ')} test` },
+        coverageAnalysis: 'off',
+        reporters: ['json', 'clear-text'],
+        jsonReporter: { fileName: 'reports/mutation/mutation.json' },
+        tempDirName: '.stryker-tmp',
+        timeoutMS: 60_000,
+      }),
+    )
+  }
+
+  const argv = [...command, config, '--concurrency', String(concurrency), '--reporters', 'json,clear-text']
+  if (isEstimate) argv.push('--dryRunOnly')
+  const result = run(argv, { cwd: copy.path, timeoutMs: isEstimate ? 15 * 60_000 : 6 * 60 * 60_000 })
+  const log = result.stdout + '\n' + result.stderr
+
+  if (isEstimate) {
+    const mutants = Number(log.match(/with (\d+) mutant/)?.[1] ?? NaN)
+    const testSeconds = Number(log.match(/Ran [\d.]+ tests? in ([\d.]+) seconds?/)?.[1] ?? NaN)
+    const minutes = Number.isFinite(mutants) && Number.isFinite(testSeconds) ? Math.ceil((mutants * testSeconds) / concurrency / 60) : null
+    writeJson(join(out, 'stryker-estimate.json'), { ok: result.ok, mutants, testSeconds, concurrency, minutes, output: result.ok ? '' : tail(log) })
+    console.log(result.ok ? `Stryker: ${mutants} mutants, about ${minutes} minutes with ${concurrency} at a time.` : `Stryker dry run failed:\n${tail(log)}`)
+    return
+  }
+
+  const report = join(copy.path, 'reports/mutation/mutation.json')
+  if (existsSync(report)) copyFileSync(report, join(out, 'mutation.json'))
+  writeJson(join(out, 'stryker.json'), {
+    ok: result.ok && existsSync(report),
+    measured: own ? 'repo' : 'default',
+    version: own ? repoFacts.tools.stryker.version : PINNED.stryker,
+    seconds: result.seconds,
+    error: existsSync(report) ? null : tail(log),
+  })
+  console.log(existsSync(report) ? `Stryker finished in ${Math.round(result.seconds / 60)} minutes.` : `Stryker failed:\n${tail(log)}`)
+}
+
+function cleanup(out) {
+  const { copy } = state(out)
+  if (copy.path.includes('imagineer-')) rmSync(copy.path, { recursive: true, force: true })
+  console.log(`Removed ${copy.path}.`)
+}
+
+const [step] = process.argv.slice(2)
+const out = arg('out')
+try {
+  if (!out) throw new Error('--out <run folder> is required')
+  if (step === 'prepare') prepare(arg('repo') ?? '.', out)
+  else if (step === 'checks') checks(out)
+  else if (step === 'fallow') fallow(out)
+  else if (step === 'stryker') stryker(out, process.argv.includes('--estimate'))
+  else if (step === 'cleanup') cleanup(out)
+  else throw new Error('Steps: prepare, checks, fallow, stryker, cleanup')
+} catch (error) {
+  console.error(error.message)
+  process.exit(1)
+}

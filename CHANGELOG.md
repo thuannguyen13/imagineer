@@ -2,6 +2,20 @@
 
 Imagineer's releases, newest first. Below 1.0, a `0.y.0` release may change how Imagineer is used; such changes are listed first under **Changes you need to know**. See [docs/proposals/inspect-and-build.md](docs/proposals/inspect-and-build.md#versioning).
 
+## 0.3.0 — unreleased
+
+The first slice of Inspect: a real grade from measurements.
+
+### New
+
+- `/imagineer:inspect` measures a JavaScript or TypeScript repository in a throwaway copy of its last commit, so the repository is never changed:
+  - **Test strength** with Stryker mutation testing: how many deliberate breaks the tests notice, and the weakest files. Long runs are estimated first and asked about.
+  - **Structure** with Fallow: health score, unused files and exports, overly complex functions, duplication.
+  - **Foundations**: lockfile, install, typecheck, tests, CI running the tests, and environment variables documented in `.env.example`.
+- The repository's own Fallow and Stryker setup is used when it has one; otherwise pinned versions run once, without installing anything in the repository.
+- A script computes the grade from that evidence, by the rules in the design: the weakest link sets the overall grade. "Matches your intent", "Security and permissions" and "Data safety" show as not checked until later slices.
+- Results go to `.claude/imagineer/`, kept out of git.
+
 ## 0.2.0 — 2026-11-05
 
 The first step of the two-command design: a grade you can see.
