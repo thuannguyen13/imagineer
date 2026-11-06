@@ -214,6 +214,12 @@ export function whenTested(iso: string, now = new Date()): string {
   return `${MONTHS[at.getMonth()]} ${at.getDate()}${year}, ${time}`
 }
 
+/** Whether Inspect is finished, and if not, what it still needs, in plain words. */
+export function finishLines(bar: { met: boolean; missing: string[] }): string[] {
+  if (bar.met) return ['✓ Finished: tests catch enough breaks, nothing is left to review, and two attack rounds in a row found nothing new.']
+  return ['Not finished yet. Inspect still needs:', ...bar.missing.map(m => `  • ${m}`), 'Run /imagineer:inspect to continue.']
+}
+
 /** How many items Evidence shows per area before "and N more". */
 export const ITEMS_SHOWN = 5
 
@@ -272,7 +278,7 @@ export function summaryText(summary: Summary): string {
     for (const item of firstItems(dimension.items)) lines.push(`      • ${item}`)
   }
   if (summary.run.bar) {
-    lines.push(summary.run.bar.met ? 'Stop bar: met.' : `Stop bar not met: ${summary.run.bar.missing.join('; ')}.`)
+    lines.push(...finishLines(summary.run.bar))
   }
   if (summary.questions.waiting > 0) {
     lines.push(`${summary.questions.waiting} questions waiting for you.`)

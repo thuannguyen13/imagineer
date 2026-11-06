@@ -12,6 +12,7 @@ import {
   dialogIds,
   FLAGS_PATH,
   findPackedRef,
+  finishLines,
   firstItems,
   isActive,
   isSameCommit,
@@ -257,10 +258,15 @@ export const register: Register = on => {
       <Box flexDirection="column">
         {summary.dimensions.map(dimension => row(dimension))}
         <Box marginTop={1} flexDirection="column">
-          {summary.run.bar && (
-            <Text dimColor>{summary.run.bar.met ? '✓ Stop bar met.' : `Stop bar not met: ${summary.run.bar.missing.join('; ')}.`}</Text>
-          )}
-          <Text dimColor>Press a row to see its evidence.</Text>
+          {summary.run.bar &&
+            finishLines(summary.run.bar).map(line => (
+              <Text dimColor={!line.startsWith('✓')} color={line.startsWith('✓') ? 'success' : undefined}>
+                {line}
+              </Text>
+            ))}
+          <Box marginTop={1}>
+            <Text dimColor>Select a row for details.</Text>
+          </Box>
         </Box>
       </Box>
     )

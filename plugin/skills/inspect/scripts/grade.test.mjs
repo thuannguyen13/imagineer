@@ -209,7 +209,7 @@ test('security: unchecked until attacked or scanned; a break fails it; otherwise
   const clean = security({ ledger: emptyLedger(), attacks: held, security: { candidates: [], audit: { high: 0, critical: 0 } } })
   assert.equal(clean.state, 'weak')
   assert.match(clean.summary, /secrets not scanned yet/)
-  assert.doesNotMatch(clean.summary, /not yet 2 clean rounds/)
+  assert.doesNotMatch(clean.summary, /have not yet come back clean/)
   const broke = security({ ledger: emptyLedger(), attacks: [...held, attackRow('A3', 3, 'permissions', 'broke')] })
   assert.equal(broke.state, 'failing')
   assert.equal(broke.summary, '1 attack broke through.')
@@ -233,7 +233,7 @@ test('data safety notes that backups are not drilled yet', () => {
 
 test('the stop bar needs strong tests, clean structure and two clean attack rounds', () => {
   const dims = [{ id: 'test-strength', state: 'strong' }, { id: 'structure', state: 'strong' }]
-  assert.deepEqual(stopBar(dims, [attackRow('A1', 1, 'data', 'broke'), attackRow('A2', 2, 'data', 'held')]).missing, ['not yet 2 clean attack rounds'])
+  assert.deepEqual(stopBar(dims, [attackRow('A1', 1, 'data', 'broke'), attackRow('A2', 2, 'data', 'held')]).missing, ['two attack rounds in a row that find nothing new'])
   assert.equal(stopBar(dims, [attackRow('A1', 1, 'data', 'broke'), attackRow('A2', 2, 'data', 'held'), attackRow('A3', 3, 'permissions', 'held')]).met, true)
   assert.equal(stopBar([{ id: 'test-strength', state: 'weak' }, { id: 'structure', state: 'strong' }], []).met, false)
 })

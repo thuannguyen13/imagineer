@@ -236,7 +236,7 @@ export function security(evidence) {
   const openCandidates = (evidence.findings ?? []).filter(item => item.kind === 'security' && !(item.key in ledger.dismissed)).length
   const gaps = []
   if (attacks.tried) gaps.push(`${plural(attacks.tried, 'attack')} held`)
-  if (attacks.cleanInARow < 2) gaps.push(attacks.tried ? 'not yet 2 clean rounds' : 'no attack rounds yet')
+  if (attacks.cleanInARow < 2) gaps.push(attacks.tried ? 'two attack rounds in a row have not yet come back clean' : 'no attack rounds yet')
   if (openCandidates) gaps.push(`${plural(openCandidates, 'possible weakness', 'possible weaknesses')} not yet verified`)
   if (answers.total > answers.proven) gaps.push(`${plural(answers.total - answers.proven, 'permission answer')} not yet proven by a test`)
   if (scan?.audit?.skipped) gaps.push('dependencies not audited')
@@ -259,7 +259,7 @@ export function dataSafety(evidence) {
 
   const gaps = []
   if (attacks.tried) gaps.push(`${plural(attacks.tried, 'attack')} held`)
-  if (attacks.cleanInARow < 2) gaps.push(attacks.tried ? 'not yet 2 clean rounds' : 'no attack rounds yet')
+  if (attacks.cleanInARow < 2) gaps.push(attacks.tried ? 'two attack rounds in a row have not yet come back clean' : 'no attack rounds yet')
   if (answers.total > answers.proven) gaps.push(`${plural(answers.total - answers.proven, 'data answer')} not yet proven by a test`)
   gaps.push('backup restore not drilled by Imagineer yet')
   return dimension('data-safety', name, 'trust', 'weak', 'default', `${sentenceCase(gaps.join('; '))}.`)
@@ -319,9 +319,10 @@ export function metricFor(d, evidence) {
 export function stopBar(dimensions, attacks) {
   const missing = []
   const byId = id => dimensions.find(d => d.id === id)
-  if (byId('test-strength')?.state !== 'strong') missing.push('test strength below the bar')
-  if (byId('structure')?.state !== 'strong') missing.push('structure findings open')
-  if (rounds((attacks ?? []).filter(a => !a.void)).cleanInARow < 2) missing.push('not yet 2 clean attack rounds')
+  // Each line says what Inspect still needs, in words a person reads in the grade pane.
+  if (byId('test-strength')?.state !== 'strong') missing.push('tests that catch at least 80% of deliberate breaks')
+  if (byId('structure')?.state !== 'strong') missing.push('you to review the structure findings')
+  if (rounds((attacks ?? []).filter(a => !a.void)).cleanInARow < 2) missing.push('two attack rounds in a row that find nothing new')
   return { met: missing.length === 0, missing }
 }
 
@@ -410,6 +411,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   excludeFromGit(repo)
   writeJson(join(repo, RESULTS), results)
   console.log(`${grade.state}: ${grade.reason || 'every dimension meets the bar.'}`)
-  console.log(bar.met ? 'Stop bar met.' : `Stop bar not met: ${bar.missing.join('; ')}.`)
+  console.log(bar.met ? 'Finished: nothing more for Inspect to do.' : `Not finished yet. Inspect still needs: ${bar.missing.join('; ')}.`)
   for (const d of dimensions) console.log(`  ${d.state.padEnd(9)} ${d.name}: ${d.summary}`)
 }

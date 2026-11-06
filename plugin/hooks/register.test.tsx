@@ -6,7 +6,7 @@ const SAMPLE = {
   schema: 1,
   imagineer: '0.2.0',
   scale: 1,
-  run: { command: 'inspect', status: 'waiting', round: 2, commit: 'abc1234', at: '2026-11-06T14:02:00', bar: { met: false, missing: ['not yet 2 clean attack rounds'] } },
+  run: { command: 'inspect', status: 'waiting', round: 2, commit: 'abc1234', at: '2026-11-06T14:02:00', bar: { met: false, missing: ['two attack rounds in a row that find nothing new'] } },
   overall: { state: 'failing', reason: 'Test strength and data safety are failing.' },
   dimensions: [
     {
@@ -277,7 +277,10 @@ test('the pane lists open questions, most consequential first, and the stop bar'
   await $.command.run(typed('imagineer:status'))
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect(await ui.find({ type: 'Text', text: /Stop bar not met: not yet 2 clean attack rounds\./ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Not finished yet\. Inspect still needs:$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^  • two attack rounds in a row that find nothing new$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Run \/imagineer:inspect to continue\.$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Stop bar/ })).toBeUndefined()
   await ui.press({ key: 'tab-questions' })
   const ids = (await ui.findAll({ type: 'Text', text: /^Q\d+$/ })).map(found => found.text)
   expect(ids).toEqual(['Q6', 'Q9'])
