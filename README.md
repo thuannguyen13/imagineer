@@ -37,7 +37,7 @@ Inspect works in a throwaway copy of your last commit, so your project's files a
 
 - **Measures** how well your tests catch deliberate breaks, how the code is structured, and the basics (tests, typecheck, CI, docs). If the test check would take more than 20 minutes, it asks first.
 - **Asks you questions** about what the app should do, in plain language, each with an example and suggested answers. Pick one, write your own, or choose "Not sure".
-- **Proves your answers** with tests, and **tries to break the app** (for example, a user seeing another team's data). Anything that breaks through comes back to you as a question.
+- **Proves your answers** with tests, and **tries to break the app** (for example, a user seeing another team's data). Anything that breaks through comes back to you as a question. Before the first attack, it asks once which models to use (see Build below); the choice is shared.
 
 It never fixes your code. When it finds a gap, it tells you in plain words. It offers to add the tests it proved, or docs from your answers, as new files for you to review. Nothing is added without your yes, and nothing is committed.
 
@@ -53,7 +53,7 @@ The pane also says whether Inspect is finished, by the thresholds Imagineer sugg
 
 Run `/imagineer:build` followed by what you want, for example `/imagineer:build let managers approve expenses over $500`.
 
-- The first time, it asks which models to use: **Recommended**, **Budget** or **Maximum**, a trade-off between cost and how many blind spots the agents share.
+- The first time, it asks which models to use, unless Inspect already did: **Recommended**, **Budget** or **Maximum**, a trade-off between cost and how many blind spots the agents share.
 - The Architect turns your request into requirements in plain words. Nothing is built until you approve them.
 - QA writes the tests first, from the requirements. Dev writes the code until those tests pass. Each agent is kept to its role: QA never writes code, Dev never writes tests.
 - The work happens in its own branch, apart from your checkout. At the end you see what was built per requirement, and it asks before pushing or opening a pull request. It never merges.

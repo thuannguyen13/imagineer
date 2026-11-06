@@ -155,7 +155,14 @@ Without a user, prove what you can from answers already in the ledger and list t
 
 ## Attack rounds
 
-Try to break the app on purpose. Before the first round, regrade with `--status running --step "Attack round 1: trying to break permissions and data"`. Each round, spawn the `imagineer:attacker` agent with the Agent tool and give it, in its prompt: the copy's path (from `$O/copy.json`), `$O`, `$S`, the round number, the attack IDs to use (six per round, continuing from the last), what the app is for and its roles, the user's answers from the ledger, and the attacks already tried (`node $S/attack.mjs list --out $O`).
+Try to break the app on purpose. Before the first round, regrade with `--status running --step "Attack round 1: trying to break permissions and data"`. **Model.** The attacker runs on the model the user chose for Imagineer's agents. Run `node <this skill's folder>/../build/scripts/build.mjs models`. If it says `unset`, ask once, in plain words, and save the choice with `--set <choice>`:
+- **Recommended:** the strongest model for planning, testing and attacking, a faster one for writing code. Medium cost.
+- **Budget:** the faster model for every role. Lowest cost; attacks may miss more.
+- **Maximum:** the strongest model for every role. Highest cost.
+
+Without a user, use the `default` it prints. Spawn the attacker with its `attacker` model.
+
+Each round, spawn the `imagineer:attacker` agent with the Agent tool (model: the `attacker` above) and give it, in its prompt: the copy's path (from `$O/copy.json`), `$O`, `$S`, the round number, the attack IDs to use (six per round, continuing from the last), what the app is for and its roles, the user's answers from the ledger, and the attacks already tried (`node $S/attack.mjs list --out $O`).
 
 After each round:
 

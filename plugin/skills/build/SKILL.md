@@ -29,7 +29,7 @@ Input: $ARGUMENTS
 
 1. **Resume or start.** Run `node $BS list --repo $R`. If the input is empty and a run is unfinished, resume it from its `phase`; if several are, ask which. Otherwise check the repository is a git repository with a `package.json` and a clean working tree, pick a slug, and run `node $BS start --repo $R --slug <slug> --request "<the request>"`.
 
-2. **Models.** Run `node $BS models`. If it says `unset`, ask the user once, in plain words, and save their choice with `node $BS models --set <choice>`:
+2. **Models.** Run `node $BS models`. If it says `unset`, ask the user once, in plain words, and save their choice with `node $BS models --set <choice>`. The same choice sets the model of Inspect's attacker:
    - **Recommended:** the strongest model for planning and testing, a faster one for coding. Medium cost.
    - **Budget:** the faster model for every role. Lowest cost; the coder and the tester share more blind spots.
    - **Maximum:** the strongest model for every role. Highest cost.
@@ -39,7 +39,7 @@ Input: $ARGUMENTS
 3. **Intent.** Read the repository's docs and `$R/.claude/imagineer/questions.json` if it exists. If there are no docs and no answers, ask Inspect's big-picture questions first (what the app is for, who uses it, what is sensitive, what must never happen, which code handles money, personal data or permissions), with `node $IS/questions.mjs` as [Inspect](../inspect/SKILL.md#questions) describes.
 
 4. **Design.** Spawn `imagineer:architect` (model: the preset's `architect`) on the **design** task with `$R`, `$B`, the request and the answers. When it returns:
-   - Ask its questions, if any, with AskUserQuestion, the way [Inspect asks](../inspect/SKILL.md#how-to-write-a-question): plain language with no files or code, the point first, then what you'd expect, what happens today and an example; options that each say what they mean, and Not sure. Spawn it again with the answers if they change the design.
+   - If it wrote `$B/questions.json`, add them to the repository's question ledger: `node $IS/questions.mjs add --repo $R < $B/questions.json`. If the script refuses one (code in the text, a missing example, a suggestion without what it means), spawn the Architect again with the refusal to rewrite it; never reword it yourself. Then ask and record them exactly as [Inspect does](../inspect/SKILL.md#asking): `questions.mjs ask`, AskUserQuestion, `questions.mjs answer` or `not-sure`. The answers stay in the ledger, so Inspect does not ask them again and can prove them later. Spawn the Architect again with the answers if they change the design.
    - Show the user the requirements R1… in plain words, with no files or code, and ask them to approve or change them. Nothing is built before they approve. Without a user, go on only if the request itself says the requirements may be approved as drafted; otherwise list them and stop.
    - Record each approved requirement: `node $BS require --repo $R --slug <slug> --id R1 --text "<requirement>"`.
    - `node $BS state --repo $R --slug <slug> --phase tests`.

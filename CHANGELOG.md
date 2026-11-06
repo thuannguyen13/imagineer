@@ -8,6 +8,8 @@ Imagineer's releases, newest first. Below 1.0, the middle number goes up only wh
 
 - The grade pane fills in while Inspect runs. It opens as soon as Inspect starts, even on a project's first run, and each area appears as soon as it is measured; areas not reached yet show as **◌ Coming up**. The header and the line above the prompt say what Inspect is doing now, for example "Measuring test strength (about 18 minutes, until 14:30)". On the main screen, where a pane would cover the conversation, the **Details** button above the prompt opens it.
 - Choosing to skip the test-strength check shows it as not checked, with your reason, instead of waiting for it.
+- Build's Architect writes its questions the way Inspect does: the point first, what you'd expect, what happens today, an example, answers that say what they mean, and Not sure, with no code in the text. They are checked the same way, and kept with Inspect's answers, so neither asks them twice.
+- The model choice (Recommended, Budget, Maximum) now covers Inspect's attacker too. On Budget, Inspect's attacks run on the faster model instead of always on the strongest. Inspect asks once if you have not chosen yet.
 
 ## 0.2.0 — 2026-11-06
 

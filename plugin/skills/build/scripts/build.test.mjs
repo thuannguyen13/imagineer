@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { barFrom, changedSources, gradeSection, modelsFrom, prBody } from './build.mjs'
 
 test('model presets: recommended mixes, budget and maximum are uniform, custom is checked', () => {
-  assert.deepEqual(modelsFrom('recommended'), { preset: 'recommended', architect: 'opus', dev: 'sonnet', devCritical: 'opus', qa: 'opus' })
+  assert.deepEqual(modelsFrom('recommended'), { preset: 'recommended', architect: 'opus', dev: 'sonnet', devCritical: 'opus', qa: 'opus', attacker: 'opus' })
   assert.equal(modelsFrom('budget').qa, 'sonnet')
   assert.equal(modelsFrom('maximum').dev, 'opus')
   assert.equal(modelsFrom({ dev: 'opus' }).architect, 'opus')
@@ -64,4 +64,36 @@ test('the done thresholds are not met when most breaks timed out', () => {
   const result = barFrom({ tests: { ok: true }, typecheck: { present: true, ok: true }, audit: { ok: true, verdict: 'pass' }, critical: [], mutation: { caught: 20, total: 20, timeouts: 19 } })
   assert.equal(result.met, false)
   assert.match(result.missing[0], /19 of 20 breaks timed out/)
+})
+
+test('the model choice covers Inspect\'s attacker, and a choice saved before it had one still works', async () => {
+  const { savedModels } = await import('./build.mjs')
+  const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs')
+  const { join } = await import('node:path')
+  const { tmpdir } = await import('node:os')
+  assert.equal(modelsFrom('budget').attacker, 'sonnet')
+  assert.equal(modelsFrom('recommended').attacker, 'opus')
+  // A custom map without an attacker gives it QA's model.
+  assert.equal(modelsFrom({ qa: 'sonnet' }).attacker, 'sonnet')
+  assert.throws(() => modelsFrom({ attacker: 'gpt' }), /Unknown model "gpt" for attacker/)
+
+  const dir = mkdtempSync(join(tmpdir(), 'imagineer-prefs-'))
+  try {
+    const path = join(dir, 'preferences.json')
+    writeFileSync(path, JSON.stringify({ buildModels: { preset: 'budget', architect: 'sonnet', dev: 'sonnet', devCritical: 'sonnet', qa: 'sonnet' } }))
+    assert.equal(savedModels(path).attacker, 'sonnet')
+    writeFileSync(path, JSON.stringify({ buildModels: { preset: 'custom', architect: 'opus', dev: 'sonnet', devCritical: 'opus', qa: 'haiku' } }))
+    assert.equal(savedModels(path).attacker, 'haiku')
+    assert.equal(savedModels(join(dir, 'missing.json')), null)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('the example question in the Architect\'s instructions passes Inspect\'s plain-language check', async () => {
+  const { readFileSync } = await import('node:fs')
+  const { addQuestions, emptyLedger } = await import('../../inspect/scripts/questions.mjs')
+  const text = readFileSync(new URL('../../../agents/architect.md', import.meta.url), 'utf8')
+  const example = JSON.parse(text.match(/```json\n([\s\S]+?)\n```/)[1])
+  assert.equal(addQuestions(emptyLedger(), [example]).questions[0].point, example.point)
 })
