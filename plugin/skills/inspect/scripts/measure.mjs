@@ -108,18 +108,22 @@ function stryker(out, isEstimate) {
   const { copy, repoFacts } = state(out)
   const concurrency = Math.max(1, Math.min(8, availableParallelism() - 2))
   const own = repoFacts.tools.stryker.inRepo
-  if (!own && !existsSync(join(copy.path, 'node_modules/@stryker-mutator/core'))) {
-    // Into the throwaway copy only: Stryker has to resolve the project's own
-    // packages (TypeScript, test runners), which it cannot do from npx's cache.
-    const add = ADD[repoFacts.manager](`@stryker-mutator/core@${PINNED.stryker}`)
-    const installed = run(add, { cwd: copy.path, timeoutMs: 10 * 60_000 })
-    if (!installed.ok) {
-      writeJson(join(out, isEstimate ? 'stryker-estimate.json' : 'stryker.json'), { ok: false, error: `Could not install Stryker in the copy: ${tail(installed.stderr)}` })
-      console.log('Stryker could not be installed in the copy.')
-      return
+  // Imagineer's own Stryker lives in a tools folder of its own, never in the project's
+  // node_modules: adding a package there can make npm drop the project's platform binaries.
+  let command = ['npx', 'stryker', 'run']
+  if (!own) {
+    const tools = join(tmpdir(), `imagineer-tools-stryker-${PINNED.stryker}`)
+    const bin = join(tools, 'node_modules', '.bin', 'stryker')
+    if (!existsSync(bin)) {
+      const installed = run(['npm', 'install', '--prefix', tools, '--no-audit', '--no-fund', `@stryker-mutator/core@${PINNED.stryker}`, 'typescript@5'], { timeoutMs: 10 * 60_000 })
+      if (!installed.ok) {
+        writeJson(join(out, isEstimate ? 'stryker-estimate.json' : 'stryker.json'), { ok: false, error: `Could not install Stryker: ${tail(installed.stderr)}` })
+        console.log('Stryker could not be installed.')
+        return
+      }
     }
+    command = [bin, 'run']
   }
-  const command = ['npx', 'stryker', 'run']
 
   let config = repoFacts.tools.stryker.config
   if (!own || config === null) {

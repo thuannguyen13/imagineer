@@ -55,7 +55,7 @@ Built in slices, each released on its own.
 - [x] QA writes tests from the Architect's spec before Dev starts, and they must fail first; Dev runs them and never edits tests. Enforced by `hooks/role-guard.mjs` (8 tests).
 - [x] Done when QA's tests pass and the change meets the bar: typecheck, Fallow audit against the base, mutation testing of changed code at 80% with critical code fully covered (`build.mjs bar`).
 - [x] Reuse from forge: run folder, state file and resume, finding IDs (`F<k>` from the Architect's review), role guard in place of the reviewer hook.
-- [ ] Evidence: a headless Build of the bench's approvals feature passes the forge oracles (F1, F2, F4, F5) it was never shown.
+- [x] Evidence (2026-11-05): a headless Build of the bench's approvals feature, from a brief with the interface named, passed all four forge oracles it was never shown (F1, F2, F4, F5), with 59 of 59 tests and the typecheck passing. QA's tests failed before the feature existed. 8 agent spawns, $5.74. Round 2 caught 79% of breaks in the changed code (194 of 245), just under the bar; the run then ended early because the Lead had left QA running in the background, so Build now waits for every agent.
 
 ## B5 — Retire the old entry points
 

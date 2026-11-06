@@ -12,6 +12,8 @@ Imagineer checks itself, and you can tell it when it got something wrong.
 - **`/imagineer:feedback`** records what Imagineer said or did and what actually happened, as behaviour only, never your code, on your machine. You can then open a pre-filled GitHub issue and submit it yourself, save it as a file, or keep it private.
 - Each run ends with two optional questions: was anything asked that wasn't worth your time, and did we miss anything you know about.
 - Proofs and QA's tests cover every case a person would count as the same answer: for "required", also spaces, tabs, line breaks and invisible characters. Learned from a real miss (bench scenario L1).
+- Build waits for each agent it spawns, so a run without a user does not end early with an agent still working.
+- Inspect keeps its own Stryker in a tools folder outside the project, instead of adding it to the copy's `node_modules`, where npm could drop the project's platform binaries (found on the first real project: its test runner's binary went missing).
 - Build's pull request now carries the repository's grade as it stood before the change, with a reminder to inspect again after merging.
 
 ## 0.7.0 — unreleased
