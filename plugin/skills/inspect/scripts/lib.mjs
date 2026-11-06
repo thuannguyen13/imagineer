@@ -20,9 +20,11 @@ export function writeJson(path, value) {
 /** Runs a command without a shell. Never throws: the result says what happened. */
 export function run(argv, { cwd, timeoutMs = 10 * 60_000, env } = {}) {
   const started = Date.now()
+  // A test runner's own marker would make a nested `node --test` report to it instead of failing.
+  const { NODE_TEST_CONTEXT, ...inherited } = process.env
   const result = spawnSync(argv[0], argv.slice(1), {
     cwd,
-    env: { ...process.env, CI: '1', ...env },
+    env: { ...inherited, CI: '1', ...env },
     encoding: 'utf8',
     timeout: timeoutMs,
     maxBuffer: 64 * 1024 * 1024,
