@@ -27,7 +27,12 @@ export type Run = {
   status: RunStatus
   round: number
   commit: string
+  /** Inspect's stop bar, when the run recorded one. */
+  bar: { met: boolean; missing: string[] } | null
 }
+
+/** An open question from the question ledger, for the pane. */
+export type OpenQuestion = { id: string; topic: string; text: string }
 
 export type Results = {
   kind: 'results'
@@ -37,6 +42,9 @@ export type Results = {
   overall: { state: OverallState; reason: string }
   dimensions: Dimension[]
   questions: { waiting: number; resolved: number }
+  /** True once the repository's HEAD is no longer the commit the grade was measured at. */
+  isStale: boolean
+  openQuestions: OpenQuestion[]
 }
 
 /** What the mod knows about the repo's results file. */

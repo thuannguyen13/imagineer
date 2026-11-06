@@ -9,8 +9,14 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Summary } from '../types'
 import {
+  findPackedRef,
   isActive,
+  isSameCommit,
   MEASURED_LABEL,
+  parseHead,
+  QUESTIONS_PATH,
+  questionLine,
+  readOpenQuestions,
   readResults,
   RESULTS_PATH,
   STATE_LABEL,
@@ -25,27 +31,73 @@ const POLL_MS = 3000
 // Change the tag when Summary's fields change: a value an earlier version
 // stored is then read as "no results" until the file is read again.
 const summaryAtom = atom({ plugin: 'imagineer', key: 'summary' } as const, { kind: 'none' } as Summary, {
-  shape: 'summary-1',
+  shape: 'summary-2',
 })
 
 let lastMtime: number | null = null
+let lastBase: Summary = { kind: 'none' }
+let lastShown = ''
 let stopWatching: (() => void) | null = null
 
-/** Reads the results file again when it changed, and stores what it says. */
+const readIf = async ($: EngineInterface, path: string): Promise<string | null> =>
+  (await $.fs.exists(path)) ? $.fs.read(path) : null
+
+/** The commit the repository's HEAD is at, read from git's own files (no git process). */
+async function currentCommit($: EngineInterface): Promise<string | null> {
+  try {
+    if (!(await $.fs.exists('.git'))) return null
+    let gitDir = '.git'
+    if ((await $.fs.stat('.git')).kind === 'file') {
+      // A worktree: .git names the real folder.
+      const pointer = (await $.fs.read('.git')).match(/^gitdir:\s*(.+)$/m)
+      if (!pointer) return null
+      gitDir = pointer[1]!.trim()
+    }
+    const head = parseHead(await $.fs.read(`${gitDir}/HEAD`))
+    if (!head) return null
+    if ('sha' in head) return head.sha
+    const common = await readIf($, `${gitDir}/commondir`)
+    const commonDir = common === null ? gitDir : common.trim().startsWith('/') ? common.trim() : `${gitDir}/${common.trim()}`
+    for (const dir of [gitDir, commonDir]) {
+      const loose = await readIf($, `${dir}/${head.ref}`)
+      if (loose !== null) return loose.trim()
+    }
+    const packed = await readIf($, `${commonDir}/packed-refs`)
+    return packed === null ? null : findPackedRef(packed, head.ref)
+  } catch {
+    return null
+  }
+}
+
+/** Reads the results file again when it changed, adds what changed since, and stores it. */
 async function refresh($: EngineInterface): Promise<Summary> {
   if (!(await $.fs.exists(RESULTS_PATH))) {
     lastMtime = null
-    const none: Summary = { kind: 'none' }
-    await update($, summaryAtom, () => none)
-    return none
+    lastBase = { kind: 'none' }
+  } else {
+    const { mtimeMs } = await $.fs.stat(RESULTS_PATH)
+    if (mtimeMs !== lastMtime) {
+      lastBase = readResults(await $.fs.read(RESULTS_PATH))
+      lastMtime = mtimeMs
+    }
   }
 
-  const { mtimeMs } = await $.fs.stat(RESULTS_PATH)
-  if (mtimeMs === lastMtime) return read($, summaryAtom)
+  let summary: Summary = lastBase
+  if (lastBase.kind === 'results') {
+    const head = await currentCommit($)
+    summary = {
+      ...lastBase,
+      isStale: head !== null && !isSameCommit(head, lastBase.run.commit),
+      openQuestions: readOpenQuestions(await readIf($, QUESTIONS_PATH)),
+    }
+  }
 
-  const summary = readResults(await $.fs.read(RESULTS_PATH))
-  lastMtime = mtimeMs
-  await update($, summaryAtom, () => summary)
+  // Redraw only when something a reader sees has changed.
+  const shown = JSON.stringify(summary)
+  if (shown !== lastShown) {
+    lastShown = shown
+    await update($, summaryAtom, () => summary)
+  }
   return summary
 }
 
@@ -117,13 +169,16 @@ export const register: Register = on => {
             {overall.icon} Overall: {overall.word}
           </Text>
           {summary.overall.reason !== '' && <Text dimColor>{summary.overall.reason}</Text>}
+          {summary.isStale && (
+            <Text color="warning">{`⟳ Measured at ${summary.run.commit}; the code has changed since. Run /imagineer:inspect again.`}</Text>
+          )}
         </Box>
         {groups.map(group => (
           <Box flexDirection="column">
             <Text weight="semibold">{group.title}</Text>
             {group.dimensions.map(dimension => {
               const label = STATE_LABEL[dimension.state]
-              const notes = [dimension.isStale ? '⟳ stale' : '', dimension.isClaimed ? 'claimed' : '']
+              const notes = [dimension.isStale || summary.isStale ? '⟳ stale' : '', dimension.isClaimed ? 'claimed' : '']
                 .filter(Boolean)
                 .join(' · ')
               return (
@@ -139,11 +194,21 @@ export const register: Register = on => {
             })}
           </Box>
         ))}
-        {summary.questions.waiting > 0 && (
-          <Text color="warning">
-            {summary.questions.waiting} {summary.questions.waiting === 1 ? 'question is' : 'questions are'} waiting
-            for you.
+        {summary.run.bar && (
+          <Text color={summary.run.bar.met ? 'success' : 'inactive'}>
+            {summary.run.bar.met ? '✓ Stop bar met.' : `Stop bar not met: ${summary.run.bar.missing.join('; ')}.`}
           </Text>
+        )}
+        {summary.questions.waiting > 0 && (
+          <Box flexDirection="column">
+            <Text color="warning">
+              {summary.questions.waiting} {summary.questions.waiting === 1 ? 'question is' : 'questions are'} waiting
+              for you. Run /imagineer:inspect to answer.
+            </Text>
+            {summary.openQuestions.map(q => (
+              <Text dimColor>{`   ${questionLine(q)}`}</Text>
+            ))}
+          </Box>
         )}
         <Text dimColor>
           {summary.run.commit ? `Measured at ${summary.run.commit} · ` : ''}Imagineer {summary.imagineer}

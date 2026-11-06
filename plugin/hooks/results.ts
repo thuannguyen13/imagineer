@@ -5,6 +5,7 @@ import type {
   Dimension,
   GradeState,
   Measured,
+  OpenQuestion,
   OverallState,
   Results,
   Run,
@@ -14,6 +15,9 @@ import type {
 
 /** Where Inspect and Build write their results, relative to the repo root. */
 export const RESULTS_PATH = '.claude/imagineer/results.json'
+
+/** The question ledger Inspect keeps beside the results. */
+export const QUESTIONS_PATH = '.claude/imagineer/questions.json'
 
 /** The results file format this version of the mod reads. */
 export const SCHEMA = 1
@@ -63,8 +67,51 @@ function toRun(raw: unknown): Run {
     status: oneOf(run.status, RUN_STATUSES, 'done'),
     round: count(run.round),
     commit: text(run.commit),
+    bar: isObject(run.bar)
+      ? { met: run.bar.met === true, missing: Array.isArray(run.bar.missing) ? run.bar.missing.filter((m): m is string => typeof m === 'string') : [] }
+      : null,
   }
 }
+
+const TOPIC_ORDER = ['data', 'money', 'permissions', 'behaviour', 'wording']
+
+/** The open questions in the ledger, most consequential first. Never throws. */
+export function readOpenQuestions(source: string | null, limit = 5): OpenQuestion[] {
+  if (source === null) return []
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(source)
+  } catch {
+    return []
+  }
+  if (!isObject(parsed) || !Array.isArray(parsed.questions)) return []
+  const rank = (topic: string) => (TOPIC_ORDER.includes(topic) ? TOPIC_ORDER.indexOf(topic) : TOPIC_ORDER.length)
+  return parsed.questions
+    .filter((q): q is Json => isObject(q) && q.status === 'open' && typeof q.id === 'string')
+    .map(q => ({ id: String(q.id), topic: text(q.topic, 'behaviour'), text: text(q.expectation).replace(/^My guess \(no docs found\):\s*/, '') }))
+    .sort((a, b) => rank(a.topic) - rank(b.topic) || Number(a.id.slice(1)) - Number(b.id.slice(1)))
+    .slice(0, limit)
+}
+
+/** Where `.git/HEAD` points: a ref to look up, or a commit when detached. */
+export function parseHead(head: string): { ref: string } | { sha: string } | null {
+  const line = head.trim()
+  const ref = line.match(/^ref:\s*(\S+)$/)
+  if (ref) return { ref: ref[1]! }
+  return /^[0-9a-f]{7,64}$/.test(line) ? { sha: line } : null
+}
+
+/** A ref's commit in `packed-refs`, when it is not a loose file. */
+export function findPackedRef(packed: string, ref: string): string | null {
+  for (const line of packed.split('\n')) {
+    const [sha, name] = line.trim().split(/\s+/)
+    if (name === ref && sha && /^[0-9a-f]+$/.test(sha)) return sha
+  }
+  return null
+}
+
+/** A full commit matches the short commit a grade records when it starts with it. */
+export const isSameCommit = (full: string, short: string) => short !== '' && full.startsWith(short)
 
 /** Turns the file's text into what the pane and band draw. */
 export function readResults(source: string): Summary {
@@ -98,10 +145,16 @@ export function readResults(source: string): Summary {
     },
     dimensions,
     questions: { waiting: count(questions.waiting), resolved: count(questions.resolved) },
+    isStale: false,
+    openQuestions: [],
   }
 
   return results
 }
+
+const shortText = (value: string, max = 110) => (value.length > max ? `${value.slice(0, max - 1).trimEnd()}…` : value)
+
+export const questionLine = (q: OpenQuestion) => `${q.id} (${q.topic}): ${shortText(q.text)}`
 
 export const STATE_LABEL: Record<OverallState, { icon: string; word: string; color: string }> = {
   strong: { icon: '✓', word: 'Strong', color: 'success' },
@@ -142,15 +195,20 @@ export function summaryText(summary: Summary): string {
 
   const overall = STATE_LABEL[summary.overall.state]
   const lines = [`Imagineer: ${overall.icon} ${overall.word}${summary.overall.reason ? ` (${summary.overall.reason})` : ''}`]
+  if (summary.isStale) lines.push(`⟳ Measured at ${summary.run.commit}; the code has changed since. Run /imagineer:inspect again for a current grade.`)
   for (const dimension of summary.dimensions) {
     const label = STATE_LABEL[dimension.state]
-    const notes = [dimension.isStale ? 'stale' : '', dimension.isClaimed ? 'claimed' : ''].filter(Boolean)
+    const notes = [dimension.isStale || summary.isStale ? 'stale' : '', dimension.isClaimed ? 'claimed' : ''].filter(Boolean)
     lines.push(
       `  ${label.icon} ${dimension.name}: ${label.word}${dimension.summary ? `. ${dimension.summary}` : ''}${notes.length ? ` [${notes.join(', ')}]` : ''}`,
     )
   }
+  if (summary.run.bar) {
+    lines.push(summary.run.bar.met ? 'Stop bar: met.' : `Stop bar not met: ${summary.run.bar.missing.join('; ')}.`)
+  }
   if (summary.questions.waiting > 0) {
     lines.push(`${summary.questions.waiting} questions waiting for you.`)
+    for (const q of summary.openQuestions) lines.push(`  ${questionLine(q)}`)
   }
   if (summary.run.commit) lines.push(`Measured at commit ${summary.run.commit}.`)
 

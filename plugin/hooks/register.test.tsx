@@ -6,7 +6,7 @@ const SAMPLE = {
   schema: 1,
   imagineer: '0.2.0',
   scale: 1,
-  run: { command: 'inspect', status: 'waiting', round: 2, commit: 'abc1234' },
+  run: { command: 'inspect', status: 'waiting', round: 2, commit: 'abc1234', bar: { met: false, missing: ['not yet 2 clean attack rounds'] } },
   overall: { state: 'failing', reason: 'Test strength and data safety are failing.' },
   dimensions: [
     {
@@ -59,10 +59,20 @@ function files(on: On, contents: Record<string, string>) {
   let mtime = 1
   // The engine may hand the path on resolved against the session's directory.
   const find = (path: string) => Object.keys(contents).find(name => path === name || path.endsWith(`/${name}`))
+  // Every folder above a file, so `.git` is a folder when `.git/HEAD` is a file, however the path is spelled.
+  const isDir = (path: string) =>
+    Object.keys(contents).some(name =>
+      name
+        .split('/')
+        .slice(0, -1)
+        .map((_, i, parts) => parts.slice(0, i + 1).join('/'))
+        .some(folder => folder !== '' && (path === folder || path.endsWith(`/${folder}`))),
+    )
   mock.clock(on)
   on('session.start', (_, e) => ({ cwd: e.cwd }))
-  on('fs.exists', (_, e) => ({ value: find(e.path) !== undefined }))
+  on('fs.exists', (_, e) => ({ value: find(e.path) !== undefined || isDir(e.path) }))
   on('fs.stat', (_, e) => {
+    if (find(e.path) === undefined && isDir(e.path)) return { value: { kind: 'dir', size: 0, mtimeMs: 0, isLink: false } }
     const name = find(e.path)
     if (name === undefined) throw new Error('not found')
     return { value: { kind: 'file', size: contents[name]!.length, mtimeMs: mtime, isLink: false } }
@@ -205,4 +215,58 @@ test('the pane follows the file when it changes', async ($, on) => {
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect((await ui.find({ type: 'Text', text: /Overall/ }))?.text).toBe('! Overall: Weak')
   await ui.unmount()
+})
+
+const LEDGER = JSON.stringify({
+  questions: [
+    { id: 'Q9', topic: 'wording', status: 'open', expectation: 'Error messages are plain.' },
+    { id: 'Q6', topic: 'permissions', status: 'open', expectation: 'My guess (no docs found): test sign-in never works on the live app.' },
+    { id: 'Q2', topic: 'data', status: 'answered', expectation: 'Answered already.' },
+  ],
+})
+
+test('the pane lists open questions, most consequential first, and the stop bar', async ($, on) => {
+  files(on, { [RESULTS]: JSON.stringify(SAMPLE), '.claude/imagineer/questions.json': LEDGER })
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  await $.command.run({ command: 'imagineer:status', args: '' })
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const lines = (await ui.findAll({ type: 'Text', text: /^ {3}Q\d/ })).map(found => found.text)
+  expect(lines).toEqual(['   Q6 (permissions): test sign-in never works on the live app.', '   Q9 (wording): Error messages are plain.'])
+  expect(await ui.find({ type: 'Text', text: /Stop bar not met: not yet 2 clean attack rounds\./ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('the grade is marked stale once HEAD moves past the measured commit', async ($, on) => {
+  files(on, {
+    [RESULTS]: JSON.stringify(SAMPLE),
+    '.git/HEAD': 'ref: refs/heads/main\n',
+    '.git/refs/heads/main': 'def5678000000000000000000000000000000000\n',
+  })
+  on('ui.open', () => ({ value: { isPlaced: false, reason: 'no-surface' } }))
+  const result = await $.command.run({ command: 'imagineer:status', args: '' })
+  expect(result.text).toContain('⟳ Measured at abc1234; the code has changed since.')
+  expect(result.text).toContain('[stale]')
+})
+
+test('the grade is current when HEAD is the measured commit, found in packed-refs', async ($, on) => {
+  files(on, {
+    [RESULTS]: JSON.stringify(SAMPLE),
+    '.git/HEAD': 'ref: refs/heads/main\n',
+    '.git/packed-refs': '# pack-refs with: peeled\nabc1234aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa refs/heads/main\n',
+  })
+  on('ui.open', () => ({ value: { isPlaced: false, reason: 'no-surface' } }))
+  const result = await $.command.run({ command: 'imagineer:status', args: '' })
+  expect(result.text).not.toContain('changed since')
+})
+
+test('a worktree is followed to its own HEAD', async ($, on) => {
+  files(on, {
+    [RESULTS]: JSON.stringify(SAMPLE),
+    '.git': 'gitdir: /repo/.git/worktrees/feature\n',
+    '/repo/.git/worktrees/feature/HEAD': 'def5678000000000000000000000000000000000\n',
+  })
+  on('ui.open', () => ({ value: { isPlaced: false, reason: 'no-surface' } }))
+  const result = await $.command.run({ command: 'imagineer:status', args: '' })
+  expect(result.text).toContain('the code has changed since')
 })
