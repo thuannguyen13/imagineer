@@ -1,25 +1,10 @@
 # Changelog
 
-Imagineer's releases, newest first. Below 1.0, a `0.y.0` release may change how Imagineer is used; such changes are listed first under **Changes you need to know**. See [docs/proposals/inspect-and-build.md](docs/proposals/inspect-and-build.md#versioning).
-
-## 0.10.0 — 2026-11-06
-
-A grade pane you can scan.
-
-### New
-
-- The pane says in plain words whether Inspect is finished and what it still needs ("Not finished yet. By the thresholds Imagineer suggests, Inspect still needs: …"), instead of "Stop bar not met".
-- What Inspect still needs names the real reason, with today's number: "every break in critical code caught or explained (3 left in lib/deal-scope.ts, 50% caught)", or "tests that catch at least 80% of deliberate breaks (now 33%)".
-- The thresholds are labelled as **Imagineer's suggestion**, not a standard: "By the thresholds Imagineer suggests, Inspect still needs…", and test strength's details say "Imagineer suggests at least 80%".
-- The pane's header shows only the verdict, the commit and when it was tested ("✕ Failing", "e367d330 · tested Nov 5, 22:01"); the rows below say which areas fail.
-- The pane has two tabs. **Grade**: one aligned row per area: icon, name, state, and its one measured number in the same shape for every area, done out of total and what it counts, higher always better (48/51 breaks caught, 17/19 attacks held, 6/6 checks pass), right-aligned in its own column. Press a row to open its evidence underneath (its summary, the first five items and a count of the rest, how it was measured) and again to close it; all start closed. The rows fit the pane: the full row from 64 columns, the number alone from 44, and two lines per area below that. **Questions**: what is waiting for you, by its point, and anything Imagineer may have got wrong itself. There is still no blended overall score: the headline is the weakest-link verdict.
-- Wrapped lines keep their indent, so every line stays under its area.
-- The plugin's description in `/plugin` says what Imagineer does today (Inspect, Build and the grade pane), instead of the earlier skills' names.
-- The grade gives each area a short summary and a separate list, instead of one long sentence with every item in it. "Matches your intent" counts questions plainly: how many you answered, how many the docs settled, how many are waiting.
+Imagineer's releases, newest first. Below 1.0, the middle number goes up only when how you use Imagineer changes, or a command is added; those changes are listed first under **Changes you need to know**. Everything else is a `0.y.z` release. See [docs/proposals/inspect-and-build.md](docs/proposals/inspect-and-build.md#versioning).
 
 ## 0.9.0 — 2026-11-06
 
-Clearer questions, for people who do not read code.
+Clearer questions for people who do not read code, and a grade pane you can scan.
 
 ### Changes you need to know
 
@@ -32,10 +17,18 @@ Clearer questions, for people who do not read code.
 - Which code is critical is asked as parts of your product (sign-in, roles, amounts), not as a list of files.
 - In the terminal and the Desktop app, Imagineer's questions get a calm line above the dialog, and engineers see each question's code details in a dim line there.
 - Build asks its Architect's questions and shows its requirements the same way.
+- The pane says in plain words whether Inspect is finished and what it still needs ("Not finished yet. By the thresholds Imagineer suggests, Inspect still needs: …"), instead of "Stop bar not met".
+- What Inspect still needs names the real reason, with today's number: "every break in critical code caught or explained (3 left in lib/deal-scope.ts, 50% caught)", or "tests that catch at least 80% of deliberate breaks (now 33%)".
+- The thresholds are labelled as **Imagineer's suggestion**, not a standard: "By the thresholds Imagineer suggests, Inspect still needs…", and test strength's details say "Imagineer suggests at least 80%".
+- The pane's header shows only the verdict, the commit and when it was tested ("✕ Failing", "e367d330 · tested Nov 5, 22:01"); the rows below say which areas fail.
+- The pane has two tabs. **Grade**: one aligned row per area: icon, name, state, and its one measured number in the same shape for every area, done out of total and what it counts, higher always better (48/51 breaks caught, 17/19 attacks held, 6/6 checks pass), right-aligned in its own column. Press a row to open its evidence underneath (its summary, the first five items and a count of the rest, how it was measured) and again to close it; all start closed. The rows fit the pane: the full row from 64 columns, the number alone from 44, and two lines per area below that. **Questions**: what is waiting for you, by its point, and anything Imagineer may have got wrong itself. There is still no blended overall score: the headline is the weakest-link verdict.
+- Wrapped lines keep their indent, so every line stays under its area.
+- The plugin's description in `/plugin` says what Imagineer does today (Inspect, Build and the grade pane), instead of the earlier skills' names.
+- The grade gives each area a short summary and a separate list, instead of one long sentence with every item in it. "Matches your intent" counts questions plainly: how many you answered, how many the docs settled, how many are waiting.
 
 ### Fixed
 
-- **Test strength could read Strong when it had measured nothing.** On the first real project, 728 of 729 breaks timed out because eight copies of a full test suite ran at once, and timeouts counted as caught: a false 100%. Now a run where most breaks time out reads as not checked, never Strong (and Build's done bar is not met); mutants run a quarter of the cores at a time with a limit based on the suite's real duration; the estimate allows for runs slowing each other; and test files are never mutated.
+- **Test strength could read Strong when it had measured nothing.** On the first real project, 728 of 729 breaks timed out because eight copies of a full test suite ran at once, and timeouts counted as caught: a false 100%. Now a run where most breaks time out reads as not checked, never Strong (and Build's done thresholds are not met); mutants run a quarter of the cores at a time with a limit based on the suite's real duration; the estimate allows for runs slowing each other; and test files are never mutated.
 - Test strength says how many test files run only with a setting the copy did not have (a database, most often), since its number may then be lower than in CI.
 - The self-check flags a mutation run where most breaks timed out.
 - Attack and proof tests no longer stay in the throwaway copy after they run: a test that broke through fails on purpose, and made every later measurement of the copy fail.

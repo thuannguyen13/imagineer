@@ -317,8 +317,10 @@ Semantic versioning in `plugin.json`, bumped in the pull request that changes wh
 
 | Bump | When |
 |---|---|
-| `y` (0.**2**.0) | Anything that breaks or changes how Imagineer is used, and any new command, dimension, check or option. The changelog marks breaking changes |
-| `z` (0.2.**1**) | Fixes and wording that do not change behaviour users rely on |
+| `y` (0.**2**.0) | Something users must know about: a change to how Imagineer is used (a command, question or file format works differently, or something is removed), or a new command. Listed under **Changes you need to know** |
+| `z` (0.2.**1**) | Everything else: fixes, wording, new checks and options, pane improvements |
+
+Up to 0.8.0, every new check or option raised `y`, and every merged pull request was released on its own, so the version went from 0.2.0 to 0.8.0 in one day. From 0.9.0 the rules above apply, and releases are batched (below).
 
 - `v0.1.0` is the three-skill plugin as it is on `main` today: tagged once, as the baseline the bench compares against.
 - `v0.2.0` is the first release of the two-command design, when B1 merges.
@@ -335,7 +337,8 @@ Semantic versioning in `plugin.json`, bumped in the pull request that changes wh
 
 - `CHANGELOG.md` gets one entry per version, in plain language, with what changes for users and any breaking change first.
 - Each release is a git tag `vX.Y.Z` and a GitHub release with the changelog entry. Users can pin a version with `/plugin marketplace add thuannguyen13/imagineer#vX.Y.Z`.
-- A check fails a pull request that changes anything under `plugin/` without bumping the version and adding a changelog entry.
+- **Releases are batched.** A pull request that changes anything under `plugin/` adds to the changelog entry of the next, untagged version; only the first one after a release bumps the version. The owner tags a release when a set of work is ready, not after every pull request.
+- A check fails a pull request that changes anything under `plugin/` while the version is already tagged, or without a changelog entry for it.
 - Releases are made by the owner, never by the plugin itself.
 
 ### What else carries a version

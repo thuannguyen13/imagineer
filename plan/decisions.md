@@ -79,3 +79,7 @@ The owner confirmed Inspect's stop bar at the proposed numbers: Stryker catches 
 ## 2026-11-06 — The thresholds are Imagineer's suggestion
 
 The owner asked whether Imagineer should list findings without judging them against its own numbers, since 80% is not a standard and Imagineer is not yet validated. Weighed against that: users without technical knowledge cannot read a raw number, and Inspect and Build need a point at which they stop. The owner chose to keep the thresholds, labelled everywhere as Imagineer's suggestion ("By the thresholds Imagineer suggests…"), not as a standard, and to call them thresholds rather than a "bar", which read as unclear. Thresholds the user sets per repository remain a candidate if the suggestion does not fit their projects.
+
+## 2026-11-06 — Slower versions
+
+The owner found the version moved too fast: 0.2.0 to 0.10.0 in two days, because every new check or option raised the middle number and every merged pull request was released on its own. From now on the middle number goes up only for something users must know about (a change to how Imagineer is used, or a new command); everything else is a patch. Pull requests add to the next untagged version, and the owner releases a batch when it is ready. 0.10.0 was never tagged, so it was folded into 0.9.0. Tags v0.1.0 to v0.8.0 stay as they are, since people may have pinned them.
