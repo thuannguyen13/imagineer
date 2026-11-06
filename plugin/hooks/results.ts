@@ -59,7 +59,15 @@ function toDimension(raw: unknown): Dimension | null {
     measured: oneOf(raw.measured, MEASURED, 'none'),
     summary: text(raw.summary),
     items: Array.isArray(raw.items) ? raw.items.filter((i): i is string => typeof i === 'string') : [],
-    metric: isObject(raw.metric) && typeof raw.metric.value === 'string' ? { value: raw.metric.value, label: text(raw.metric.label) } : null,
+    // `text` is the plain phrase; results written before it had one say the number and its label.
+    metric:
+      isObject(raw.metric) && typeof raw.metric.value === 'string'
+        ? {
+            value: raw.metric.value,
+            label: text(raw.metric.label),
+            text: text(raw.metric.text) || (raw.metric.value === '—' ? text(raw.metric.label) : `${raw.metric.value} ${text(raw.metric.label)}`.trim()),
+          }
+        : null,
     isStale: raw.stale === true,
     isClaimed: raw.claimed === true,
     isPending: raw.pending === true,
@@ -77,7 +85,19 @@ function toRun(raw: unknown): Run {
     step: text(run.step),
     at: text(run.at),
     bar: isObject(run.bar)
-      ? { met: run.bar.met === true, missing: Array.isArray(run.bar.missing) ? run.bar.missing.filter((m): m is string => typeof m === 'string') : [] }
+      ? {
+          met: run.bar.met === true,
+          missing: Array.isArray(run.bar.missing) ? run.bar.missing.filter((m): m is string => typeof m === 'string') : [],
+          progress: Array.isArray(run.bar.progress)
+            ? run.bar.progress.filter(isObject).map(p => ({
+                label: text(p.label),
+                done: count(p.done),
+                total: Math.max(1, count(p.total)),
+                met: p.met === true,
+                text: text(p.text),
+              }))
+            : [],
+        }
       : null,
   }
 }
@@ -249,6 +269,15 @@ export function whenTested(iso: string, now = new Date()): string {
   return `${MONTHS[at.getMonth()]} ${at.getDate()}${year}, ${time}`
 }
 
+/**
+ * A segmented bar of `width` cells for `done` of `total`, as its filled and empty parts, drawn in two
+ * colours. The segments do not fill the line's height, so bars on consecutive rows stay apart.
+ */
+export function progressBar(done: number, total: number, width = 12): { filled: string; empty: string } {
+  const filled = total > 0 ? Math.round((Math.min(done, total) / total) * width) : 0
+  return { filled: '▰'.repeat(filled), empty: '▱'.repeat(width - filled) }
+}
+
 /** Whether Inspect is finished, and if not, what it still needs, in plain words. */
 export function finishLines(bar: { met: boolean; missing: string[] }): string[] {
   if (bar.met) return ['✓ Finished, by the thresholds Imagineer suggests: tests catch enough breaks, nothing is left to review, and two attack rounds in a row found nothing new.']
@@ -271,7 +300,8 @@ export function firstItems(items: string[], shown = ITEMS_SHOWN): string[] {
 export const STATE_LABEL: Record<OverallState, { icon: string; word: string; color: string }> = {
   strong: { icon: '✓', word: 'Strong', color: 'success' },
   weak: { icon: '!', word: 'Weak', color: 'warning' },
-  failing: { icon: '✕', word: 'Failing', color: 'error' },
+  // `failing` in the results file; said as "At risk": something that matters is known to be wrong or unprotected.
+  failing: { icon: '✕', word: 'At risk', color: 'error' },
   unchecked: { icon: '?', word: 'Not checked', color: 'inactive' },
   'not-proven': { icon: '?', word: 'Not proven yet', color: 'inactive' },
 }
@@ -324,7 +354,7 @@ export function summaryText(summary: Summary): string {
   if (summary.isStale) lines.push(`⟳ Measured at ${summary.run.commit}; the code has changed since. Run /imagineer:inspect again for a current grade.`)
   for (const dimension of summary.dimensions) {
     const label = labelFor(dimension)
-    const notes = [dimension.isStale || summary.isStale ? 'stale' : '', dimension.isClaimed ? 'claimed' : ''].filter(Boolean)
+    const notes = [dimension.isStale && !summary.isStale ? 'stale' : '', dimension.isClaimed ? 'claimed' : ''].filter(Boolean)
     lines.push(
       `  ${label.icon} ${dimension.name}: ${label.word}${dimension.summary ? `. ${dimension.summary}` : ''}${notes.length ? ` [${notes.join(', ')}]` : ''}`,
     )

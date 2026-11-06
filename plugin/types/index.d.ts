@@ -19,12 +19,15 @@ export type Dimension = {
   /** The list behind the summary (files, attacks, answers), shown under Evidence. */
   items: string[]
   /** The area's one measured number and what it counts, for its tile. */
-  metric: { value: string; label: string } | null
+  metric: { value: string; label: string; text: string } | null
   isStale: boolean
   isClaimed: boolean
   /** A running Inspect has not reached this area yet: coming up, not "not checked". */
   isPending: boolean
 }
+
+/** One finish threshold and how far along it is: `done` of `total`, and the numbers in words. */
+export type FinishStep = { label: string; done: number; total: number; met: boolean; text: string }
 
 export type RunStatus = 'running' | 'waiting' | 'done' | 'stopped'
 
@@ -38,7 +41,7 @@ export type Run = {
   /** When the run measured the code, as an ISO time; empty when unknown. */
   at: string
   /** Inspect's finish thresholds, when the run recorded them: met, or what is still missing. */
-  bar: { met: boolean; missing: string[] } | null
+  bar: { met: boolean; missing: string[]; progress: FinishStep[] } | null
 }
 
 /** An open question from the question ledger, for the pane. */
@@ -81,6 +84,6 @@ export type Summary =
 
 declare module 'claude-code' {
   interface PluginState {
-    imagineer: { summary: Shaped<Summary>; tab: Shaped<Tab>; open: string[]; starting: boolean }
+    imagineer: { summary: Shaped<Summary>; tab: Shaped<Tab>; open: string[]; starting: boolean; frame: number }
   }
 }

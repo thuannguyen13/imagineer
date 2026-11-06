@@ -45,7 +45,7 @@ It never fixes your code. When it finds a gap, it tells you in plain words. It o
 
 The pane opens on its own during Inspect, and `/imagineer:status` reopens it at any time, even after you restart Claude Code.
 
-Each area gets one state: **✓ Strong**, **! Weak**, **✕ Failing** or **? Not checked**. The areas are test strength, structure, foundations, matches your intent, security and permissions, and data safety. The overall grade is the weakest area that matters most, not an average. Select a row to see its evidence.
+Each area gets one state: **✓ Strong**, **! Weak**, **✕ At risk** (something that matters is known to be wrong or unprotected) or **? Not checked**. The areas are test strength, code quality, foundations, matches your intent, security and permissions, and data safety. The overall grade is the weakest area that matters most, not an average. Select a row to see its evidence.
 
 The pane has two tabs. **Overview** is how your project is doing: the areas above, and a line telling you when questions wait. **Questions** is what Imagineer still needs from you, and **Your answers**: everything you've told it and what came of each, such as "Matches what the app does" or "Differs from the app: you want it fixed".
 

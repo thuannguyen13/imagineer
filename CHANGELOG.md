@@ -14,6 +14,8 @@ Questions asked blind.
 
 ### New
 
+- The Structure area is called **Code quality**, as readability becomes a main focus. Its id in the results file stays `structure`.
+- The grade's worst state is called **At risk** instead of Failing: something that matters is known to be wrong or unprotected. The results file still says `failing`, so older results read the same.
 - "Matches your intent" counts what the questions found: answers that matched what the app does, gaps you want fixed, and gaps you chose to keep. A gap you want fixed counts against it at once, as Failing when it is about data, money or permissions.
 - Gaps are asked first, and the report lists each one: what you said, what the app does today, and whether you want it fixed.
 - Build's Architect writes choices for what is new, and checks, asked blind, for what the app already does.

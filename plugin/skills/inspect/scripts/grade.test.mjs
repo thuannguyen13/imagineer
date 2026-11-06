@@ -338,6 +338,9 @@ test('every area\'s number has one shape: done/total and its good outcome', () =
     return `${value} ${label}`
   }
   assert.equal(metric({ id: 'test-strength', state: 'strong', summary: '' }, { mutation: report, stryker: { ok: true } }), '48/51 breaks caught')
+  // The pane's phrase: plain words, no tool names.
+  assert.equal(metricFor({ id: 'test-strength', state: 'strong', summary: '' }, { mutation: report, stryker: { ok: true } }).text, '48 of 51 planted bugs caught')
+  assert.equal(metricFor({ id: 'structure', state: 'weak', summary: '' }, { fallow: { health: { health_score: { score: 63.6 } } } }).text, 'code health 63.6 of 100')
   assert.equal(metric({ id: 'test-strength', state: 'unchecked', summary: '728 of 729 breaks timed out' }, { mutation: report }), '— runs timed out')
   const attacks = [attackRow('A1', 1, 'permissions', 'broke'), attackRow('A2', 1, 'permissions', 'held'), attackRow('A3', 2, 'data', 'held')]
   assert.equal(metric({ id: 'security', state: 'failing', summary: '' }, { attacks, security: { audit: { critical: 1, high: 6 } } }), '1/2 attacks held')
@@ -487,4 +490,22 @@ test('a question still open from before 0.3.0 is asked in its old layout', () =>
   const dialog = dialogFor(ledger.questions[0])
   assert.match(dialog.question, /^Old point\.\n\nYou'd expect: Old expectation\./)
   assert.deepEqual(dialog.options.map(o => o.label), ['A', 'B', 'Not sure'])
+})
+
+import { finishProgress } from './grade.mjs'
+
+test('each finish threshold says how far along it is, for the pane\'s bars', () => {
+  const report = { files: { 'a.ts': { mutants: [...Array.from({ length: 61 }, () => ({ status: 'Killed' })), ...Array.from({ length: 39 }, (_, i) => ({ id: String(i), status: 'Survived', location: { start: { line: i + 1 } } }))] } } }
+  const byId = id => ({ 'test-strength': { state: 'failing' }, structure: { state: 'weak' } })[id]
+  const ledger = { ...emptyLedger(), dismissed: { 'unused-file:a.ts:': { question: 'Q1' } } }
+  const findings = [
+    { key: 'unused-file:a.ts:', kind: 'unused-file' },
+    { key: 'complex:b.ts:3', kind: 'complex' },
+    { key: 'mutant:a.ts:1', kind: 'mutant' },
+  ]
+  const [tests, structure, attacks] = finishProgress(byId, 1, { stryker: { ok: true }, mutation: report, ledger, findings })
+  assert.deepEqual(tests, { label: 'Tests catch breaks', done: 61, total: 80, met: false, text: '61% of 80%' })
+  assert.deepEqual(structure, { label: 'Code quality reviewed', done: 1, total: 2, met: false, text: '1 of 2 findings' })
+  assert.deepEqual(attacks, { label: 'Clean attack rounds', done: 1, total: 2, met: false, text: '1 of 2 in a row' })
+  assert.equal(finishProgress(byId, 3, {})[2].done, 2)
 })

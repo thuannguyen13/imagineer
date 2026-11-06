@@ -50,12 +50,12 @@ test('the pull request body leads with requirements and their evidence', () => {
 test('the pull request carries the repository grade as it stood before the change', () => {
   const results = {
     run: { commit: 'b903e13' },
-    overall: { state: 'failing', reason: 'Failing: test strength.' },
+    overall: { state: 'failing', reason: 'At risk: test strength.' },
     dimensions: [{ name: 'Test strength', state: 'failing', summary: 'Tests catch 31% of deliberate breaks.' }],
   }
   const lines = gradeSection(results).join('\n')
-  assert.match(lines, /Before this change, at b903e13: \*\*✕ Failing\*\* \(Failing: test strength\.\)/)
-  assert.match(lines, /- ✕ Failing Test strength: Tests catch 31%/)
+  assert.match(lines, /Before this change, at b903e13: \*\*✕ At risk\*\* \(At risk: test strength\.\)/)
+  assert.match(lines, /- ✕ At risk Test strength: Tests catch 31%/)
   assert.match(gradeSection(null).join('\n'), /Not inspected yet/)
   assert.match(prBody({ request: 'x', requirements: [], rounds: [] }, results), /## Repository grade/)
 })

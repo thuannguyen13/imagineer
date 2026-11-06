@@ -213,7 +213,7 @@ function bar(repo, slug, command, skipMutation) {
   if (!tests.ok) console.log(tail(tests.stdout + '\n' + tests.stderr, 20))
 }
 
-const STATE_WORD = { strong: '✓ Strong', weak: '! Weak', failing: '✕ Failing', unchecked: '? Not checked', 'not-proven': '? Not proven yet' }
+const STATE_WORD = { strong: '✓ Strong', weak: '! Weak', failing: '✕ At risk', unchecked: '? Not checked', 'not-proven': '? Not proven yet' }
 
 /** The repository's grade from its last Inspect run, as it stood before this change. */
 export function gradeSection(results) {

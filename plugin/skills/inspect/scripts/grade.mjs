@@ -105,7 +105,8 @@ const resolvedNote = (byUser, byDocs) =>
 
 export function structure(evidence) {
   const { fallow } = evidence
-  const name = 'Structure'
+  // Shown as Code quality (Structure before 0.3.0); the id stays `structure`, so earlier results still load.
+  const name = 'Code quality'
   if (!fallow) return dimension('structure', name, 'care', 'unchecked', 'none', 'Not measured yet.')
   if (!fallow.ok) return dimension('structure', name, 'care', 'unchecked', 'none', 'Fallow could not run, so structure is unknown.')
 
@@ -280,13 +281,14 @@ export function dataSafety(evidence) {
 }
 
 /** Shown where an area has nothing measured. */
-const NONE = label => ({ value: '—', label })
+const NONE = label => ({ value: '—', label, text: label })
 
 const ratio = (done, total) => ({ done, total, value: `${done}/${total}` })
 
 /**
  * One measured number per area, in one shape for every area: `done/total`, then what is
- * counted and its good outcome, so a higher number is always better. Never a blended score;
+ * counted and its good outcome, so a higher number is always better. `text` says it as one plain
+ * phrase for the pane ("31 of 51 planted bugs caught"), with no tool names. Never a blended score;
  * anything else an area knows (vulnerabilities, contradicted answers, open findings) is in its
  * summary and items, under Evidence.
  */
@@ -296,22 +298,25 @@ export function metricFor(d, evidence) {
     const report = evidence.mutation
     if (!report || d.state === 'unchecked') return NONE(evidence.stryker?.skipped ? 'no test command' : /timed out/.test(d.summary) ? 'runs timed out' : 'not measured')
     const { caught, total } = mutationScore(report)
-    return { ...ratio(caught, total), label: 'breaks caught' }
+    return { ...ratio(caught, total), label: 'breaks caught', text: `${caught} of ${total} planted bugs caught` }
   }
   if (d.id === 'intent') {
     const answered = ledger.questions.filter(q => q.status === 'answered')
     if (!answered.length) return NONE(ledger.questions.length ? 'no answers yet' : 'no questions yet')
-    return { ...ratio(answered.filter(isProven).length, answered.length), label: 'answers proven' }
+    const proven = answered.filter(isProven).length
+    return { ...ratio(proven, answered.length), label: 'answers proven', text: `${proven} of ${answered.length} answers backed by a test` }
   }
   if (d.id === 'security' || d.id === 'data-safety') {
     const mine = (evidence.attacks ?? []).filter(a => a.category === (d.id === 'security' ? 'permissions' : 'data') && !a.void)
     if (!mine.length) return NONE('not attacked yet')
-    return { ...ratio(mine.filter(a => a.result === 'held').length, mine.length), label: 'attacks held' }
+    const held = mine.filter(a => a.result === 'held').length
+    const what = d.id === 'security' ? 'break-in attempts' : 'data attacks'
+    return { ...ratio(held, mine.length), label: 'attacks held', text: `${held} of ${mine.length} ${what} blocked` }
   }
   if (d.id === 'structure') {
     const score = evidence.fallow?.health?.health_score?.score
     if (score === undefined || d.state === 'unchecked') return NONE('not measured')
-    return { ...ratio(score, 100), label: 'Fallow health' }
+    return { ...ratio(score, 100), label: 'Fallow health', text: `code health ${score} of 100` }
   }
   if (d.id === 'foundations') {
     const { detect, copy, checks } = evidence
@@ -324,7 +329,8 @@ export function metricFor(d, evidence) {
       detect.ci.runsTests,
       detect.env.missing.length === 0,
     ]
-    return { ...ratio(results.filter(Boolean).length, results.length), label: 'checks pass' }
+    const pass = results.filter(Boolean).length
+    return { ...ratio(pass, results.length), label: 'checks pass', text: `${pass} of ${results.length} basics in place` }
   }
   return NONE('')
 }
@@ -362,9 +368,41 @@ export function stopBar(dimensions, attacks, evidence = {}) {
     const needs = testStrengthNeeds(evidence)
     missing.push(...(needs.length ? needs : ['tests that catch at least 80% of deliberate breaks']))
   }
-  if (byId('structure')?.state !== 'strong') missing.push('you to review the structure findings')
-  if (rounds((attacks ?? []).filter(a => !a.void)).cleanInARow < 2) missing.push('two attack rounds in a row that find nothing new')
-  return { met: missing.length === 0, missing }
+  if (byId('structure')?.state !== 'strong') missing.push('you to review the code quality findings')
+  const clean = rounds((attacks ?? []).filter(a => !a.void)).cleanInARow
+  if (clean < 2) missing.push('two attack rounds in a row that find nothing new')
+  return { met: missing.length === 0, missing, progress: finishProgress(byId, clean, evidence) }
+}
+
+const STRUCTURE_KINDS = ['unused-file', 'unused-export', 'complex']
+
+/**
+ * How far along each finish threshold is, for the pane's bars: `done` of `total`, whether it is
+ * met, and the numbers in words. The thresholds are Imagineer's suggestion, not a standard.
+ */
+export function finishProgress(byId, cleanInARow, evidence = {}) {
+  const ledger = evidence.ledger ?? emptyLedger()
+  const tests = (() => {
+    const met = byId('test-strength')?.state === 'strong'
+    const report = evidence.mutation
+    if (!evidence.stryker?.ok || !report) return { label: 'Tests catch breaks', done: 0, total: 80, met, text: 'not measured yet' }
+    const { total, score } = mutationScore(report)
+    if (total === 0) return { label: 'Tests catch breaks', done: 0, total: 80, met, text: 'nothing measured' }
+    const caught = Math.round(score * 100)
+    const critical = testStrengthNeeds(evidence).find(n => n.startsWith('every break in critical code'))
+    return { label: 'Tests catch breaks', done: Math.min(caught, 80), total: 80, met, text: `${caught}% of 80%${critical && caught >= 80 ? ', critical code not yet' : ''}` }
+  })()
+  const structureItems = (evidence.findings ?? []).filter(item => STRUCTURE_KINDS.includes(item.kind))
+  const reviewed = structureItems.filter(item => item.key in ledger.dismissed).length
+  const structure = {
+    label: 'Code quality reviewed',
+    done: structureItems.length ? reviewed : byId('structure')?.state === 'strong' ? 1 : 0,
+    total: structureItems.length || 1,
+    met: byId('structure')?.state === 'strong',
+    text: structureItems.length ? `${reviewed} of ${structureItems.length} findings` : byId('structure')?.state === 'strong' ? 'nothing to review' : 'not measured yet',
+  }
+  const attacks = { label: 'Clean attack rounds', done: Math.min(cleanInARow, 2), total: 2, met: cleanInARow >= 2, text: `${Math.min(cleanInARow, 2)} of 2 in a row` }
+  return [tests, structure, attacks]
 }
 
 /** The overall grade: the weakest link, never an average. */
@@ -374,7 +412,7 @@ export function overall(dimensions) {
   const names = list => list.map(d => d.name.toLowerCase()).join(', ')
 
   const failing = trust.filter(d => d.state === 'failing')
-  if (failing.length) return { state: 'failing', reason: `Failing: ${names(failing)}.` }
+  if (failing.length) return { state: 'failing', reason: `At risk: ${names(failing)}.` }
   const unchecked = trust.filter(d => d.state === 'unchecked')
   if (unchecked.length) return { state: 'not-proven', reason: `Not checked yet: ${names(unchecked)}.` }
   const weak = [...trust, ...care].filter(d => d.state === 'weak' || (d.group === 'care' && d.state === 'failing'))

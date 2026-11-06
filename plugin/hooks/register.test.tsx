@@ -1,4 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
+import { VERSION } from './version'
 
 const RESULTS = '.claude/imagineer/results.json'
 
@@ -115,27 +116,32 @@ test('status with no results says how to start, and opens nothing', async ($, on
 
 test('status opens the pane: an aligned overview first, on every surface', async ($, on) => {
   files(on, { [RESULTS]: JSON.stringify(SAMPLE) })
-  on('ui.open', () => ({ value: { isPlaced: true } }))
+  const titles: string[] = []
+  on('ui.open', (_, e) => {
+    titles.push(String(e.title))
+    return { value: { isPlaced: true } }
+  })
 
   const result = await $.command.run(typed('imagineer:status'))
   expect(result.text ?? '').toBe('')
+  // The plugin's version is in the pane's title, kept in step with plugin.json by CI.
+  expect(titles).toEqual([`Imagineer ${VERSION}`])
 
   for (const surface of ['terminal', 'desktop', 'vscode', 'mobile'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    expect((await ui.find({ type: 'Text', text: /^✕ Failing$/ }))?.text).toBe('✕ Failing')
+    expect((await ui.find({ type: 'Text', text: /^✕ At risk$/ }))?.text).toBe('✕ At risk')
     // The header: the verdict, the commit and when it was tested, nothing else.
     expect(await ui.find({ type: 'Text', text: /^abc1234 · tested Nov 6, 14:02$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /Test strength and data safety are failing/ })).toBeUndefined()
     // One layout on every surface: each area's name, its number and what it counts, its state, each
-    // its own Text with its colour, and a small chevron that opens its evidence.
+    // its own Text with its colour. The chevron and the name are one button, the widest place to press.
     const row = await ui.find({ type: 'Button', key: 'row-test-strength' })
     {
-      expect(row?.text).toBe('›')
-      expect(await ui.find({ type: 'Text', text: /^Test strength$/ })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: /^51\/167$/ })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: /^breaks caught$/ })).toBeDefined()
+      expect(row?.text).toBe('▶ Test strength')
+      // Results written before the plain phrase say the number and its label.
+      expect(await ui.find({ type: 'Text', text: /^51\/167 breaks caught$/ })).toBeDefined()
       expect((await ui.find({ type: 'Button', key: 'go-questions' }))?.text).toBe('3 questions wait for you: open Questions')
-      expect((await ui.findAll({ type: 'Text', text: /^Failing$/ })).length).toBeGreaterThan(0)
+      expect(await ui.find({ type: 'Text', text: /^✕ At risk$/ })).toBeDefined()
     }
     expect(await ui.find({ type: 'Button', key: 'row-intent' })).toBeDefined()
     expect(await ui.find({ type: 'Button', key: 'tab-questions' })).toBeDefined()
@@ -154,6 +160,7 @@ test('pressing a row opens its evidence: the summary and the first five items, t
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
     await ui.press({ key: 'row-test-strength' })
+    expect((await ui.find({ type: 'Button', key: 'row-test-strength' }))?.text).toBe('▼ Test strength')
     expect(await ui.find({ type: 'Text', text: /Tests catch 30% of deliberate breaks/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^(• )?A5: attack 5$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^(• )?A6: attack 6$/ })).toBeUndefined()
@@ -184,7 +191,7 @@ test('status answers in text where no pane can be drawn', async ($, on) => {
 
   const result = await $.command.run(typed('imagineer:status'))
 
-  expect(result.text).toContain('Imagineer: ✕ Failing')
+  expect(result.text).toContain('Imagineer: ✕ At risk')
   expect(result.text).toContain('? Matches your intent: Not checked')
   expect(result.text).toContain('[claimed]')
   expect(result.text).toContain('3 questions waiting for you.')
@@ -346,7 +353,22 @@ test('the grade is marked stale once HEAD moves past the measured commit', async
   on('ui.open', () => ({ value: { isPlaced: false, reason: 'no-surface' } }))
   const result = await $.command.run(typed('imagineer:status'))
   expect(result.text).toContain('⟳ Measured at abc1234; the code has changed since.')
-  expect(result.text).toContain('[stale]')
+  // Said once, not on every area.
+  expect(result.text).not.toContain('[stale]')
+})
+
+test('the pane says once, in its header, that the code has changed since the grade', async ($, on) => {
+  files(on, {
+    [RESULTS]: JSON.stringify(SAMPLE),
+    '.git/HEAD': 'ref: refs/heads/main\n',
+    '.git/refs/heads/main': 'def5678000000000000000000000000000000000\n',
+  })
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  await $.command.run(typed('imagineer:status'))
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const stale = await ui.findAll({ type: 'Text', text: /⟳/ })
+  expect(stale.map(t => t.text)).toEqual(['⟳ Your code has changed since. Run /imagineer:inspect for a current grade.'])
+  await ui.unmount()
 })
 
 test('the grade is current when HEAD is the measured commit, found in packed-refs', async ($, on) => {
@@ -467,14 +489,16 @@ test('while Inspect runs, the pane says what it is doing, and areas not reached 
   await $.command.run(typed('imagineer:status'))
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  expect(await ui.find({ type: 'Text', text: /^◌ Inspect is running$/ })).toBeDefined()
+  // While running: no verdict yet, and a spinner beside what Inspect is doing.
+  expect(await ui.find({ type: 'Text', text: /^Inspect is running$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] $/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^Measuring test strength \(about 18 minutes\)$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^Coming up$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^Weak$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^◌ Coming up$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^! Weak$/ })).toBeDefined()
   // Not a verdict, and not "not finished" while it is still measuring.
   expect(await ui.find({ type: 'Text', text: /Not proven yet/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /Not finished yet/ })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: /Areas fill in as Inspect measures them/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Areas fill in as Inspect measures them/ })).toBeUndefined()
   await ui.unmount()
 
   const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
@@ -503,5 +527,62 @@ test('a gap waits in Questions first, saying the answer differs from what the ap
   // Answered questions are not waiting: they are in the record below.
   expect(texts.indexOf('Answered.')).toBeGreaterThan(texts.indexOf('Your answers (1)'))
   expect(texts.indexOf('Your answers (1)')).toBeGreaterThan(texts.indexOf('What should happen to a deleted client?'))
+  await ui.unmount()
+})
+
+test('the header shows how far along each finish threshold is, as bars', async ($, on) => {
+  const progress = [
+    { label: 'Tests catch breaks', done: 61, total: 80, met: false, text: '61% of 80%' },
+    { label: 'Structure reviewed', done: 2, total: 2, met: true, text: '2 of 2 findings' },
+    { label: 'Clean attack rounds', done: 1, total: 2, met: false, text: '1 of 2 in a row' },
+  ]
+  const results = { ...SAMPLE, run: { ...SAMPLE.run, bar: { met: false, missing: ['x'], progress } } }
+  files(on, { [RESULTS]: JSON.stringify(results) })
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  await $.command.run(typed('imagineer:status'))
+
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...PANE, surface })
+    // Stopped before finishing: the verdict leads, Inspect's progress beneath it with its bars.
+    expect(await ui.find({ type: 'Text', text: /^✕ At risk$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^Inspect's progress · 1 of 3 done · by the thresholds Imagineer suggests$/ })).toBeDefined()
+    // Segmented bars, label first: done in colour, the rest dim.
+    expect(await ui.find({ type: 'Text', text: /^▰▰▰▰▰▰▰▰▰$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^▱▱▱$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^▰▰▰▰▰▰▰▰▰▰▰▰$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^61% of 80%$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^Run \/imagineer:inspect to continue\.$/ })).toBeDefined()
+    // The old wording is for results written before the bars.
+    expect(await ui.find({ type: 'Text', text: /^Not finished yet/ })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /Select an area/ })).toBeUndefined()
+    await ui.unmount()
+  }
+})
+
+test('once Inspect is finished, the box holds the result alone, without the bars', async ($, on) => {
+  const progress = ['Tests catch breaks', 'Structure reviewed', 'Clean attack rounds'].map(label => ({ label, done: 2, total: 2, met: true, text: 'done' }))
+  const results = { ...SAMPLE, run: { ...SAMPLE.run, status: 'done', bar: { met: true, missing: [], progress } }, overall: { state: 'weak', reason: '' } }
+  files(on, { [RESULTS]: JSON.stringify(results) })
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  await $.command.run(typed('imagineer:status'))
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: /^! Weak$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^✓ Inspect finished: every threshold Imagineer suggests is met\.$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Structure reviewed$/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /Run \/imagineer:inspect to continue/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('each area says its number as one plain phrase, with no tool names', async ($, on) => {
+  const dims = SAMPLE.dimensions.map(d =>
+    d.id === 'test-strength' ? { ...d, metric: { value: '31/51', label: 'breaks caught', text: '31 of 51 planted bugs caught' } } : d,
+  )
+  files(on, { [RESULTS]: JSON.stringify({ ...SAMPLE, dimensions: dims }) })
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  await $.command.run(typed('imagineer:status'))
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: /^31 of 51 planted bugs caught$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /breaks caught/ })).toBeUndefined()
   await ui.unmount()
 })
