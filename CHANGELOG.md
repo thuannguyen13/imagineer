@@ -2,7 +2,7 @@
 
 Imagineer's releases, newest first. Below 1.0, a `0.y.0` release may change how Imagineer is used; such changes are listed first under **Changes you need to know**. See [docs/proposals/inspect-and-build.md](docs/proposals/inspect-and-build.md#versioning).
 
-## 0.8.0 — unreleased
+## 0.8.0 — 2026-11-05
 
 Imagineer checks itself, and you can tell it when it got something wrong.
 
@@ -16,7 +16,7 @@ Imagineer checks itself, and you can tell it when it got something wrong.
 - Inspect keeps its own Stryker in a tools folder outside the project, instead of adding it to the copy's `node_modules`, where npm could drop the project's platform binaries (found on the first real project: its test runner's binary went missing).
 - Build's pull request now carries the repository's grade as it stood before the change, with a reminder to inspect again after merging.
 
-## 0.7.0 — unreleased
+## 0.7.0 — 2026-11-05
 
 Build arrives.
 
