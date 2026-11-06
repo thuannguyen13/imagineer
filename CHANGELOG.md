@@ -2,7 +2,7 @@
 
 Imagineer's releases, newest first. Below 1.0, a `0.y.0` release may change how Imagineer is used; such changes are listed first under **Changes you need to know**. See [docs/proposals/inspect-and-build.md](docs/proposals/inspect-and-build.md#versioning).
 
-## 0.10.0 — unreleased
+## 0.10.0 — 2026-11-06
 
 A grade pane you can scan.
 
