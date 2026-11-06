@@ -95,3 +95,12 @@ The owner restated Inspect's goal: keep trying to break the system and turn what
 - **Secret scanning uses gitleaks**, which also searches the git history, where a deleted key still leaks. No weaker fallback: a pinned release is downloaded into Imagineer's tools folder (outside the repo, checksum checked, as Stryker is installed), and if that fails the scan shows as not checked with the reason.
 - **Structure is renamed Code quality**, since readability becomes a main focus. The area's id stays `structure`, so earlier results still load.
 - **A second angle only for answers about data, money and permissions**, where a wrong guess costs most; other answers keep one question, so the user is not asked everything twice.
+
+## 2026-11-06 — The owner's intention check
+
+Inspect's own method was run on the owner: blind questions about what Imagineer should do, then each again from a second angle. Settled:
+
+- **Fixing:** Inspect reports, then offers to start Build for the holes the user picks; Build fixes them on a branch with a pull request. The owner's first two answers disagreed (fix on a branch; report only), and asking once more with both side by side gave this third answer. That disagreement is the case the second angle exists for.
+- **Finish line:** 80% of planted bugs caught holds for every app, asked twice (once for a small personal tool). Thresholds set per repository are not wanted for now.
+- **Secrets:** nothing about a found secret in the pane, which may be on a shared screen. Security shows At risk, its evidence points to Inspect's report, and only the report says where and what kind, never the secret.
+- **File names:** visible but secondary, in a dim line for whoever helps the user. Matches the design.

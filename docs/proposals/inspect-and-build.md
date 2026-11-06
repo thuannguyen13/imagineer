@@ -46,8 +46,9 @@ When a command runs, Claude Code fires a `command.run` event before the skill do
 
 1. **Research.** Read the docs and the code. At the same time, run the tools (below).
 2. **Ask.** Turn every gap between what the code does and what it seems meant to do into a question for the user (format below).
-3. **Attack.** Try to break the system: permissions, data integrity, double submits, partial saves, errors, inputs. Every break that gets through becomes a test; every "that's not what I meant" becomes a fix.
+3. **Attack.** Try to break the system: permissions, data integrity, double submits, partial saves, errors, inputs. Every break that gets through becomes a question for the user and, once confirmed, a test that fails until it is fixed.
 4. **Repeat** from 2 until the finish thresholds are met.
+5. **Report, then offer Build.** Inspect never changes the code. At the end it lists the holes worth fixing and offers to start `/imagineer:build` for the ones the user picks; Build fixes them on a branch, with a pull request the user reviews. *Planned.*
 
 ### Tools
 
@@ -96,7 +97,7 @@ One section per area of the grade. *Today* is what Inspect does in 0.3.0; *Plann
 **Security: can someone see or do what they shouldn't, or find what should stay secret?**
 
 - *Today:* Fallow's possible weaknesses, checked in the code or asked about; `npm audit`; attacks on permissions (a role doing what it must not, refusals that exist only in the interface).
-- *Planned:* **secret scanning**, of the files and of the git history, since a key deleted last month is still in the history and still leaked. With gitleaks, run from Imagineer's tools folder, so nothing is installed in the repo or asked of the user; if it cannot be downloaded, the secret scan shows as not checked, with the reason, rather than a weaker scan. Also what those tools miss: committed `.env` files, secret-looking values in variables shipped to the browser (`NEXT_PUBLIC_`, `VITE_`), tokens written to logs, real credentials in test fixtures. Whether exposed on purpose or by accident, each is reported by file, line and kind of key, never the secret itself. Until this exists, Security reaches Weak at best.
+- *Planned:* **secret scanning**, of the files and of the git history, since a key deleted last month is still in the history and still leaked. With gitleaks, run from Imagineer's tools folder, so nothing is installed in the repo or asked of the user; if it cannot be downloaded, the secret scan shows as not checked, with the reason, rather than a weaker scan. Also what those tools miss: committed `.env` files, secret-looking values in variables shipped to the browser (`NEXT_PUBLIC_`, `VITE_`), tokens written to logs, real credentials in test fixtures. Whether exposed on purpose or by accident, a found secret never appears in the pane, since the pane may be on a shared screen: the Security area shows At risk, and its evidence says only that a secret was found and to see Inspect's report. The report gives the file, the line and the kind of key, never the secret itself. Until this exists, Security reaches Weak at best.
 
 **Data safety: could the user lose or mix up their data?**
 
