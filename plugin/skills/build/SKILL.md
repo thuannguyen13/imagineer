@@ -58,3 +58,12 @@ Input: $ARGUMENTS
 9. **Pull request.** `node $BS state --repo $R --slug <slug> --status done`. Show the user what was built, per requirement, and `node $BS pr-body --repo $R --slug <slug>`. Ask whether to push the branch and open a pull request with that body. If yes, push and open it from the worktree. Give the link. Never merge.
 
 Without a user (AskUserQuestion not available): use the recommended model preset, do not push or open a pull request, and end with the PR body and the branch name.
+
+## Retro
+
+At the end of every run, after the report:
+
+1. Run `node <this skill's folder>/../feedback/scripts/feedback.mjs check --repo $R`. If it lists flags (an agent stepped outside its role, a tool did not run, a proven answer an attack broke, questions answered mostly in the user's own words, a Build stuck at its round limit), say each in one plain line and offer `/imagineer:feedback` to record and share it.
+2. Ask two optional questions in one AskUserQuestion call: "Was anything asked that wasn't worth your time?" and "Did we miss anything you know about?", each with "No" first. Record any yes with `/imagineer:feedback`'s record step.
+
+Without a user, run the check and list its flags; ask nothing.

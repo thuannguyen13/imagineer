@@ -5,7 +5,7 @@
 // Runs in the throwaway copy only.
 //
 //   node attack.mjs run  --out <run folder> --round 1 --id A3 --category permissions|data
-//                        --title "<what was tried, in plain words>" --file <path> --run "<command>"
+//                        --title "<what was tried, in plain words>" --file <path> --run "<command>" [--about Q8]
 //   node attack.mjs void --out <run folder> --id A3 --reason "<why the test itself was wrong>"
 //   node attack.mjs list --out <run folder>
 //
@@ -37,7 +37,7 @@ export function rounds(attacks) {
   return { perRound, cleanInARow: clean, broke: live.filter(a => a.result === 'broke'), held: live.filter(a => a.result === 'held') }
 }
 
-function attack({ out, round, id, category, title, file, command }) {
+function attack({ out, round, id, category, title, file, command, about = null }) {
   if (!CATEGORIES.includes(category)) throw new Error(`Category must be one of ${CATEGORIES.join(', ')}.`)
   const copy = readJson(join(out, 'copy.json'))
   const target = join(copy.path, file)
@@ -52,6 +52,7 @@ function attack({ out, round, id, category, title, file, command }) {
     round,
     category,
     title,
+    about,
     file,
     run: command,
     result: result.ok ? 'held' : 'broke',
@@ -71,7 +72,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     if (step === 'run') {
       const fields = { round: Number(arg('round')), id: arg('id'), category: arg('category'), title: arg('title'), file: arg('file'), command: arg('run') }
       if (Object.values(fields).some(v => v === null || Number.isNaN(v))) throw new Error('run needs --round, --id, --category, --title, --file and --run')
-      attack({ out, ...fields })
+      attack({ out, ...fields, about: arg('about') })
     } else if (step === 'void') {
       const ledger = loadAttacks(out)
       const entry = ledger.attacks.find(a => a.id === arg('id'))

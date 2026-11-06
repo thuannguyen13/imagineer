@@ -65,11 +65,12 @@ Built in slices, each released on its own.
 
 ## B5.5 — Learning from runs
 
-- [ ] Self-check in the mod: rule broken, stuck, tool trouble, grade contradiction, poor questions, mod fault, cost.
-- [ ] `/imagineer:feedback` and the end-of-run retro write feedback records with a fingerprint to a local log.
-- [ ] Sharing: the user reviews the record, then a pre-filled GitHub issue or a saved file.
-- [ ] Owner-side triage and learn skills in the Imagineer repo (not in the plugin): label, group, rank, decide, turn an accepted issue into a bench scenario with an oracle.
-- [ ] Evidence: one real miss turned into a scenario that fails before the fix and passes after; one self-check flag raised on purpose in a test.
+- [x] Self-check (`feedback.mjs check`): role-guard refusals (logged by the hook), tools that did not run, a proven answer broken by an attack, questions answered mostly in the user's own words or asked twice, a Build stuck at 4 rounds. Shown in the pane and at the end of each run. Cost signals not yet: the run records do not hold cost.
+- [x] `/imagineer:feedback` and the end-of-run retro write feedback records with a fingerprint to `~/.claude/imagineer/feedback.jsonl`.
+- [x] Sharing: the user reviews the record, then opens a pre-filled GitHub issue and submits it, or saves a file.
+- [x] Owner-side triage and learn steps in `.claude/skills/triage-feedback/` (this repository only).
+- [x] Evidence (2026-11-05): a self-check flag raised on purpose in tests for each signal, including the role guard writing its refusal and the contradiction the bench run produced (Q8 proven, attack A7 broke it); 46 script tests and 14 mod tests pass.
+- [ ] One real miss turned into a bench scenario that fails before the fix and passes after: the first candidate is A7 (invisible characters pass a "description required" proof).
 
 ## B6 — Real project
 

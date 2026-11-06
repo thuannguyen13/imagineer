@@ -10,7 +10,8 @@
 // matching tool call in the session and acts only when `agent_type` names one
 // of these agents. Everyone else, the main session included, passes untouched.
 
-import { readFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit'])
 const GIT_WRITES = new Set(['commit', 'push', 'merge', 'rebase', 'cherry-pick', 'revert', 'am', 'pull', 'reset', 'checkout', 'switch'])
@@ -124,6 +125,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   }
   const reason = decide(payload)
   if (reason) {
+    // Keep a record for Imagineer's self-check: an agent stepping outside its role is a sign Imagineer went wrong.
+    try {
+      const dir = join(payload.cwd ?? process.cwd(), '.claude', 'imagineer')
+      mkdirSync(dir, { recursive: true })
+      appendFileSync(join(dir, 'denials.jsonl'), JSON.stringify({ at: new Date().toISOString(), agent: role(payload.agent_type), tool: payload.tool_name, reason }) + '\n')
+    } catch {}
     process.stdout.write(
       JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } }),
     )

@@ -2,6 +2,16 @@
 
 Imagineer's releases, newest first. Below 1.0, a `0.y.0` release may change how Imagineer is used; such changes are listed first under **Changes you need to know**. See [docs/proposals/inspect-and-build.md](docs/proposals/inspect-and-build.md#versioning).
 
+## 0.8.0 — unreleased
+
+Imagineer checks itself, and you can tell it when it got something wrong.
+
+### New
+
+- **Self-check.** At the end of each Inspect and Build run, Imagineer looks at its own records for signs it went wrong: an agent that tried to step outside its role (the role guard keeps a record of each refusal), a tool that did not run, an answer it called proven that one of its own attacks broke, questions you mostly answered in your own words or that came back twice, and a Build stuck at its round limit. The pane shows them too.
+- **`/imagineer:feedback`** records what Imagineer said or did and what actually happened, as behaviour only, never your code, on your machine. You can then open a pre-filled GitHub issue and submit it yourself, save it as a file, or keep it private.
+- Each run ends with two optional questions: was anything asked that wasn't worth your time, and did we miss anything you know about.
+
 ## 0.7.0 — unreleased
 
 Build arrives.

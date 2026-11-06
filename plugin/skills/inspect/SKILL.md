@@ -98,7 +98,7 @@ Each question is a JSON object for `node $S/questions.mjs add --repo $R` (an arr
 
 1. `node $S/questions.mjs next --repo $R --limit 4` gives the next questions, most consequential first.
 2. Ask them with one AskUserQuestion call: for each, a header of at most 12 characters, the question text holding the expectation, the actual behaviour and the example on separate lines, and the suggestions as options. AskUserQuestion adds "Other" for the user's own words.
-3. Record each answer: `node $S/questions.mjs answer --repo $R --id Q3 --status answered --answer "<their words or the option>"`. When the answer says a break does not matter, add `--dismiss` with its `about` keys. When it confirms the behaviour, dismiss nothing: the next version proves it with a test. When a typed answer is unclear, ask one follow-up with a new example before recording it.
+3. Record each answer: `node $S/questions.mjs answer --repo $R --id Q3 --status answered --answer "<their words or the option>"`, adding `--own` when they typed their own answer instead of picking a suggestion. When the answer says a break does not matter, add `--dismiss` with its `about` keys. When it confirms the behaviour, dismiss nothing: the next version proves it with a test. When a typed answer is unclear, ask one follow-up with a new example before recording it.
 4. Regrade: `node $S/grade.mjs --repo $R --out $O --status waiting` while questions are open, `--status done` once none are.
 5. After a round, ask whether to go on with the next questions or stop for now. Open questions stay in the ledger for the next run.
 
@@ -146,3 +146,12 @@ After each round:
 3. **Stop** when 2 rounds in a row find nothing new, after 4 rounds, or when the user says so. Ask before each round after the second.
 
 Without a user, run two rounds, list what broke through, and stop.
+
+## Retro
+
+At the end of every run, after the report:
+
+1. Run `node <this skill's folder>/../feedback/scripts/feedback.mjs check --repo $R`. If it lists flags (an agent stepped outside its role, a tool did not run, a proven answer an attack broke, questions answered mostly in the user's own words, a Build stuck at its round limit), say each in one plain line and offer `/imagineer:feedback` to record and share it.
+2. Ask two optional questions in one AskUserQuestion call: "Was anything asked that wasn't worth your time?" and "Did we miss anything you know about?", each with "No" first. Record any yes with `/imagineer:feedback`'s record step.
+
+Without a user, run the check and list its flags; ask nothing.
