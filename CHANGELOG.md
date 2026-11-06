@@ -12,6 +12,11 @@ Inspect proves your answers and tries to break the app.
 - A test that fails on the code as it is shows the code does not do what you said. Inspect reports it as a gap and changes nothing.
 - "Matches your intent" becomes Strong once every answer is proven, and Failing while the code contradicts an answer about data, money or permissions.
 - Proven tests can be added to the repository as new files, if you agree. They are never committed for you.
+- **Attack rounds**: an attacker agent writes tests that try to make the app do what it must not (a role seeing or changing what it should not, data mixed up or lost) and runs them in the throwaway copy. Each break becomes a question for you; Inspect fixes nothing.
+- A security scan: Fallow's possible weaknesses, verified in the code or asked about, and known vulnerabilities in the dependencies the app ships with (`npm audit`).
+- "Security and permissions" and "Data safety" are graded from these. They reach Weak at best until secret scanning and backup restore drills arrive.
+- Inspect's stop bar: test strength meets the bar, no open structure findings, and 2 attack rounds in a row find nothing new. The report says what is missing.
+- When the repository has no docs, every guess is marked as one, and with your agreement the answers you confirmed are saved as short docs, with a pointer in `CLAUDE.md`.
 
 ## 0.4.0 — unreleased
 

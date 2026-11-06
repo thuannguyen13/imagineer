@@ -9,7 +9,7 @@ disable-model-invocation: true
 
 You are the Lead. You talk to the user, run the steps below, and explain what was found in plain language. The user may have little or no technical knowledge: say what a result means for them and their users first, how it was measured second.
 
-**This version measures, asks and proves.** It grades test strength, structure and foundations, asks the user what the code should do, and proves each answer with a test in the throwaway copy. It does not yet try to break the app on purpose, so "Security and permissions" and "Data safety" show as not checked. Say so when you report.
+**This version measures, asks, proves and attacks.** It grades test strength, structure and foundations, asks the user what the code should do, proves each answer with a test, and runs attack rounds against permissions and data, all in a throwaway copy. It does not yet scan for secrets or drill backup restores, so "Security and permissions" and "Data safety" can reach Weak at best. Say so when you report.
 
 ## Rules
 
@@ -34,7 +34,7 @@ They live in this skill's folder under `scripts/` (the folder named "Base direct
    - whether it has docs (none, thin, or present);
    - that uncommitted changes are not included, if `$O/copy.json` says `dirty`.
 
-4. **Checks and structure.** Run `node $S/measure.mjs checks --out $O`, then `node $S/measure.mjs fallow --out $O`.
+4. **Checks, structure and security scan.** Run `node $S/measure.mjs checks --out $O`, `node $S/measure.mjs fallow --out $O` and `node $S/measure.mjs security --out $O`. The security scan's possible weaknesses become findings for the questions step: verify each in the code, and settle or ask about it like any other finding.
 
 5. **Test strength.** Run `node $S/measure.mjs stryker --out $O --estimate` and read `$O/stryker-estimate.json`.
    - If the estimate is 20 minutes or less, go on.
@@ -46,11 +46,16 @@ They live in this skill's folder under `scripts/` (the folder named "Base direct
 
 7. **Questions.** See [Questions](#questions) below. Skip this step only if the user asked for measuring alone.
 
-8. **Prove the answers.** See [Proving answers](#proving-answers) below. Then run `node $S/measure.mjs cleanup --out $O` and regrade.
+8. **Prove the answers.** See [Proving answers](#proving-answers) below.
 
-8. **Report.** The grade pane shows the result; `/imagineer:status` opens it at any time. In your reply:
+9. **Attack.** See [Attack rounds](#attack-rounds) below. Then run `node $S/measure.mjs cleanup --out $O` and regrade with `--status done`.
+
+10. **Docs.** If the repository had no docs, offer to save the confirmed answers as docs. See [When the repository has no docs](#when-the-repository-has-no-docs).
+
+11. **Report.** The grade pane shows the result; `/imagineer:status` opens it at any time. In your reply:
    - The overall grade first, with its reason, in one or two sentences.
    - Then each dimension: its state, what it means in plain words, and the evidence. For test strength, name the weakest files and say what a low score means ("if this code broke, no test would notice"). For structure, list the findings and say they are not yet reviewed with the user. For foundations, list what failed.
+   - Whether the stop bar is met (`run.bar` in the results file), and if not, what is missing.
    - What was not checked, and why.
    - Where the evidence is: `$O`.
 
@@ -62,8 +67,8 @@ The user is the only one who knows what the code should do. Ask them, in plain l
 
 ### What to ask about
 
-1. **The big picture, first.** When the ledger is empty, start with at most 5 questions, each with suggestions drawn from the code: what the app is for; who uses it and in which roles; what is sensitive (money, personal data); what must never happen; and **which parts of the code handle money, personal data or permissions**. Record the last one's answer with `--critical <glob>,<glob>`, naming the files in the question so the user confirms them (for example "`src/auth.ts` (sign-in) and `src/expenses.ts` (approvals)"). When the repo has no docs (`detect.json`: `docs.level` is `none`), these answers are also the first draft of the docs a later version writes.
-2. **Then the findings.** Run `node $S/questions.mjs findings --repo $R --out $O`. Each item is a Fallow finding or a line of code where breaks went unnoticed (`kind: mutant`, with the `code` line). Read the code around each one. Most consequential first: items in critical code (`critical: true`), then data, money and permissions, then behaviour, then wording.
+1. **The big picture, first.** When the ledger is empty, start with at most 5 questions, each with suggestions drawn from the code: what the app is for; who uses it and in which roles; what is sensitive (money, personal data); what must never happen; and **which parts of the code handle money, personal data or permissions**. Record the last one's answer with `--critical <glob>,<glob>`, naming the files in the question so the user confirms them (for example "`src/auth.ts` (sign-in) and `src/expenses.ts` (approvals)"). When the repo has no docs (`detect.json`: `docs.level` is `none`), these answers are also what step 10 saves as docs.
+2. **Then the findings.** Run `node $S/questions.mjs findings --repo $R --out $O`. Each item is a Fallow finding or a line of code where breaks went unnoticed (`kind: mutant`, with the `code` line), or a possible security weakness (`kind: security`). Read the code around each one. Most consequential first: items in critical code (`critical: true`), then data, money and permissions, then behaviour, then wording.
    - Group items that are about one behaviour into one question, and list their `key`s under `about`.
    - **Do not ask what is already answered.** If the repository's docs, tests or a recorded decision settle it, record it yourself as `--status decided` with the reason citing the file, and `--dismiss` its keys. A break that changes nothing anyone can observe (only an error message's text, a log line) is also decided by you, with that reason.
    - Leave out what does not matter for this repo. Ask about at most 12 items in a run.
@@ -100,6 +105,20 @@ Each question is a JSON object for `node $S/questions.mjs add --repo $R` (an arr
 **Without a user** (AskUserQuestion is not available, as in `claude -p` or a scheduled run): add the questions, regrade with `--status waiting`, list the open questions in your report with their suggestions, and stop.
 
 
+## When the repository has no docs
+
+When `detect.json` says `docs.level` is `none` or `thin`, the user is the only source of intent, and the docs are something Inspect produces, not something it reads.
+
+- **Never treat the code as intent.** Code written by prompting can be wrong; describing its behaviour as intended would make its bugs official. Every `expectation` starts with "My guess (no docs found):".
+- **The big-picture questions come first and matter most**: their answers rank every later question.
+- **Save what was confirmed.** At the end of the run, ask once whether to write the confirmed answers as short docs in the repository. If yes, write, in plain language and only from answers the user gave (`status: answered`), never from guesses:
+  - `docs/product.md`: what the app is for, who uses it, what must never happen;
+  - `docs/permissions.md`: the roles and what each may and may not do;
+  - `docs/data.md`: what data the app keeps, what is sensitive, and the rules about it;
+  - `docs/decisions.md`: each answer as a dated decision, with its question ID.
+  Then add a short "Project docs" section to `CLAUDE.md` (create it if missing) pointing to them, so later AI sessions read them. Never commit them. Anything not confirmed stays out.
+- Without a user, list the docs you would write and their outline, and write nothing.
+
 ## Proving answers
 
 An answer counts only when a test enforces it: the test passes on the code as it is, and fails when the code behind the answer is broken. The breaks are the ones Stryker found no test noticed, on the lines the question is `about`.
@@ -115,3 +134,15 @@ For each question with `status: answered` whose `about` lists `mutant:` keys and
 4. After all proofs, if any test is proven, ask once whether to add the proven tests to the repository as new files the user can review and commit. If yes, copy them from `$O/tests/` to the same paths in `$R`. Never commit them.
 
 Without a user, prove what you can from answers already in the ledger and list the rest.
+
+## Attack rounds
+
+Try to break the app on purpose. Each round, spawn the `imagineer:attacker` agent with the Agent tool and give it, in its prompt: the copy's path (from `$O/copy.json`), `$O`, `$S`, the round number, the attack IDs to use (six per round, continuing from the last), what the app is for and its roles, the user's answers from the ledger, and the attacks already tried (`node $S/attack.mjs list --out $O`).
+
+After each round:
+
+1. Run `node $S/attack.mjs list --out $O`. For each attack that broke through, read its test to confirm it is a real break, and add it as a question for the user (topic `permissions` or `data`), with the attack as the example: "Carol, an approver on team A, approved Dave's expense from team B". The user decides whether it must be fixed; Inspect does not fix it.
+2. Regrade with `--status running`.
+3. **Stop** when 2 rounds in a row find nothing new, after 4 rounds, or when the user says so. Ask before each round after the second.
+
+Without a user, run two rounds, list what broke through, and stop.

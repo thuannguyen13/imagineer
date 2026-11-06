@@ -185,3 +185,41 @@ test('globs: * stays in a folder, ** crosses folders', () => {
   assert.ok(!matches('src/*.ts', 'src/lib/auth.ts'))
   assert.ok(matches('src/**', 'src/lib/auth.ts'))
 })
+
+import { dataSafety, security, stopBar } from './grade.mjs'
+
+const attackRow = (id, round, category, result) => ({ id, round, category, result, title: `${id} title`, void: null })
+
+test('security: unchecked until attacked or scanned; a break fails it; otherwise weak while secrets are unscanned', () => {
+  assert.equal(security({ ledger: emptyLedger() }).state, 'unchecked')
+  const held = [attackRow('A1', 1, 'permissions', 'held'), attackRow('A2', 2, 'permissions', 'held')]
+  const clean = security({ ledger: emptyLedger(), attacks: held, security: { candidates: [], audit: { high: 0, critical: 0 } } })
+  assert.equal(clean.state, 'weak')
+  assert.match(clean.summary, /secrets not scanned yet/)
+  assert.doesNotMatch(clean.summary, /not yet 2 clean rounds/)
+  const broke = security({ ledger: emptyLedger(), attacks: [...held, attackRow('A3', 3, 'permissions', 'broke')] })
+  assert.equal(broke.state, 'failing')
+  assert.match(broke.summary, /1 attack broke through \(A3 title\)/)
+})
+
+test('security: a high vulnerability in a shipped dependency fails it', () => {
+  assert.equal(security({ ledger: emptyLedger(), security: { candidates: [], audit: { high: 1, critical: 0 } } }).state, 'failing')
+})
+
+test('a voided attack does not count', () => {
+  const attacks = [{ ...attackRow('A1', 1, 'data', 'broke'), void: 'The test imported the wrong module.' }]
+  assert.equal(dataSafety({ ledger: emptyLedger(), attacks }).state, 'unchecked')
+})
+
+test('data safety notes that backups are not drilled yet', () => {
+  const result = dataSafety({ ledger: emptyLedger(), attacks: [attackRow('A1', 1, 'data', 'held')] })
+  assert.equal(result.state, 'weak')
+  assert.match(result.summary, /backup restore not drilled/)
+})
+
+test('the stop bar needs strong tests, clean structure and two clean attack rounds', () => {
+  const dims = [{ id: 'test-strength', state: 'strong' }, { id: 'structure', state: 'strong' }]
+  assert.deepEqual(stopBar(dims, [attackRow('A1', 1, 'data', 'broke'), attackRow('A2', 2, 'data', 'held')]).missing, ['not yet 2 clean attack rounds'])
+  assert.equal(stopBar(dims, [attackRow('A1', 1, 'data', 'broke'), attackRow('A2', 2, 'data', 'held'), attackRow('A3', 3, 'permissions', 'held')]).met, true)
+  assert.equal(stopBar([{ id: 'test-strength', state: 'weak' }, { id: 'structure', state: 'strong' }], []).met, false)
+})

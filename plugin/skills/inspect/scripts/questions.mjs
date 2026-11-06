@@ -64,6 +64,17 @@ export function findings(out) {
     })
   }
 
+  const security = readJsonIf(join(out, 'security.json'))
+  for (const c of security?.candidates ?? []) {
+    items.push({
+      key: findingKey('security', c.path, `${c.line}:${c.category}`),
+      kind: 'security',
+      file: c.path,
+      line: c.line,
+      detail: `Possible ${c.category} (CWE-${c.cwe}, ${c.severity}): ${c.evidence}`,
+    })
+  }
+
   for (const [path, file] of Object.entries(mutation?.files ?? {})) {
     const lines = file.source ? file.source.split('\n') : []
     const byLine = new Map()

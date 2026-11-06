@@ -6,6 +6,7 @@
 //   node measure.mjs checks   --out <run folder>
 //   node measure.mjs fallow   --out <run folder>
 //   node measure.mjs stryker  --out <run folder> [--estimate]
+//   node measure.mjs security --out <run folder>
 //   node measure.mjs cleanup  --out <run folder>
 
 import { mkdtempSync, rmSync, writeFileSync, existsSync, copyFileSync } from 'node:fs'
@@ -167,6 +168,39 @@ function stryker(out, isEstimate) {
   console.log(existsSync(report) ? `Stryker finished in ${Math.round(result.seconds / 60)} minutes.` : `Stryker failed:\n${tail(log)}`)
 }
 
+function security(out) {
+  const { copy, repoFacts } = state(out)
+  const own = repoFacts.tools.fallow.inRepo && repoFacts.tools.fallow.version !== null
+  const command = own ? ['npx', 'fallow'] : ['npx', '-y', `fallow@${PINNED.fallow}`]
+  const scan = run([...command, 'security', '--format', 'json', '--quiet'], { cwd: copy.path })
+  let candidates = null
+  try {
+    candidates = JSON.parse(scan.stdout).security_findings ?? []
+  } catch {}
+
+  // Known vulnerabilities in the dependencies the app ships with (not dev tools).
+  let audit = { skipped: `No audit for ${repoFacts.manager} yet.` }
+  if (repoFacts.manager === 'npm' && repoFacts.lockfile) {
+    const result = run(['npm', 'audit', '--json', '--omit=dev'], { cwd: copy.path, timeoutMs: 3 * 60_000 })
+    try {
+      const counts = JSON.parse(result.stdout).metadata?.vulnerabilities ?? {}
+      audit = { tool: 'npm audit --omit=dev', high: counts.high ?? 0, critical: counts.critical ?? 0, moderate: counts.moderate ?? 0 }
+    } catch {
+      audit = { skipped: `npm audit did not answer: ${tail(result.stderr, 3)}` }
+    }
+  }
+  writeJson(join(out, 'security.json'), {
+    candidates:
+      candidates === null
+        ? null
+        : candidates.map(c => ({ path: c.path, line: c.line, category: c.category, cwe: c.cwe, severity: c.severity, evidence: c.evidence })),
+    audit,
+  })
+  console.log(
+    `Security candidates: ${candidates === null ? 'scan failed' : candidates.length}. Dependency audit: ${audit.skipped ?? `${audit.critical} critical, ${audit.high} high`}.`,
+  )
+}
+
 function cleanup(out) {
   const { copy } = state(out)
   if (copy.path.includes('imagineer-')) rmSync(copy.path, { recursive: true, force: true })
@@ -181,8 +215,9 @@ try {
   else if (step === 'checks') checks(out)
   else if (step === 'fallow') fallow(out)
   else if (step === 'stryker') stryker(out, process.argv.includes('--estimate'))
+  else if (step === 'security') security(out)
   else if (step === 'cleanup') cleanup(out)
-  else throw new Error('Steps: prepare, checks, fallow, stryker, cleanup')
+  else throw new Error('Steps: prepare, checks, fallow, stryker, security, cleanup')
 } catch (error) {
   console.error(error.message)
   process.exit(1)

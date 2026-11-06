@@ -10,6 +10,7 @@ import { appendFileSync, existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { arg, readJson, readJsonIf, run, writeJson } from './lib.mjs'
+import { loadAttacks, rounds } from './attack.mjs'
 import { CRITICAL_TOPICS, emptyLedger, findings, isCritical, loadLedger, summary } from './questions.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -162,7 +163,79 @@ export function intent(evidence) {
   return dimension('intent', name, 'trust', 'strong', 'repo', `${asked}, all resolved, and every answer is backed by a test seen failing, then passing.`)
 }
 
-const notAttacked = (id, name) => dimension(id, name, 'trust', 'unchecked', 'none', 'Not tested by Imagineer yet.')
+const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
+
+/** Answers on a topic: how many are proven, and which the code contradicts. */
+function answersOn(ledger, topic) {
+  const answered = ledger.questions.filter(q => q.status === 'answered' && q.topic === topic)
+  return {
+    total: answered.length,
+    proven: answered.filter(isProven).length,
+    contradicted: answered.filter(q => q.test && q.test.green === false).map(q => q.id),
+  }
+}
+
+function attackNotes(attacks, category) {
+  const mine = attacks.filter(a => a.category === category && !a.void)
+  const { cleanInARow } = rounds(mine)
+  const broke = mine.filter(a => a.result === 'broke')
+  return { tried: mine.length, broke, cleanInARow }
+}
+
+export function security(evidence) {
+  const name = 'Security and permissions'
+  const ledger = evidence.ledger ?? emptyLedger()
+  const attacks = attackNotes(evidence.attacks ?? [], 'permissions')
+  const scan = evidence.security
+  if (!attacks.tried && !scan) return dimension('security', name, 'trust', 'unchecked', 'none', 'Not tested by Imagineer yet.')
+
+  const answers = answersOn(ledger, 'permissions')
+  const failing = []
+  if (attacks.broke.length) failing.push(`${plural(attacks.broke.length, 'attack')} broke through (${attacks.broke.map(a => a.title).join('; ')})`)
+  if (scan?.audit?.critical || scan?.audit?.high) failing.push(`${scan.audit.critical} critical and ${scan.audit.high} high known vulnerabilities in dependencies`)
+  if (answers.contradicted.length) failing.push(`the code contradicts your answer to ${answers.contradicted.join(', ')}`)
+  if (failing.length) return dimension('security', name, 'trust', 'failing', 'default', `${failing.join('; ')}.`)
+
+  const openCandidates = (evidence.findings ?? []).filter(item => item.kind === 'security' && !(item.key in ledger.dismissed)).length
+  const gaps = []
+  if (attacks.tried) gaps.push(`${plural(attacks.tried, 'attack')} held`)
+  if (attacks.cleanInARow < 2) gaps.push(attacks.tried ? 'not yet 2 clean rounds' : 'no attack rounds yet')
+  if (openCandidates) gaps.push(`${plural(openCandidates, 'possible weakness', 'possible weaknesses')} not yet verified`)
+  if (answers.total > answers.proven) gaps.push(`${plural(answers.total - answers.proven, 'permission answer')} not yet proven by a test`)
+  if (scan?.audit?.skipped) gaps.push('dependencies not audited')
+  gaps.push('secrets not scanned yet')
+  return dimension('security', name, 'trust', 'weak', 'default', `${gaps[0][0].toUpperCase()}${gaps.join('; ').slice(1)}.`)
+}
+
+export function dataSafety(evidence) {
+  const name = 'Data safety'
+  const ledger = evidence.ledger ?? emptyLedger()
+  const attacks = attackNotes(evidence.attacks ?? [], 'data')
+  const answers = answersOn(ledger, 'data')
+  if (!attacks.tried && !answers.total) return dimension('data-safety', name, 'trust', 'unchecked', 'none', 'Not tested by Imagineer yet.')
+
+  const failing = []
+  if (attacks.broke.length) failing.push(`${plural(attacks.broke.length, 'attack')} broke through (${attacks.broke.map(a => a.title).join('; ')})`)
+  if (answers.contradicted.length) failing.push(`the code contradicts your answer to ${answers.contradicted.join(', ')}`)
+  if (failing.length) return dimension('data-safety', name, 'trust', 'failing', 'default', `${failing.join('; ')}.`)
+
+  const gaps = []
+  if (attacks.tried) gaps.push(`${plural(attacks.tried, 'attack')} held`)
+  if (attacks.cleanInARow < 2) gaps.push(attacks.tried ? 'not yet 2 clean rounds' : 'no attack rounds yet')
+  if (answers.total > answers.proven) gaps.push(`${plural(answers.total - answers.proven, 'data answer')} not yet proven by a test`)
+  gaps.push('backup restore not drilled by Imagineer yet')
+  return dimension('data-safety', name, 'trust', 'weak', 'default', `${gaps[0][0].toUpperCase()}${gaps.join('; ').slice(1)}.`)
+}
+
+/** Inspect's stop bar: test strength meets the bar, no open structure findings, and 2 attack rounds in a row found nothing new. */
+export function stopBar(dimensions, attacks) {
+  const missing = []
+  const byId = id => dimensions.find(d => d.id === id)
+  if (byId('test-strength')?.state !== 'strong') missing.push('test strength below the bar')
+  if (byId('structure')?.state !== 'strong') missing.push('structure findings open')
+  if (rounds((attacks ?? []).filter(a => !a.void)).cleanInARow < 2) missing.push('not yet 2 clean attack rounds')
+  return { met: missing.length === 0, missing }
+}
 
 /** The overall grade: the weakest link, never an average. */
 export function overall(dimensions) {
@@ -183,6 +256,8 @@ export function gradeRun(out, repo = null) {
   const evidence = {
     ledger: repo ? loadLedger(repo) : emptyLedger(),
     findings: findings(out),
+    attacks: loadAttacks(out).attacks,
+    security: readJsonIf(join(out, 'security.json')),
     detect: readJsonIf(join(out, 'detect.json')),
     copy: readJsonIf(join(out, 'copy.json')),
     checks: readJsonIf(join(out, 'checks.json')),
@@ -193,12 +268,12 @@ export function gradeRun(out, repo = null) {
   const dimensions = [
     testStrength(evidence),
     intent(evidence),
-    notAttacked('security', 'Security and permissions'),
-    notAttacked('data-safety', 'Data safety'),
+    security(evidence),
+    dataSafety(evidence),
     structure(evidence),
     foundations(evidence),
   ]
-  return { evidence, dimensions, overall: overall(dimensions) }
+  return { evidence, dimensions, overall: overall(dimensions), bar: stopBar(dimensions, evidence.attacks) }
 }
 
 function imagineerVersion() {
@@ -224,7 +299,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.error('Usage: node grade.mjs --repo <repo> --out <run folder> [--status running|done] [--round N]')
     process.exit(2)
   }
-  const { evidence, dimensions, overall: grade } = gradeRun(out, repo)
+  const { evidence, dimensions, overall: grade, bar } = gradeRun(out, repo)
   const counts = summary(evidence.ledger)
   const results = {
     schema: 1,
@@ -235,6 +310,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       status: arg('status', 'done'),
       round: Number(arg('round', '1')),
       commit: evidence.copy?.commit ?? '',
+      bar,
     },
     overall: grade,
     dimensions,
@@ -243,5 +319,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   excludeFromGit(repo)
   writeJson(join(repo, RESULTS), results)
   console.log(`${grade.state}: ${grade.reason || 'every dimension meets the bar.'}`)
+  console.log(bar.met ? 'Stop bar met.' : `Stop bar not met: ${bar.missing.join('; ')}.`)
   for (const d of dimensions) console.log(`  ${d.state.padEnd(9)} ${d.name}: ${d.summary}`)
 }
