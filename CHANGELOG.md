@@ -2,6 +2,16 @@
 
 Imagineer's releases, newest first. Below 1.0, a `0.y.0` release may change how Imagineer is used; such changes are listed first under **Changes you need to know**. See [docs/proposals/inspect-and-build.md](docs/proposals/inspect-and-build.md#versioning).
 
+## 0.6.0 — unreleased
+
+The grade pane tells you more.
+
+### New
+
+- The grade is marked **stale** (⟳) once the repository moves past the commit it was measured at, with a reminder to inspect again. The mod reads git's own files for this; it still runs no commands.
+- The pane shows Inspect's stop bar, met or what is missing.
+- The pane lists the questions waiting for you, most consequential first, not only how many.
+
 ## 0.5.0 — unreleased
 
 Inspect proves your answers and tries to break the app.

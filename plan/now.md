@@ -44,9 +44,10 @@ Built in slices, each released on its own.
 
 ## B3 — Grade
 
-- [ ] Grade computed from the results file only, per the chosen scale.
-- [ ] Pane shows the overall grade, each dimension with how it was measured, and open questions.
-- [ ] The same grade goes into the final report and the pull request.
+- [x] Grade computed from the results file only, per the chosen scale: `grade.mjs` sets every state from evidence (B2).
+- [x] Pane shows the overall grade, each dimension with how it was measured, the stop bar, and the open questions, and marks the grade stale once HEAD moves past the measured commit (0.6.0). Evidence (2026-11-05): 13 mod tests pass; in a real headless session `/imagineer:status` listed the bar and the top 5 open questions at 0 turns, and showed ⟳ stale after a new commit; `claude plugin validate` still lists only file reads, the timer, state and drawing.
+- [ ] The same grade goes into the pull request Build opens (B4).
+- [ ] The question dialog restyled by the mod: deferred until Build's dialogs settle, so both use one layout.
 
 ## B4 — Build
 
