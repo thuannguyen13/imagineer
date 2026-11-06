@@ -204,9 +204,35 @@ export const register: Register = on => {
       )
     }
 
+    // One tile per area: a label, its one measured number, what the number counts, and the
+    // state as icon and word. The number stays in text ink; the state carries the color.
+    const columns = e.props.bodyColumns >= 66 ? 3 : e.props.bodyColumns >= 40 ? 2 : 1
+    const tileWidth = Math.floor((e.props.bodyColumns - (columns - 1)) / columns)
+    const tile = (dimension: Results['dimensions'][number]) => {
+      const label = STATE_LABEL[dimension.state]
+      const metric = dimension.metric ?? { value: '—', label: '' }
+      return (
+        <Box key={`tile-${dimension.id}`} flexDirection="column" width={tileWidth} borderStyle="round" borderColor={label.color} paddingX={1}>
+          <Text dimColor>{dimension.name}</Text>
+          <Text weight="semibold">{metric.value}</Text>
+          {metric.label !== '' && <Text dimColor>{metric.label}</Text>}
+          <Text color={label.color}>
+            {label.icon} {label.word}
+            {dimension.isStale || summary.isStale ? ' ⟳' : ''}
+          </Text>
+        </Box>
+      )
+    }
+    const rows: Results['dimensions'][] = []
+    for (let i = 0; i < summary.dimensions.length; i += columns) rows.push(summary.dimensions.slice(i, i + columns))
+
     const overview = (
       <Box flexDirection="column">
-        {summary.dimensions.map(row)}
+        {rows.map((group, i) => (
+          <Box key={`row-${i}`} flexDirection="row" gap={1}>
+            {group.map(tile)}
+          </Box>
+        ))}
         {summary.run.bar && (
           <Box marginTop={1}>
             <Text dimColor>{summary.run.bar.met ? '✓ Stop bar met.' : `Stop bar not met: ${summary.run.bar.missing.join('; ')}.`}</Text>

@@ -16,6 +16,7 @@ const SAMPLE = {
       state: 'failing',
       measured: 'default',
       summary: 'Tests catch 30% of deliberate breaks.',
+      metric: { value: '30%', label: '51 of 167 breaks caught' },
     },
     { id: 'intent', name: 'Matches your intent', group: 'trust', state: 'unchecked', measured: 'none', summary: '' },
     {
@@ -124,6 +125,10 @@ test('status opens the pane: an aligned overview first, on every surface', async
     expect((await ui.find({ type: 'Text', text: /^✕ Failing$/ }))?.text).toBe('✕ Failing')
     expect(await ui.find({ type: 'Text', text: /^Test strength$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^Matches your intent$/ })).toBeDefined()
+    // Each tile: its number, what the number counts, and the state as icon and word.
+    expect(await ui.find({ type: 'Text', text: /^30%$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^51 of 167 breaks caught$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^✕ Failing$/ })).toBeDefined()
     expect(await ui.find({ type: 'Button', key: 'tab-evidence' })).toBeDefined()
     expect(await ui.find({ type: 'Button', key: 'tab-questions' })).toBeDefined()
     // The overview holds no evidence text: that is the Evidence tab's.

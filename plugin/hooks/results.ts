@@ -58,6 +58,7 @@ function toDimension(raw: unknown): Dimension | null {
     measured: oneOf(raw.measured, MEASURED, 'none'),
     summary: text(raw.summary),
     items: Array.isArray(raw.items) ? raw.items.filter((i): i is string => typeof i === 'string') : [],
+    metric: isObject(raw.metric) && typeof raw.metric.value === 'string' ? { value: raw.metric.value, label: text(raw.metric.label) } : null,
     isStale: raw.stale === true,
     isClaimed: raw.claimed === true,
   }

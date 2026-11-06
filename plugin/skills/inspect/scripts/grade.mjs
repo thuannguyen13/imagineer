@@ -265,6 +265,58 @@ export function dataSafety(evidence) {
   return dimension('data-safety', name, 'trust', 'weak', 'default', `${sentenceCase(gaps.join('; '))}.`)
 }
 
+const NONE = label => ({ value: '—', label })
+
+/** One measured number per area, for its tile: never a blended score. */
+export function metricFor(d, evidence) {
+  const ledger = evidence.ledger ?? emptyLedger()
+  if (d.id === 'test-strength') {
+    const report = evidence.mutation
+    if (!report || d.state === 'unchecked') return NONE(evidence.stryker?.skipped ? 'no test command' : /timed out/.test(d.summary) ? 'runs timed out' : 'not measured')
+    const { caught, total, score } = mutationScore(report)
+    return { value: percent(score), label: `${caught} of ${total} breaks caught` }
+  }
+  if (d.id === 'intent') {
+    const asked = ledger.questions.length
+    if (!asked) return NONE('no questions yet')
+    const waiting = ledger.questions.filter(q => q.status === 'open').length
+    if (waiting) return { value: String(waiting), label: waiting === 1 ? 'question waiting' : 'questions waiting' }
+    const answered = ledger.questions.filter(q => q.status === 'answered')
+    const contradicted = answered.filter(q => q.test && q.test.green === false).length
+    if (contradicted) return { value: `${contradicted} of ${answered.length}`, label: 'answers contradicted' }
+    return { value: `${answered.filter(isProven).length} of ${answered.length}`, label: 'answers proven' }
+  }
+  if (d.id === 'security' || d.id === 'data-safety') {
+    const mine = (evidence.attacks ?? []).filter(a => a.category === (d.id === 'security' ? 'permissions' : 'data') && !a.void)
+    const audit = d.id === 'security' ? evidence.security?.audit : null
+    const vulns = audit && !audit.skipped ? (audit.critical ?? 0) + (audit.high ?? 0) : 0
+    const vulnNote = vulns ? ` · ${audit.critical} critical, ${audit.high} high` : ''
+    if (!mine.length) return vulns ? { value: String(vulns), label: 'high or critical vulnerabilities' } : NONE('not tested')
+    const held = mine.filter(a => a.result === 'held').length
+    return { value: `${held} of ${mine.length}`, label: `attacks held${vulnNote}` }
+  }
+  if (d.id === 'structure') {
+    const score = evidence.fallow?.health?.health_score?.score
+    if (score === undefined || d.state === 'unchecked') return NONE('not measured')
+    const open = (evidence.findings ?? []).filter(i => i.kind !== 'mutant' && i.kind !== 'security' && !(i.key in ledger.dismissed)).length
+    return { value: String(score), label: `Fallow health · ${open} open` }
+  }
+  if (d.id === 'foundations') {
+    const { detect, copy, checks } = evidence
+    if (!detect || !copy || !checks) return NONE('not measured')
+    const results = [
+      Boolean(detect.lockfile),
+      copy.install.ok,
+      !checks.typecheck.present ? !detect.typescript : checks.typecheck.ok,
+      checks.test.present && checks.test.ok,
+      detect.ci.runsTests,
+      detect.env.missing.length === 0,
+    ]
+    return { value: `${results.filter(Boolean).length} of ${results.length}`, label: 'checks pass' }
+  }
+  return NONE('')
+}
+
 /** Inspect's stop bar: test strength meets the bar, no open structure findings, and 2 attack rounds in a row found nothing new. */
 export function stopBar(dimensions, attacks) {
   const missing = []
@@ -311,6 +363,7 @@ export function gradeRun(out, repo = null) {
     structure(evidence),
     foundations(evidence),
   ]
+  for (const d of dimensions) d.metric = metricFor(d, evidence)
   return { evidence, dimensions, overall: overall(dimensions), bar: stopBar(dimensions, evidence.attacks) }
 }
 
