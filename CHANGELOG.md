@@ -8,7 +8,7 @@ A grade pane you can scan.
 
 ### New
 
-- The pane has three tabs. **Overview**: a tile per area with its one measured number (94%, 17 of 19 attacks held, 6 of 6 checks), what the number counts, and its state as icon and word, then the stop bar. There is still no blended overall score: the headline is the weakest-link verdict. **Evidence**: each area's summary in a sentence or two and its list underneath (files, attacks, answers), the first five and a count of the rest. **Questions**: what is waiting for you, by its point, and anything Imagineer may have got wrong itself.
+- The pane has three tabs. **Overview**: one aligned line per area, icon, name and state, then the stop bar. **Evidence**: each area's summary in a sentence or two and its list underneath (files, attacks, answers), the first five and a count of the rest. **Questions**: what is waiting for you, by its point, and anything Imagineer may have got wrong itself.
 - Wrapped lines keep their indent, so every line stays under its area.
 - The grade gives each area a short summary and a separate list, instead of one long sentence with every item in it. "Matches your intent" counts questions plainly: how many you answered, how many the docs settled, how many are waiting.
 

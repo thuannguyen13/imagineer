@@ -18,8 +18,6 @@ export type Dimension = {
   summary: string
   /** The list behind the summary (files, attacks, answers), shown under Evidence. */
   items: string[]
-  /** The area's one measured number and what it counts, for its tile. */
-  metric: { value: string; label: string } | null
   isStale: boolean
   isClaimed: boolean
 }
