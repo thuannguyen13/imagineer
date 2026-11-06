@@ -6,6 +6,7 @@ import type {
   GradeState,
   Measured,
   OpenQuestion,
+  AnsweredQuestion,
   OverallState,
   Results,
   Run,
@@ -107,6 +108,40 @@ export function readOpenQuestions(source: string | null, limit = 5): OpenQuestio
     .slice(0, limit)
 }
 
+const isProvenJson = (q: Json): boolean => {
+  const test = isObject(q.test) ? q.test : null
+  const red = test && isObject(test.red) ? test.red : null
+  return test?.green === true && red !== null && count(red.total) > 0 && count(red.killed) === count(red.total)
+}
+
+/** What came of a resolved question, in plain words. */
+function outcomeOf(q: Json): { outcome: string; tone: AnsweredQuestion['tone'] } {
+  const proven = isProvenJson(q) ? ' · proven by a test' : ''
+  if (q.status === 'decided') return { outcome: 'Settled from the docs or code', tone: 'plain' }
+  if (q.status === 'deferred') return { outcome: `Deferred${text(q.reason) ? `: ${text(q.reason)}` : ''}`, tone: 'plain' }
+  if (q.decision === 'fix') return { outcome: `Differs from the app: you want it fixed (${text(q.answer)})`, tone: 'gap' }
+  if (q.decision === 'keep') return { outcome: `Differs from the app: kept as it is${proven}`, tone: 'plain' }
+  if (q.matches === true) return { outcome: `Matches what the app does${proven}`, tone: 'good' }
+  if (isObject(q.test) && q.test.green === false) return { outcome: `${text(q.answer) ? `You answered: ${text(q.answer)}` : 'Answered'} · the app does not do this yet`, tone: 'gap' }
+  return { outcome: `${text(q.answer) ? `You answered: ${text(q.answer)}` : 'Answered'}${proven}`, tone: proven ? 'good' : 'plain' }
+}
+
+/** The questions the user resolved, gaps to fix first, for the Questions tab's record. Never throws. */
+export function readAnswered(source: string | null): AnsweredQuestion[] {
+  if (source === null) return []
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(source)
+  } catch {
+    return []
+  }
+  if (!isObject(parsed) || !Array.isArray(parsed.questions)) return []
+  return parsed.questions
+    .filter((q): q is Json => isObject(q) && typeof q.id === 'string' && ['answered', 'decided', 'deferred'].includes(String(q.status)))
+    .map(q => ({ id: String(q.id), text: text(q.point) || text(q.expectation).replace(/^My guess \(no docs found\):\s*/, ''), ...outcomeOf(q) }))
+    .sort((a, b) => (a.tone === 'gap' ? 0 : 1) - (b.tone === 'gap' ? 0 : 1) || Number(a.id.slice(1)) - Number(b.id.slice(1)))
+}
+
 /** What the self-check said about Imagineer itself, as plain lines. Never throws. */
 export function readFlags(source: string | null): string[] {
   if (source === null) return []
@@ -192,6 +227,7 @@ export function readResults(source: string): Summary {
     questions: { waiting: count(questions.waiting), resolved: count(questions.resolved) },
     isStale: false,
     openQuestions: [],
+    answered: [],
     flags: [],
   }
 

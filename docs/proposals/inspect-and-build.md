@@ -210,7 +210,7 @@ The user needs to see at a glance how trustworthy the repo is, and how that chan
 
 ### The mod
 
-- **A pane beside the transcript** with tabs: the overall grade first, then each dimension, then open questions. Readable without technical knowledge; the owner opens a dimension for its evidence.
+- **A pane beside the transcript** with two tabs, each with its own job. **Overview**: how the project is doing, the verdict and one row per area that opens to its evidence, plus a line when questions wait. **Questions**: what Imagineer still needs from the user (gaps first), and the record of their answers and what came of each. Readable without technical knowledge.
 - **A band above the prompt** with the one-line status while Inspect or Build runs, for example "Inspecting · round 2 · 3 questions waiting".
 - **`/imagineer:status`** opens the pane at once, with no Claude turn and no usage spent. Mod command names cannot contain `:`, so the name comes from a small `status` skill in the plugin, and the mod answers that command before the skill reaches Claude (tested 2026-11-05: 0 turns, no cost). Where the mod cannot draw, such as a cloud session, it answers with the grade as text. If mods are turned off, the skill runs instead and reads the same results file.
 - **Data from a file, not from the agents' words.** Inspect and Build write each tool result and answer to a results file in the run folder; the mod reads that file and redraws. The mod never computes or invents a grade itself.

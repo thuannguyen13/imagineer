@@ -24,6 +24,7 @@ import {
   readDetails,
   readFlags,
   questionLine,
+  readAnswered,
   readOpenQuestions,
   readResults,
   RESULTS_PATH,
@@ -42,11 +43,12 @@ const POLL_MS = 3000
 // Change the tag when Summary's fields change: a value an earlier version
 // stored is then read as "no results" until the file is read again.
 const summaryAtom = atom({ plugin: 'imagineer', key: 'summary' } as const, { kind: 'none' } as Summary, {
-  shape: 'summary-6',
+  shape: 'summary-7',
 })
 
-// Shaped, so a tab an earlier version stored (overview, evidence) reads as the grade.
-const tabAtom = atom({ plugin: 'imagineer', key: 'tab' } as const, 'grade' as Tab, { shape: 'tab-2' })
+// Two tabs, each with its own job. Overview: how the project is doing. Questions: what the user
+// told Imagineer, and what it still needs from them. Shaped, so a tab an earlier version stored reads as Overview.
+const tabAtom = atom({ plugin: 'imagineer', key: 'tab' } as const, 'overview' as Tab, { shape: 'tab-3' })
 // The areas whose evidence is open, by id; all closed at first.
 const openAtom = atom({ plugin: 'imagineer', key: 'open' } as const, [] as string[])
 // Set when /imagineer:inspect starts, so the pane has something to say before the first results arrive.
@@ -106,7 +108,10 @@ async function refresh($: EngineInterface): Promise<Summary> {
     summary = {
       ...lastBase,
       isStale: head !== null && !isSameCommit(head, lastBase.run.commit),
-      openQuestions: readOpenQuestions(await readIf($, QUESTIONS_PATH)),
+      ...(await (async () => {
+        const ledger = await readIf($, QUESTIONS_PATH)
+        return { openQuestions: readOpenQuestions(ledger), answered: readAnswered(ledger) }
+      })()),
       flags: readFlags(await readIf($, FLAGS_PATH)),
     }
   }
@@ -191,7 +196,7 @@ export const register: Register = on => {
     const waiting = summary.questions.waiting
     const opened = await read($, openAtom)
     const tabs: { id: Tab; label: string }[] = [
-      { id: 'grade', label: 'Grade' },
+      { id: 'overview', label: 'Overview' },
       { id: 'questions', label: waiting ? `Questions (${waiting})` : 'Questions' },
     ]
 
@@ -289,6 +294,18 @@ export const register: Register = on => {
                 {line}
               </Text>
             ))}
+          {waiting > 0 && (
+            <Box marginTop={1}>
+              <Button
+                key="go-questions"
+                label={`${waiting} ${waiting === 1 ? 'question waits' : 'questions wait'} for you: open Questions`}
+                plain
+                onPress={() => update($, tabAtom, () => 'questions')}
+              >
+                <Text color="warning">{`▸ ${waiting} ${waiting === 1 ? 'question waits' : 'questions wait'} for you: open Questions`}</Text>
+              </Button>
+            </Box>
+          )}
           <Box marginTop={1}>
             <Text dimColor>Select a row for details.</Text>
           </Box>
@@ -296,15 +313,18 @@ export const register: Register = on => {
       </Box>
     )
 
+    const ANSWERS_SHOWN = 8
+    const toneColor = { good: 'success', gap: 'error', plain: undefined } as const
     const questions = (
       <Box flexDirection="column" gap={1}>
-        {waiting === 0 ? (
-          <Text dimColor>Nothing is waiting for you.</Text>
-        ) : (
-          <Text color="warning">
-            {waiting} {waiting === 1 ? 'question is' : 'questions are'} waiting. Run /imagineer:inspect to answer.
-          </Text>
-        )}
+        <Box flexDirection="column">
+          <Text weight="semibold">{waiting ? `Waiting for you (${waiting})` : 'Waiting for you'}</Text>
+          {waiting === 0 ? (
+            <Text dimColor>Nothing is waiting for you.</Text>
+          ) : (
+            <Text dimColor>Run /imagineer:inspect to answer.</Text>
+          )}
+        </Box>
         {summary.openQuestions.map(q => (
           <Box flexDirection="row">
             <Box width={5}>
@@ -316,6 +336,30 @@ export const register: Register = on => {
             </Box>
           </Box>
         ))}
+        {summary.answered.length > 0 && (
+          <Box flexDirection="column" gap={1}>
+            <Box flexDirection="column">
+              <Text weight="semibold">Your answers ({summary.answered.length})</Text>
+              <Text dimColor>What you told Imagineer, and what came of it.</Text>
+            </Box>
+            {summary.answered.slice(0, ANSWERS_SHOWN).map(q => (
+              <Box flexDirection="row">
+                <Box width={5}>
+                  <Text dimColor>{q.id}</Text>
+                </Box>
+                <Box flexShrink={1} flexDirection="column">
+                  <Text>{q.text}</Text>
+                  <Text color={toneColor[q.tone]} dimColor={q.tone === 'plain'}>
+                    {q.outcome}
+                  </Text>
+                </Box>
+              </Box>
+            ))}
+            {summary.answered.length > ANSWERS_SHOWN && (
+              <Text dimColor>…and {summary.answered.length - ANSWERS_SHOWN} more in .claude/imagineer/questions.json</Text>
+            )}
+          </Box>
+        )}
         {summary.flags.length > 0 && (
           <Box flexDirection="column">
             <Text color="warning">Imagineer may have gone wrong on its side:</Text>

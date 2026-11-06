@@ -61,13 +61,18 @@ export type Results = {
   /** True once the repository's HEAD is no longer the commit the grade was measured at. */
   isStale: boolean
   openQuestions: OpenQuestion[]
+  /** A question the user resolved, and what came of it, for the Questions tab's record. */
+  answered: AnsweredQuestion[]
   /** The self-check's flags about Imagineer itself, as plain lines. */
   flags: string[]
 }
 
+/** A resolved question and its outcome in plain words; `tone` colours it. */
+export type AnsweredQuestion = { id: string; text: string; outcome: string; tone: 'good' | 'gap' | 'plain' }
+
 /** What the mod knows about the repo's results file. */
 /** The pane's tabs. */
-export type Tab = 'grade' | 'questions'
+export type Tab = 'overview' | 'questions'
 
 export type Summary =
   | { kind: 'none' }

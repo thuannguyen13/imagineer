@@ -167,7 +167,7 @@ test('Questions lists what is waiting, by its point', async ($, on) => {
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await ui.press({ key: 'tab-questions' })
   expect(await ui.find({ type: 'Text', text: /^A Microsoft sign-in can take over the test admin\.$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /questions are waiting/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Waiting for you \(3\)$/ })).toBeDefined()
   await ui.unmount()
 })
 
@@ -283,8 +283,50 @@ test('the pane lists open questions, most consequential first, and the finish th
   expect(await ui.find({ type: 'Text', text: /Stop bar/ })).toBeUndefined()
   await ui.press({ key: 'tab-questions' })
   const ids = (await ui.findAll({ type: 'Text', text: /^Q\d+$/ })).map(found => found.text)
-  expect(ids).toEqual(['Q6', 'Q9'])
+  // Waiting first, most consequential first; then the record of what was answered.
+  expect(ids).toEqual(['Q6', 'Q9', 'Q2'])
   expect(await ui.find({ type: 'Text', text: /^test sign-in never works on the live app\.$/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('Overview says when questions wait, and pressing it opens Questions', async ($, on) => {
+  files(on, { [RESULTS]: JSON.stringify(SAMPLE), '.claude/imagineer/questions.json': LEDGER })
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  await $.command.run(typed('imagineer:status'))
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect((await ui.find({ type: 'Button', key: 'tab-overview' }))?.text).toMatch(/Overview/)
+  expect((await ui.find({ type: 'Button', key: 'go-questions' }))?.text).toMatch(/3 questions wait for you: open Questions/)
+  await ui.press({ key: 'go-questions' })
+  expect(await ui.find({ type: 'Text', text: /^Waiting for you \(3\)$/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('Your answers says what came of each question, gaps to fix first', async ($, on) => {
+  const ledger = JSON.stringify({
+    questions: [
+      { id: 'Q1', topic: 'data', status: 'answered', point: 'Deleted clients?', matches: true, answer: 'Hidden', test: { green: true, red: { killed: 2, total: 2 } } },
+      { id: 'Q2', topic: 'permissions', status: 'answered', point: 'Notes after losing access?', matches: false, decision: 'fix', answer: 'Bo can no longer read them' },
+      { id: 'Q3', topic: 'wording', status: 'answered', point: 'Error wording?', matches: false, decision: 'keep', answer: 'Short' },
+      { id: 'Q4', topic: 'data', status: 'decided', point: 'Backups?', reason: 'docs/data.md' },
+      { id: 'Q5', topic: 'behaviour', status: 'answered', kind: 'choice', point: 'What is the app for?', answer: 'Selling plans' },
+    ],
+  })
+  files(on, { [RESULTS]: JSON.stringify({ ...SAMPLE, questions: { waiting: 0, resolved: 5 } }), '.claude/imagineer/questions.json': ledger })
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  await $.command.run(typed('imagineer:status'))
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Button', key: 'go-questions' })).toBeUndefined()
+  await ui.press({ key: 'tab-questions' })
+  expect(await ui.find({ type: 'Text', text: /^Nothing is waiting for you\.$/ })).toBeDefined()
+  expect((await ui.findAll({ type: 'Text', text: /^Q\d+$/ })).map(t => t.text)).toEqual(['Q2', 'Q1', 'Q3', 'Q4', 'Q5'])
+  const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text)
+  expect(texts).toContain('Differs from the app: you want it fixed (Bo can no longer read them)')
+  expect(texts).toContain('Matches what the app does · proven by a test')
+  expect(texts).toContain('Differs from the app: kept as it is')
+  expect(texts).toContain('Settled from the docs or code')
+  expect(texts).toContain('You answered: Selling plans')
   await ui.unmount()
 })
 
@@ -473,6 +515,8 @@ test('a gap waits in Questions first, saying the answer differs from what the ap
   const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text)
   expect(texts.indexOf('What should the error say?')).toBeLessThan(texts.indexOf('What should happen to a deleted client?'))
   expect(texts).toContain('Your answer differs from what the app does: fix it or keep it?')
-  expect(texts).not.toContain('Answered.')
+  // Answered questions are not waiting: they are in the record below.
+  expect(texts.indexOf('Answered.')).toBeGreaterThan(texts.indexOf('Your answers (1)'))
+  expect(texts.indexOf('Your answers (1)')).toBeGreaterThan(texts.indexOf('What should happen to a deleted client?'))
   await ui.unmount()
 })
