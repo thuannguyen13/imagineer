@@ -5,7 +5,8 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { foundations, mutationScore, overall, structure, testStrength } from './grade.mjs'
+import { foundations, intent, mutationScore, overall, structure, testStrength } from './grade.mjs'
+import { addQuestions, answerQuestion, emptyLedger, matches, openQuestions } from './questions.mjs'
 import { detect } from './detect.mjs'
 
 const mutants = (killed, survived, other = {}) => ({
@@ -51,19 +52,31 @@ test('no tests at all fails test strength; a run that never happened is not chec
   assert.equal(testStrength({ stryker: { ok: false } }).state, 'unchecked')
 })
 
-const fallow = (score, issues = 0, findings = []) => ({
+const fallow = score => ({
   ok: true,
   measured: 'default',
-  health: { health_score: { score, grade: 'B' }, findings, vital_signs: { duplication_pct: 0 } },
-  check: { total_issues: issues, summary: { unused_files: issues } },
+  health: { health_score: { score, grade: 'B' }, findings: [], vital_signs: { duplication_pct: 0 } },
+  check: {},
 })
+const unused = n => Array.from({ length: n }, (_, i) => ({ key: `unused-file:public/${i}.js:`, kind: 'unused-file', file: `public/${i}.js` }))
 
 test('structure: clean and 70 or more is strong, findings make it weak, below 55 fails', () => {
-  assert.equal(structure({ fallow: fallow(85) }).state, 'strong')
-  assert.equal(structure({ fallow: fallow(85, 2) }).state, 'weak')
-  assert.equal(structure({ fallow: fallow(60) }).state, 'weak')
-  assert.equal(structure({ fallow: fallow(50) }).state, 'failing')
-  assert.match(structure({ fallow: fallow(81, 2) }).summary, /2 unused files; not yet reviewed with you/)
+  assert.equal(structure({ fallow: fallow(85), findings: [] }).state, 'strong')
+  assert.equal(structure({ fallow: fallow(85), findings: unused(2) }).state, 'weak')
+  assert.equal(structure({ fallow: fallow(60), findings: [] }).state, 'weak')
+  assert.equal(structure({ fallow: fallow(50), findings: [] }).state, 'failing')
+  assert.match(structure({ fallow: fallow(81), findings: unused(2) }).summary, /2 unused files; not yet reviewed with you/)
+})
+
+test('structure: findings the user resolved no longer count', () => {
+  const ledger = {
+    ...emptyLedger(),
+    questions: [{ id: 'Q1', status: 'answered' }, { id: 'Q2', status: 'decided' }],
+    dismissed: { 'unused-file:public/0.js:': { question: 'Q1' }, 'unused-file:public/1.js:': { question: 'Q2' } },
+  }
+  const result = structure({ fallow: fallow(81), findings: unused(2), ledger })
+  assert.equal(result.state, 'strong')
+  assert.match(result.summary, /1 finding resolved with you, 1 settled from the repo's docs or code/)
 })
 
 const good = {
@@ -107,4 +120,62 @@ test('detect finds env variables missing from .env.example, and no docs', t => {
   assert.equal(facts.docs.level, 'none')
   assert.equal(facts.scripts.test, null)
   assert.equal(facts.lockfile, null)
+})
+
+const ask = (topic, extra = {}) => ({ topic, expectation: 'e', actual: 'a', example: 'x', suggestions: ['yes', 'no'], ...extra })
+
+test('questions are ranked data, money, permissions, behaviour, wording', () => {
+  const ledger = addQuestions(emptyLedger(), [ask('wording'), ask('behaviour'), ask('permissions'), ask('data')])
+  assert.deepEqual(openQuestions(ledger).map(q => q.topic), ['data', 'permissions', 'behaviour', 'wording'])
+  assert.deepEqual(ledger.questions.map(q => q.id), ['Q1', 'Q2', 'Q3', 'Q4'])
+})
+
+test('a question needs an example and at least two suggestions', () => {
+  assert.throws(() => addQuestions(emptyLedger(), [ask('data', { example: '' })]), /example/)
+  assert.throws(() => addQuestions(emptyLedger(), [ask('data', { suggestions: ['only one'] })]), /two suggestions/)
+  assert.throws(() => addQuestions(emptyLedger(), [ask('security')]), /Unknown topic/)
+})
+
+test('intent: not checked, then failing while a critical question is open, then weak until tested', () => {
+  assert.equal(intent({ ledger: emptyLedger() }).state, 'unchecked')
+  const ledger = addQuestions(emptyLedger(), [ask('permissions'), ask('wording')])
+  assert.equal(intent({ ledger }).state, 'failing')
+  assert.match(intent({ ledger }).summary, /^2 questions for you; 1 about data, money or permissions still open\./)
+  answerQuestion(ledger, { id: 'Q1', status: 'answered', answer: 'Only the owner.' })
+  assert.equal(intent({ ledger }).state, 'weak')
+  answerQuestion(ledger, { id: 'Q2', status: 'deferred', answer: null, reason: 'Later.' })
+  const resolved = intent({ ledger })
+  assert.equal(resolved.state, 'weak')
+  assert.match(resolved.summary, /1 answer is not yet backed by a test/)
+  ledger.questions[0].test = { name: 'Q1 only the owner submits', red: 'abc', green: 'def' }
+  assert.equal(intent({ ledger }).state, 'strong')
+})
+
+test('deferring or deciding needs a reason', () => {
+  const ledger = addQuestions(emptyLedger(), [ask('data')])
+  assert.throws(() => answerQuestion(ledger, { id: 'Q1', status: 'deferred' }), /needs a reason/)
+})
+
+test('critical code must meet the bar on its own, with every surviving break explained', () => {
+  const report = {
+    files: {
+      'src/auth.ts': { mutants: [{ status: 'Killed', location: { start: { line: 1 } } }, { status: 'Survived', location: { start: { line: 17 } } }] },
+      'src/other.ts': { mutants: Array.from({ length: 18 }, () => ({ status: 'Killed', location: { start: { line: 1 } } })) },
+    },
+  }
+  const ledger = { ...emptyLedger(), critical: ['src/auth.ts'] }
+  assert.equal(testStrength({ stryker, mutation: report }).state, 'strong')
+  assert.equal(testStrength({ stryker, mutation: report, ledger }).state, 'failing')
+  report.files['src/auth.ts'].mutants.unshift(...Array.from({ length: 8 }, () => ({ status: 'Killed', location: { start: { line: 2 } } })))
+  const weak = testStrength({ stryker, mutation: report, ledger })
+  assert.equal(weak.state, 'weak')
+  assert.match(weak.summary, /1 line with breaks not yet explained/)
+  ledger.dismissed['mutant:src/auth.ts:17'] = { question: 'Q4', reason: 'Only the message text changes.' }
+  assert.equal(testStrength({ stryker, mutation: report, ledger }).state, 'strong')
+})
+
+test('globs: * stays in a folder, ** crosses folders', () => {
+  assert.ok(matches('src/*.ts', 'src/auth.ts'))
+  assert.ok(!matches('src/*.ts', 'src/lib/auth.ts'))
+  assert.ok(matches('src/**', 'src/lib/auth.ts'))
 })

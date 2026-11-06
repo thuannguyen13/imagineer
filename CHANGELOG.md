@@ -2,6 +2,20 @@
 
 Imagineer's releases, newest first. Below 1.0, a `0.y.0` release may change how Imagineer is used; such changes are listed first under **Changes you need to know**. See [docs/proposals/inspect-and-build.md](docs/proposals/inspect-and-build.md#versioning).
 
+## 0.4.0 — unreleased
+
+Inspect asks you what the code should do.
+
+### New
+
+- After measuring, `/imagineer:inspect` asks plain-language questions: first the big picture (what the app is for, who uses it, what is sensitive, which code handles money, personal data or permissions), then the findings that matter, most consequential first. Each question shows what you seem to expect, what the code actually does, a concrete example, and suggested answers, with room for your own.
+- Answers are kept in `.claude/imagineer/questions.json`, so nothing is asked twice. What the repository's docs or tests already settle is recorded with the file it cites, not asked.
+- The grade uses the answers:
+  - "Matches your intent" is Failing while a question about data, money or permissions is open, and Weak until answers are backed by tests (next release).
+  - Code you mark as critical must meet the test-strength bar on its own, with every break no test noticed there explained.
+  - Structure findings you resolve no longer count against it.
+- Without a user to answer (`claude -p`, a scheduled run), Inspect records the questions, marks the run as waiting, and lists them.
+
 ## 0.3.0 — unreleased
 
 The first slice of Inspect: a real grade from measurements.

@@ -30,7 +30,7 @@ Evidence gathered 2026-11-05: Stryker on `bench/app` kills 30.5% of mutants (`se
 Built in slices, each released on its own.
 
 - [x] Slice 1 (0.3.0): research and tools. `/imagineer:inspect` detects the repo's setup, runs checks, Fallow and Stryker in a throwaway copy, and a script grades the evidence into the results file. Evidence (2026-11-05): on a fresh copy of `bench/app`, headless `/imagineer:inspect` ran in 7 turns ($0.41) with no permission prompts beyond `node`, `ls` and `git`, left the repository unchanged and removed its copy; grade ✕ Failing (test strength 31%, 51 of 167, as measured by hand earlier), structure ! Weak (Fallow 81), foundations ✓ Strong, the rest not checked; 9 script tests pass.
-- [ ] Slice 2: questions.
+- [x] Slice 2 (0.4.0): questions. The big-picture interview, findings turned into ranked questions in the EXPECTATION / ACTUAL / EXAMPLE / SUGGESTIONS format, a ledger that never asks twice, and the grade reading the answers (intent, critical code, resolved findings). Evidence (2026-11-05): headless `/imagineer:inspect` on the bench copy (5 turns, $0.98, repository unchanged) put 14 items in the ledger: 10 settled from the bench docs with citations, 4 open questions listed for the user, one of them a real gap no planted defect covers (`APP_ENV=production` would turn on dev sign-in). 16 script tests pass.
 - [ ] Slice 3: attack rounds, the stop bar and the no-docs path.
 
 - [ ] Tool detection: the repo's own Fallow and Stryker version and config when present; otherwise `npx fallow` and Stryker in a throwaway copy.
