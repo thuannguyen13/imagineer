@@ -84,7 +84,11 @@ export function testStrength(evidence) {
     .sort((a, b) => a.score - b.score || b.total - a.total)
     .slice(0, 3)
     .map(f => `${f.path} ${percent(f.score)}`)
-  const summary = `Tests catch ${percent(score)} of deliberate breaks (${caught} of ${total}).${weakest.length ? ` Weakest: ${weakest.join(', ')}.` : ''}${criticalNote}`
+  const skipped = evidence.detect?.tests?.needSetting ?? 0
+  const skippedNote = skipped
+    ? ` ${skipped} test ${skipped === 1 ? 'file' : 'files'} run only with a setting this copy did not have (a database, most often), so this may be lower than in CI.`
+    : ''
+  const summary = `Tests catch ${percent(score)} of deliberate breaks (${caught} of ${total}).${weakest.length ? ` Weakest: ${weakest.join(', ')}.` : ''}${criticalNote}${skippedNote}`
   return dimension('test-strength', name, 'trust', state, stryker.measured, summary)
 }
 

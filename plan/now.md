@@ -74,8 +74,11 @@ Built in slices, each released on its own.
 
 ## B6 — Real project
 
-- [ ] `/imagineer:inspect` on one of the owner's real projects, starting from the incident of 2026-11-05.
-- [ ] Marked validated only after that run.
+- [x] Dry run on the owner's sales portal, scoped to users and access (2026-11-06): grade ✕ Failing; three gaps the owner confirmed (deal notes after losing Pipeline access, Settings lockout by one Undo, the test admin reachable by Microsoft sign-in on staging); eight problems with Imagineer found and fixed in 0.9.0. Write-up: [docs/validation/2026-11-06-sales-portal-dry-run.md](../docs/validation/2026-11-06-sales-portal-dry-run.md).
+- [ ] A run with the database the project's tests expect, so test strength matches CI.
+- [ ] `lib/permissions.ts` measured: try Stryker's vitest runner, which runs only the tests that cover each break.
+- [ ] A run the owner starts with `/imagineer:inspect` in their own project, with 0.9.0 installed.
+- [ ] Marked validated only after those.
 
 ## Still open from before
 

@@ -26,3 +26,9 @@ Possible scope: turn an incident into a regression test and a decision record. A
 **Trigger:** users of Inspect or Build ask for protection against destructive commands (`rm -rf`, force pushes, database drops) in their own sessions.
 
 A mod that holds such a command and shows what it would change, with Proceed and Cancel, as Anthropic's `blast-radius` sample does. It would be the plugin's first mod that changes tool calls, so it needs its own on/off switch and stays out of the read-only grade mod.
+
+## A throwaway database for tests that need one
+
+**Trigger:** a project whose tests skip themselves without a database, as the sales portal's 43 test files do.
+
+Inspect would start a disposable database (Postgres in Docker, or PGlite where it fits), apply the project's migrations as its CI does, and set the variable the tests read, so mutation testing sees the same tests CI runs.

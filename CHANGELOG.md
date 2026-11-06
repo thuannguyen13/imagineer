@@ -2,7 +2,7 @@
 
 Imagineer's releases, newest first. Below 1.0, a `0.y.0` release may change how Imagineer is used; such changes are listed first under **Changes you need to know**. See [docs/proposals/inspect-and-build.md](docs/proposals/inspect-and-build.md#versioning).
 
-## 0.9.0 — unreleased
+## 0.9.0 — 2026-11-06
 
 Clearer questions, for people who do not read code.
 
@@ -21,6 +21,8 @@ Clearer questions, for people who do not read code.
 ### Fixed
 
 - **Test strength could read Strong when it had measured nothing.** On the first real project, 728 of 729 breaks timed out because eight copies of a full test suite ran at once, and timeouts counted as caught: a false 100%. Now a run where most breaks time out reads as not checked, never Strong (and Build's done bar is not met); mutants run a quarter of the cores at a time with a limit based on the suite's real duration; the estimate allows for runs slowing each other; and test files are never mutated.
+- Test strength says how many test files run only with a setting the copy did not have (a database, most often), since its number may then be lower than in CI.
+- The self-check flags a mutation run where most breaks timed out.
 - Attack and proof tests no longer stay in the throwaway copy after they run: a test that broke through fails on purpose, and made every later measurement of the copy fail.
 - Foundations no longer says CI skips the tests when a workflow runs the test command directly (for example `npx vitest run --shard=1/3`), and it recognises named env examples such as `.env.local.example`. Variables the hosting platform sets itself (Vercel, Netlify, Render, Fly, GitHub) need no example. Both were found on the first real project.
 

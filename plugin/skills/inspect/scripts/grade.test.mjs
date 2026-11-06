@@ -300,3 +300,19 @@ test('test strength: a run where most breaks timed out says nothing, and is neve
   const rare = { files: { 'a.ts': { mutants: [...Array.from({ length: 95 }, () => ({ status: 'Killed' })), ...Array.from({ length: 5 }, () => ({ status: 'Timeout' }))] } } }
   assert.equal(testStrength({ stryker: { ok: true, measured: 'default' }, mutation: rare }).state, 'strong')
 })
+
+test('test strength says when tests that need a database did not run', () => {
+  const report = { files: { 'a.ts': { mutants: [{ status: 'Killed' }, { status: 'Survived', location: { start: { line: 1 } } }] } } }
+  const result = testStrength({ stryker: { ok: true, measured: 'default' }, mutation: report, detect: { tests: { files: 200, needSetting: 43 } } })
+  assert.match(result.summary, /43 test files run only with a setting this copy did not have/)
+})
+
+test('detect counts test files that skip themselves without a setting', t => {
+  const repo = mkdtempSync(join(tmpdir(), 'imagineer-test-'))
+  t.after(() => rmSync(repo, { recursive: true, force: true }))
+  mkdirSync(join(repo, 'lib'))
+  writeFileSync(join(repo, 'package.json'), JSON.stringify({ scripts: { test: 'vitest run' } }))
+  writeFileSync(join(repo, 'lib/a.test.ts'), 'describe.skipIf(!process.env.DATABASE_URL)("db", () => {})')
+  writeFileSync(join(repo, 'lib/b.test.ts'), 'it("plain", () => {})')
+  assert.deepEqual(detect(repo).tests, { files: 2, needSetting: 1 })
+})
