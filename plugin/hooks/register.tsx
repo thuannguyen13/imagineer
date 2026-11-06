@@ -12,7 +12,6 @@ import {
   dialogIds,
   FLAGS_PATH,
   findPackedRef,
-  finishLines,
   firstItems,
   isActive,
   isSameCommit,
@@ -28,7 +27,6 @@ import {
   readOpenQuestions,
   readResults,
   RESULTS_PATH,
-  rowLayout,
   runningTitle,
   whenTested,
   STATE_LABEL,
@@ -189,11 +187,7 @@ export const register: Register = on => {
     if (summary.kind !== 'results') return <Text dimColor>{summaryText(summary)}</Text>
 
     const tab = await read($, tabAtom)
-    const isTerminal = e.surface === 'terminal'
     const overall = STATE_LABEL[summary.overall.state]
-    const layout = rowLayout(e.props.bodyColumns)
-    // The numbers line up in their own column, right-aligned, as wide as the widest.
-    const valueWidth = Math.max(0, ...summary.dimensions.map(d => (d.metric && d.metric.value !== '—' ? d.metric.value.length : 0)))
     const waiting = summary.questions.waiting
     const opened = await read($, openAtom)
     const tabs: { id: Tab; label: string }[] = [
@@ -205,100 +199,81 @@ export const register: Register = on => {
     // While a run is under way: that it is running, and what it is doing now.
     const tested = whenTested(summary.run.at)
     const isRunning = summary.run.status === 'running'
-    const header = isRunning ? (
-      <Box flexDirection="column">
-        <Text weight="semibold">{runningTitle(summary.run)}</Text>
-        <Text dimColor>{summary.run.step || 'Working…'}</Text>
-      </Box>
-    ) : (
-      <Box flexDirection="column">
-        <Text color={overall.color} weight="semibold">
-          {overall.icon} {overall.word}
+
+    // One layout for every surface; each draws it its own way (text sizes and spacing steps are the
+    // surface's). A headline, the questions that wait as a callout, one row per area with its number
+    // under its name and a small chevron to open its evidence, and what is left to finish. Rows are
+    // not buttons themselves: Desktop, VS Code and mobile draw a button as its plain label alone.
+    const toggleArea = (id: string) => () =>
+      update($, openAtom, ids => (ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]))
+    const tally = (['failing', 'weak', 'strong', 'unchecked'] as const)
+      .map(state => {
+        const n = summary.dimensions.filter(d => !d.isPending && d.state === state).length
+        return n ? `${n} ${state === 'unchecked' ? 'not checked' : state}` : ''
+      })
+      .concat(summary.dimensions.some(d => d.isPending) ? [`${summary.dimensions.filter(d => d.isPending).length} coming up`] : [])
+      .filter(Boolean)
+      .join(' · ')
+    const header = (
+      <Box flexDirection="column" gap="xs">
+        {isRunning ? (
+          <Text size="heading" weight="semibold">
+            {runningTitle(summary.run)}
+          </Text>
+        ) : (
+          <Text size="heading" weight="semibold" color={overall.color}>
+            {overall.icon} {overall.word}
+          </Text>
+        )}
+        <Text size="caption" dimColor>
+          {isRunning ? summary.run.step || 'Working…' : tally}
         </Text>
-        <Text dimColor>{[summary.run.commit, tested ? `tested ${tested}` : ''].filter(Boolean).join(' · ')}</Text>
+        {!isRunning && (
+          <Text size="caption" dimColor>
+            {[summary.run.commit, tested ? `tested ${tested}` : ''].filter(Boolean).join(' · ')}
+          </Text>
+        )}
       </Box>
     )
-
-    // One row per area, a button that opens its evidence underneath. Laid out for the pane's
-    // width: icon, name, state and the area's number, with what it counts when there is room;
-    // two lines when the pane is narrow. A row's children are text only, as a button takes.
-    const row = (dimension: Results['dimensions'][number]) => {
+    const areaRow = (dimension: Results['dimensions'][number]) => {
       const label = labelFor(dimension)
       const isOpen = opened.includes(dimension.id)
-      const arrow = isOpen ? '▾ ' : '▸ '
-      const stateText = `${label.word}${!dimension.isPending && (dimension.isStale || summary.isStale) ? ' ⟳' : ''}`
       const metric = dimension.metric && dimension.metric.value !== '—' ? dimension.metric : null
-      const toggle = () => update($, openAtom, ids => (ids.includes(dimension.id) ? ids.filter(id => id !== dimension.id) : [...ids, dimension.id]))
-      const plain = `${arrow}${label.icon} ${dimension.name} ${stateText}${metric ? ` ${metric.value} ${metric.label}` : ''}`
-
-      // Desktop, VS Code and mobile draw a Button as a native button with its plain label, so the
-      // terminal's styled row would arrive as one flat line. There the row is a layout of its own,
-      // columns that line up in a proportional font, with a small Details button to open it.
-      const button = !isTerminal ? (
-        <Box flexDirection="row" alignItems="center" gap={1}>
-          <Box width={2}>
-            <Text color={label.color}>{label.icon}</Text>
-          </Box>
-          <Box flexGrow={1} flexShrink={1}>
-            <Text>{dimension.name}</Text>
-          </Box>
-          <Box width={layout.kind === 'narrow' ? 10 : 13}>
-            <Text color={label.color}>{stateText}</Text>
-          </Box>
-          {layout.kind !== 'narrow' && (
-            <Box width={10} justifyContent="flex-end">
-              <Text>{metric ? metric.value : ''}</Text>
-            </Box>
-          )}
-          {layout.kind === 'wide' && (
-            <Box width={16}>
-              <Text dimColor>{metric?.label ?? ''}</Text>
-            </Box>
-          )}
-          <Button key={`row-${dimension.id}`} label={isOpen ? 'Hide' : 'Details'} dimColor onPress={toggle} />
-        </Box>
-      ) : layout.kind === 'narrow' ? (
-          <Button key={`row-${dimension.id}`} label={plain} plain onPress={toggle}>
-            <Text dimColor>{arrow}</Text>
-            <Text color={label.color}>{label.icon}</Text>
-            {` ${dimension.name}`}
-          </Button>
-        ) : (
-          <Button key={`row-${dimension.id}`} label={plain} plain onPress={toggle}>
-            <Text dimColor>{arrow}</Text>
-            <Text color={label.color}>{`${label.icon}  `}</Text>
-            {dimension.name.padEnd(layout.nameWidth).slice(0, layout.nameWidth)}
-            <Text color={label.color}>{stateText.padEnd(layout.stateWidth)}</Text>
-            {metric ? metric.value.padStart(valueWidth) : ''.padStart(valueWidth)}
-            {metric && layout.kind === 'wide' && metric.label ? <Text dimColor>{`  ${metric.label}`}</Text> : ''}
-          </Button>
-        )
-
+      const stale = !dimension.isPending && (dimension.isStale || summary.isStale) ? ' ⟳' : ''
       return (
         <Box flexDirection="column">
-          {button}
-          {isTerminal && layout.kind === 'narrow' && (
-            <Box paddingLeft={4}>
-              <Text>
-                <Text color={label.color}>{stateText}</Text>
-                {metric ? ` · ${metric.value}` : ''}
+          <Box flexDirection="row" alignItems="center" gap="sm">
+            <Box width={2}>
+              <Text color={label.color} weight="semibold">
+                {label.icon}
               </Text>
             </Box>
-          )}
+            <Box flexGrow={1} flexShrink={1} flexDirection="column">
+              <Text weight="medium">{dimension.name}</Text>
+              {metric ? (
+                <Text size="caption" dimColor tabular>
+                  {`${metric.value} ${metric.label}`}
+                </Text>
+              ) : dimension.isPending ? (
+                <Text size="caption" dimColor>
+                  Later in this run
+                </Text>
+              ) : null}
+            </Box>
+            <Text color={label.color} weight="medium">
+              {`${label.word}${stale}`}
+            </Text>
+            <Button key={`row-${dimension.id}`} label={isOpen ? '⌄' : '›'} plain dimColor onPress={toggleArea(dimension.id)} />
+          </Box>
           {isOpen && (
-            <Box flexDirection="column" paddingLeft={isTerminal ? 5 : 3} marginBottom={1}>
-              {dimension.summary !== '' && <Text>{dimension.summary}</Text>}
+            <Box flexDirection="column" gap="xs" paddingLeft={3} paddingTop="xs" paddingBottom="sm">
+              {dimension.summary !== '' && <Text size="footnote">{dimension.summary}</Text>}
               {firstItems(dimension.items).map(item => (
-                <Box flexDirection="row">
-                  <Box width={2}>
-                    <Text dimColor>•</Text>
-                  </Box>
-                  <Box flexShrink={1}>
-                    <Text dimColor>{item}</Text>
-                  </Box>
-                </Box>
+                <Text size="footnote" dimColor>
+                  {`• ${item}`}
+                </Text>
               ))}
-              <Text dimColor>
+              <Text size="caption" dimColor>
                 {MEASURED_LABEL[dimension.measured]}
                 {dimension.isClaimed ? ' · claimed, not re-run' : ''}
               </Text>
@@ -307,35 +282,50 @@ export const register: Register = on => {
         </Box>
       )
     }
-
-    const grade = (
-      <Box flexDirection="column">
-        {summary.dimensions.map(dimension => row(dimension))}
-        <Box marginTop={1} flexDirection="column">
-          {isRunning && <Text dimColor>Areas fill in as Inspect measures them.</Text>}
-          {!isRunning &&
-            summary.run.bar &&
-            finishLines(summary.run.bar).map(line => (
-              <Text dimColor={!line.startsWith('✓')} color={line.startsWith('✓') ? 'success' : undefined}>
-                {line}
-              </Text>
-            ))}
-          {waiting > 0 && (
-            <Box marginTop={1}>
-              <Button
-                key="go-questions"
-                label={`${waiting} ${waiting === 1 ? 'question waits' : 'questions wait'} for you: open Questions`}
-                plain
-                onPress={() => update($, tabAtom, () => 'questions')}
-              >
-                <Text color="warning">{`▸ ${waiting} ${waiting === 1 ? 'question waits' : 'questions wait'} for you: open Questions`}</Text>
-              </Button>
-            </Box>
-          )}
-          <Box marginTop={1}>
-            <Text dimColor>{isTerminal ? 'Select a row for details.' : 'Press Details on a row to see its evidence.'}</Text>
-          </Box>
+    const group = (title: string, ids: Results['dimensions']) =>
+      ids.length > 0 && (
+        <Box flexDirection="column" gap="sm">
+          <Text size="caption" weight="semibold" dimColor>
+            {title}
+          </Text>
+          {ids.map(d => areaRow(d))}
         </Box>
+      )
+    const overview = (
+      <Box flexDirection="column" gap="lg">
+        {waiting > 0 && (
+          <Box borderStyle="round" borderColor="warning" paddingX="md" paddingY="sm" flexDirection="row" alignItems="center" gap="md">
+            <Box flexGrow={1} flexShrink={1} flexDirection="column">
+              <Text weight="semibold">{`${waiting} ${waiting === 1 ? 'question waits' : 'questions wait'} for you`}</Text>
+              <Text size="caption" dimColor>
+                Only you can say what the app should do.
+              </Text>
+            </Box>
+            <Button key="go-questions" label="See questions" variant="primary" onPress={() => update($, tabAtom, () => 'questions')} />
+          </Box>
+        )}
+        {group('Can you trust it?', summary.dimensions.filter(d => d.group === 'trust'))}
+        {group('Is it well kept?', summary.dimensions.filter(d => d.group === 'care'))}
+        {isRunning ? (
+          <Text size="caption" dimColor>
+            Areas fill in as Inspect measures them.
+          </Text>
+        ) : summary.run.bar?.met ? (
+          <Text color="success">✓ Finished, by the thresholds Imagineer suggests.</Text>
+        ) : summary.run.bar ? (
+          <Box flexDirection="column" gap="xs">
+            <Text weight="semibold">To finish</Text>
+            <Text size="caption" dimColor>
+              By the thresholds Imagineer suggests, Inspect still needs:
+            </Text>
+            {summary.run.bar.missing.map(item => (
+              <Text size="footnote">{`○ ${item}`}</Text>
+            ))}
+            <Text size="caption" dimColor>
+              Run /imagineer:inspect to continue.
+            </Text>
+          </Box>
+        ) : null}
       </Box>
     )
 
@@ -413,8 +403,10 @@ export const register: Register = on => {
           ))}
         </Box>
         {header}
-        {tab === 'questions' ? questions : grade}
-        <Text dimColor>Imagineer {summary.imagineer}</Text>
+        {tab === 'questions' ? questions : overview}
+        <Text dimColor size="caption">
+          Imagineer {summary.imagineer}
+        </Text>
       </Box>
     )
   })

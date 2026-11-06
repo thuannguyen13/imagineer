@@ -126,17 +126,19 @@ test('status opens the pane: an aligned overview first, on every surface', async
     // The header: the verdict, the commit and when it was tested, nothing else.
     expect(await ui.find({ type: 'Text', text: /^abc1234 · tested Nov 6, 14:02$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /Test strength and data safety are failing/ })).toBeUndefined()
-    // One row per area: name, state, the number and what it counts. In the terminal the row is
-    // the button; elsewhere a button draws only its plain label, so the row is columns of text,
-    // each part its own Text with its colour, and a Details button opens it.
+    // One layout on every surface: each area's name, its number and what it counts, its state, each
+    // its own Text with its colour, and a small chevron that opens its evidence.
     const row = await ui.find({ type: 'Button', key: 'row-test-strength' })
-    if (surface === 'terminal') {
-      expect(row?.text).toMatch(/Test strength/)
-      expect(row?.text).toMatch(/51\/167/)
-    } else {
-      expect(row?.text).toBe('Details')
+    {
+      expect(row?.text).toBe('›')
       expect(await ui.find({ type: 'Text', text: /^Test strength$/ })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: /^51\/167$/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /^51\/167 breaks caught$/ })).toBeDefined()
+      // A quiet tally under the verdict, and the rows grouped by what they answer.
+      expect(await ui.find({ type: 'Text', text: /^1 failing · 2 weak · 1 not checked$/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /^Can you trust it\?$/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /^Is it well kept\?$/ })).toBeDefined()
+      // The questions that wait come first, as a callout with one button.
+      expect((await ui.find({ type: 'Button', key: 'go-questions' }))?.text).toBe('See questions')
       expect((await ui.findAll({ type: 'Text', text: /^Failing$/ })).length).toBeGreaterThan(0)
     }
     expect(await ui.find({ type: 'Button', key: 'row-intent' })).toBeDefined()
@@ -157,8 +159,8 @@ test('pressing a row opens its evidence: the summary and the first five items, t
     const ui = await $.ui.mount({ ...PANE, surface })
     await ui.press({ key: 'row-test-strength' })
     expect(await ui.find({ type: 'Text', text: /Tests catch 30% of deliberate breaks/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^A5: attack 5$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^A6: attack 6$/ })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /^(• )?A5: attack 5$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^(• )?A6: attack 6$/ })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: /and 13 more/ })).toBeDefined()
     await ui.press({ key: 'row-test-strength' })
     expect(await ui.find({ type: 'Text', text: /deliberate breaks/ })).toBeUndefined()
@@ -286,10 +288,10 @@ test('the pane lists open questions, most consequential first, and the finish th
   await $.command.run(typed('imagineer:status'))
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect(await ui.find({ type: 'Text', text: /^Not finished yet\. By the thresholds Imagineer suggests, Inspect still needs:$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^  • two attack rounds in a row that find nothing new$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^To finish$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^By the thresholds Imagineer suggests, Inspect still needs:$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^○ two attack rounds in a row that find nothing new$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^Run \/imagineer:inspect to continue\.$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /Stop bar/ })).toBeUndefined()
   await ui.press({ key: 'tab-questions' })
   const ids = (await ui.findAll({ type: 'Text', text: /^Q\d+$/ })).map(found => found.text)
   // Waiting first, most consequential first; then the record of what was answered.
@@ -305,7 +307,8 @@ test('Overview says when questions wait, and pressing it opens Questions', async
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect((await ui.find({ type: 'Button', key: 'tab-overview' }))?.text).toMatch(/Overview/)
-  expect((await ui.find({ type: 'Button', key: 'go-questions' }))?.text).toMatch(/3 questions wait for you: open Questions/)
+  expect((await ui.find({ type: 'Button', key: 'go-questions' }))?.text).toBe('See questions')
+  expect(await ui.find({ type: 'Text', text: /^3 questions wait for you$/ })).toBeDefined()
   await ui.press({ key: 'go-questions' })
   expect(await ui.find({ type: 'Text', text: /^Waiting for you \(3\)$/ })).toBeDefined()
   await ui.unmount()
@@ -416,28 +419,6 @@ test('other questions keep Claude Code\'s dialog untouched', async ($, on) => {
   await ui.unmount()
 })
 
-test('the Overview row fits the pane: full row, number alone, or two lines', async ($, on) => {
-  files(on, { [RESULTS]: JSON.stringify(SAMPLE) })
-  on('ui.open', () => ({ value: { isPlaced: true } }))
-  await $.command.run(typed('imagineer:status'))
-  const at = (bodyColumns: number) => ({ ...PANE, props: { ...PANE.props, bodyColumns } })
-
-  const wide = await $.ui.mount({ ...at(90), surface: 'terminal' })
-  expect((await wide.find({ type: 'Button', key: 'row-test-strength' }))?.text).toMatch(/51\/167\s+breaks caught/)
-  await wide.unmount()
-
-  const medium = await $.ui.mount({ ...at(50), surface: 'terminal' })
-  const mediumRow = (await medium.find({ type: 'Button', key: 'row-test-strength' }))?.text ?? ''
-  expect(mediumRow).toMatch(/51\/167/)
-  expect(mediumRow).not.toMatch(/breaks caught/)
-  await medium.unmount()
-
-  const narrow = await $.ui.mount({ ...at(32), surface: 'terminal' })
-  expect((await narrow.find({ type: 'Button', key: 'row-test-strength' }))?.text).toMatch(/✕ Test strength/)
-  expect(await narrow.find({ type: 'Text', text: /^Failing · 51\/167$/ })).toBeDefined()
-  await narrow.unmount()
-})
-
 const RUNNING = {
   ...SAMPLE,
   run: { ...SAMPLE.run, status: 'running', round: 1, step: 'Measuring test strength (about 18 minutes)', bar: { met: false, missing: ['x'] } },
@@ -493,8 +474,9 @@ test('while Inspect runs, the pane says what it is doing, and areas not reached 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect(await ui.find({ type: 'Text', text: /^◌ Inspect is running$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^Measuring test strength \(about 18 minutes\)$/ })).toBeDefined()
-  expect((await ui.find({ type: 'Button', key: 'row-test-strength' }))?.text).toMatch(/◌\s+Test strength\s+Coming up/)
-  expect((await ui.find({ type: 'Button', key: 'row-foundations' }))?.text).toMatch(/!\s+Foundations\s+Weak/)
+  expect(await ui.find({ type: 'Text', text: /^Coming up$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Later in this run$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Weak$/ })).toBeDefined()
   // Not a verdict, and not "not finished" while it is still measuring.
   expect(await ui.find({ type: 'Text', text: /Not proven yet/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /Not finished yet/ })).toBeUndefined()

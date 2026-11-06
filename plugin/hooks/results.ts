@@ -238,15 +238,6 @@ const shortText = (value: string, max = 110) => (value.length > max ? `${value.s
 
 export const questionLine = (q: OpenQuestion) => `${q.id} (${q.isGap ? 'differs from what the app does' : q.topic}): ${shortText(q.text)}`
 
-/** How the Overview lays out a row at a pane width: the full row, the number alone, or two lines. */
-export type RowLayout = { kind: 'wide' | 'medium' | 'narrow'; nameWidth: number; stateWidth: number }
-
-export function rowLayout(columns: number): RowLayout {
-  if (columns >= 64) return { kind: 'wide', nameWidth: Math.min(26, Math.floor(columns * 0.32)), stateWidth: 13 }
-  if (columns >= 44) return { kind: 'medium', nameWidth: Math.min(24, columns - 3 - 12 - 10), stateWidth: 12 }
-  return { kind: 'narrow', nameWidth: columns - 3, stateWidth: 0 }
-}
-
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 /** "Nov 6, 14:02" in local time, with the year when it is not this year's. Empty when unknown. */
