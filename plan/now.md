@@ -70,7 +70,7 @@ Built in slices, each released on its own.
 - [x] Sharing: the user reviews the record, then opens a pre-filled GitHub issue and submits it, or saves a file.
 - [x] Owner-side triage and learn steps in `.claude/skills/triage-feedback/` (this repository only).
 - [x] Evidence (2026-11-05): a self-check flag raised on purpose in tests for each signal, including the role guard writing its refusal and the contradiction the bench run produced (Q8 proven, attack A7 broke it); 46 script tests and 14 mod tests pass.
-- [ ] One real miss turned into a bench scenario that fails before the fix and passes after: the first candidate is A7 (invisible characters pass a "description required" proof).
+- [x] One real miss turned into a bench scenario that fails before the fix and passes after: L1, from A7. Before the boundary-case guidance the proof of "a description is required" passed (missed); after it, the proof fails on the app's invisible-character gap (caught). One run each: `bench/results/2026-11-05-learn-L1.md`.
 
 ## B6 — Real project
 
