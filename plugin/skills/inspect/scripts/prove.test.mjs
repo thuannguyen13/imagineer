@@ -2,7 +2,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -59,6 +59,7 @@ test('a test that passes now and catches every break proves the answer', t => {
   assert.equal(result.status, 0, result.stderr)
   const { questions, dismissed } = ledger()
   assert.deepEqual(questions[0].test.red, { killed: 2, total: 2, missed: [] })
+  assert.ok(!existsSync(join(root, 'imagineer-copy/test/q1.test.mjs')), 'the proof test is removed from the copy')
   assert.equal(questions[0].test.green, true)
   assert.ok('mutant:src/rules.mjs:2' in dismissed)
 })

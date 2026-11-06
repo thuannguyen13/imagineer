@@ -20,6 +20,8 @@ Clearer questions, for people who do not read code.
 
 ### Fixed
 
+- **Test strength could read Strong when it had measured nothing.** On the first real project, 728 of 729 breaks timed out because eight copies of a full test suite ran at once, and timeouts counted as caught: a false 100%. Now a run where most breaks time out reads as not checked, never Strong (and Build's done bar is not met); mutants run a quarter of the cores at a time with a limit based on the suite's real duration; the estimate allows for runs slowing each other; and test files are never mutated.
+- Attack and proof tests no longer stay in the throwaway copy after they run: a test that broke through fails on purpose, and made every later measurement of the copy fail.
 - Foundations no longer says CI skips the tests when a workflow runs the test command directly (for example `npx vitest run --shard=1/3`), and it recognises named env examples such as `.env.local.example`. Variables the hosting platform sets itself (Vercel, Netlify, Render, Fly, GitHub) need no example. Both were found on the first real project.
 
 ## 0.8.0 — 2026-11-05

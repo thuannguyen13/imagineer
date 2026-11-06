@@ -9,7 +9,7 @@
 // into the copy at the same path, runs it, records the result on the question,
 // and explains (dismisses) each line whose every break the test caught.
 
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { arg, readJson, readJsonIf, run, tail, writeJson } from './lib.mjs'
 import { LEDGER, loadLedger } from './questions.mjs'
@@ -83,6 +83,8 @@ function prove({ repo, out, id, file, command }) {
     }
   }
 
+  // The proof leaves the copy as it came, so later measurements see only the repository's own tests.
+  rmSync(target, { force: true })
   question.test = test
   writeJson(join(repo, LEDGER), ledger)
 

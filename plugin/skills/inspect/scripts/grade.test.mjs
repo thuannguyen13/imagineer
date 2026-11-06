@@ -291,3 +291,12 @@ test('detect: CI that runs the test command directly counts, and named env examp
   assert.equal(facts.env.example, '.env.local.example')
   assert.deepEqual(facts.env.missing, [])
 })
+
+test('test strength: a run where most breaks timed out says nothing, and is never Strong', () => {
+  const report = { files: { 'lib/permissions.ts': { mutants: [...Array.from({ length: 728 }, () => ({ status: 'Timeout' })), { status: 'Killed' }] } } }
+  const result = testStrength({ stryker: { ok: true, measured: 'default' }, mutation: report })
+  assert.equal(result.state, 'unchecked')
+  assert.match(result.summary, /728 of 729 breaks timed out/)
+  const rare = { files: { 'a.ts': { mutants: [...Array.from({ length: 95 }, () => ({ status: 'Killed' })), ...Array.from({ length: 5 }, () => ({ status: 'Timeout' }))] } } }
+  assert.equal(testStrength({ stryker: { ok: true, measured: 'default' }, mutation: rare }).state, 'strong')
+})

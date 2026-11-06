@@ -59,3 +59,9 @@ test('the pull request carries the repository grade as it stood before the chang
   assert.match(gradeSection(null).join('\n'), /Not inspected yet/)
   assert.match(prBody({ request: 'x', requirements: [], rounds: [] }, results), /## Repository grade/)
 })
+
+test('the done bar is not met when most breaks timed out', () => {
+  const result = barFrom({ tests: { ok: true }, typecheck: { present: true, ok: true }, audit: { ok: true, verdict: 'pass' }, critical: [], mutation: { caught: 20, total: 20, timeouts: 19 } })
+  assert.equal(result.met, false)
+  assert.match(result.missing[0], /19 of 20 breaks timed out/)
+})

@@ -11,7 +11,7 @@
 //
 // Attack tests are written first to <run folder>/attacks/<path>.
 
-import { copyFileSync, mkdirSync } from 'node:fs'
+import { copyFileSync, mkdirSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { arg, readJson, readJsonIf, run, tail, writeJson } from './lib.mjs'
 
@@ -44,6 +44,9 @@ function attack({ out, round, id, category, title, file, command, about = null }
   mkdirSync(dirname(target), { recursive: true })
   copyFileSync(join(out, 'attacks', file), target)
   const result = run(['sh', '-c', command], { cwd: copy.path, timeoutMs: 5 * 60_000 })
+  // The attack test leaves the copy as it came: a test that broke through fails on purpose,
+  // and would fail every later measurement of the copy.
+  rmSync(target, { force: true })
 
   const ledger = loadAttacks(out)
   ledger.attacks = ledger.attacks.filter(a => a.id !== id)
