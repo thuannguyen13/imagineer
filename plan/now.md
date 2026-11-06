@@ -49,9 +49,9 @@ Evidence gathered 2026-11-05: Stryker on `bench/app` kills 30.5% of mutants (`se
 
 ## B5 — Retire the old entry points
 
-- [ ] Guard's rules in Dev's practices, ground's checklist in Inspect; old skills and agents removed.
-- [ ] Decide whether the mod replaces the Python reviewer hook and gives ground's destructive-command guard buttons.
-- [ ] README rewritten around the three commands.
+- [x] guard, forge and ground, forge's agents and its reviewer hook removed from the plugin in 0.2.0 (2026-11-05, chosen by the owner), ahead of B2 and B4, so the plugin shows only the new design. Their text stays at tag `v0.1.0`; B2 takes ground's checklist and hooks from there, B4 forge's run folder, state, finding IDs and reviewer hook, and Dev's practices take guard's rules. `bench/prepare.sh` installs the skills of `IMAGINEER_REF`, default `v0.1.0`, so the existing scenarios still run as the baseline.
+- [x] README rewritten around the commands.
+- [ ] Decide whether the mod replaces the Python reviewer hook when Build brings review agents back, and gives a destructive-command guard buttons.
 
 ## B5.5 — Learning from runs
 

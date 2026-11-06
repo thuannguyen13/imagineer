@@ -26,14 +26,21 @@ git add -A
 commit() { git -c user.name=dev -c user.email=dev@example.test commit -qm "$1"; }
 commit "Expenses app"
 
-# Skills, forge's agents and the plugin's reviewer hook under test: whatever this repository has checked out,
-# copied in the way a project without the plugin installs them, so the commands stay /forge, /ground, /guard.
+# The skills, agents and hooks under test, from IMAGINEER_REF (default v0.1.0, the last release with
+# guard, forge and ground), copied the way a project without the plugin installs them, so the commands
+# stay /forge, /ground, /guard. Releases before 0.2.0 kept the plugin at the repository root.
+ref=${IMAGINEER_REF:-v0.1.0}
+src=$(mktemp -d)
+git -C "$repo" archive "$ref" | tar -x -C "$src"
+[ -d "$src/plugin" ] && src=$src/plugin
 mkdir -p .claude/skills .claude/agents .claude/hooks
-cp -R "$repo/plugin/skills/." .claude/skills/
-cp "$repo"/plugin/agents/*.md .claude/agents/
-cp "$repo/plugin/hooks/forge-reviewer-guard.py" .claude/hooks/
+[ -d "$src/skills" ] && cp -R "$src/skills/." .claude/skills/
+if compgen -G "$src/agents/*.md" > /dev/null; then cp "$src"/agents/*.md .claude/agents/; fi
+[ -f "$src/hooks/forge-reviewer-guard.py" ] && cp "$src/hooks/forge-reviewer-guard.py" .claude/hooks/
 # A grounded product has ground's hooks installed too.
-cp "$repo/plugin/skills/ground/hooks/block-destructive.py" "$repo/plugin/skills/ground/hooks/check-before-stop.py" .claude/hooks/
+if [ -d "$src/skills/ground/hooks" ]; then
+  cp "$src/skills/ground/hooks/block-destructive.py" "$src/skills/ground/hooks/check-before-stop.py" .claude/hooks/
+fi
 printf 'npm test\n' > .claude/hooks/fast-checks.txt
 printf 'APP_ENV=prod\nPROD_DATA_DIR\ndata/prod\nbackups/prod\n' > .claude/hooks/production-patterns.txt
 cat > .claude/settings.json <<'JSON'

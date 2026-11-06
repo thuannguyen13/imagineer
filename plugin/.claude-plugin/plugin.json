@@ -1,7 +1,7 @@
 {
   "name": "imagineer",
   "version": "0.2.0",
-  "description": "Engineering judgment for AI coding agents: guard for every change, forge for one consequential feature, ground for the whole product.",
+  "description": "Make AI-built software trustworthy without trusting the AI: inspect a repo until it is hard to break, and build new work to the same bar. Shows the grade in a pane.",
   "author": {
     "name": "thuannguyen13",
     "url": "https://github.com/thuannguyen13"

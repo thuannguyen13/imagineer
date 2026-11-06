@@ -24,8 +24,8 @@ fi
 old=$(version_at "$base")
 new=$(version_at HEAD)
 
-if [ "$old" = "$new" ]; then
-  echo "Plugin files changed but the version is still $new. Bump \"version\" in $manifest:"
+if [ "$old" = "$new" ] && git rev-parse -q --verify "refs/tags/v$new" > /dev/null; then
+  echo "Plugin files changed but the version is still $new, which is already released. Bump \"version\" in $manifest:"
   echo "$changed" | sed 's/^/  /'
   exit 1
 fi
@@ -35,4 +35,8 @@ if ! grep -qE "^## ${new//./\\.}( |$)" CHANGELOG.md; then
   exit 1
 fi
 
-echo "Version $old -> $new, with a changelog entry."
+if [ "$old" = "$new" ]; then
+  echo "Version $new is not released yet; these changes join its changelog entry."
+else
+  echo "Version $old -> $new, with a changelog entry."
+fi
