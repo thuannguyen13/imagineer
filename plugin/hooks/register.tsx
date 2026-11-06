@@ -9,6 +9,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Summary } from '../types'
 import {
+  dialogIds,
   FLAGS_PATH,
   findPackedRef,
   isActive,
@@ -16,6 +17,7 @@ import {
   MEASURED_LABEL,
   parseHead,
   QUESTIONS_PATH,
+  readDetails,
   readFlags,
   questionLine,
   readOpenQuestions,
@@ -225,6 +227,31 @@ export const register: Register = on => {
         <Text dimColor>
           {summary.run.commit ? `Measured at ${summary.run.commit} · ` : ''}Imagineer {summary.imagineer}
         </Text>
+      </Box>
+    )
+  })
+
+  // Inspect's questions: a calm line above Claude Code's own dialog, and each question's
+  // details for engineers, read from the ledger. The dialog itself stays Claude Code's.
+  on('ui.render', { component: 'AskUserQuestion' }, async ($, e, next) => {
+    const theirs = await next(e)
+    if (e.props.metadataSource !== 'imagineer') return theirs
+    const { Box, Text } = $.ui.resolve(e)
+    const details = readDetails(await readIf($, QUESTIONS_PATH))
+    const lines = dialogIds(e.props.questions)
+      .filter(id => details[id])
+      .slice(0, 2)
+      .map(id => {
+        const detail = details[id]!
+        return `For engineers · ${id}: ${detail.length > 110 ? `${detail.slice(0, 109).trimEnd()}…` : detail}`
+      })
+    return (
+      <Box flexDirection="column">
+        <Text dimColor>Imagineer asks what your app should do. Pick an answer, Not sure, or type your own.</Text>
+        {lines.map(line => (
+          <Text dimColor>{line}</Text>
+        ))}
+        {theirs}
       </Box>
     )
   })

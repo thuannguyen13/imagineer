@@ -108,6 +108,25 @@ export function readFlags(source: string | null): string[] {
   }
 }
 
+/** The engineers' detail of each question in the ledger, by id. Never throws. */
+export function readDetails(source: string | null): Record<string, string> {
+  if (source === null) return {}
+  try {
+    const parsed: unknown = JSON.parse(source)
+    if (!isObject(parsed) || !Array.isArray(parsed.questions)) return {}
+    const details: Record<string, string> = {}
+    for (const q of parsed.questions) if (isObject(q) && typeof q.id === 'string' && typeof q.detail === 'string' && q.detail) details[q.id] = q.detail
+    return details
+  } catch {
+    return {}
+  }
+}
+
+/** The question ids an Imagineer dialog asks, read from each question's chip ("Q4 Access"). */
+export function dialogIds(questions: unknown[]): string[] {
+  return questions.flatMap(q => (isObject(q) && typeof q.header === 'string' ? (q.header.match(/^Q\d+/) ?? []) : []))
+}
+
 /** Where `.git/HEAD` points: a ref to look up, or a commit when detached. */
 export function parseHead(head: string): { ref: string } | { sha: string } | null {
   const line = head.trim()

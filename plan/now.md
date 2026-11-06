@@ -47,7 +47,7 @@ Built in slices, each released on its own.
 - [x] Grade computed from the results file only, per the chosen scale: `grade.mjs` sets every state from evidence (B2).
 - [x] Pane shows the overall grade, each dimension with how it was measured, the stop bar, and the open questions, and marks the grade stale once HEAD moves past the measured commit (0.6.0). Evidence (2026-11-05): 13 mod tests pass; in a real headless session `/imagineer:status` listed the bar and the top 5 open questions at 0 turns, and showed ⟳ stale after a new commit; `claude plugin validate` still lists only file reads, the timer, state and drawing.
 - [x] The same grade goes into the pull request Build opens: `build.mjs pr-body` adds the repository's grade as it stood before the change, with the reminder to inspect again after merging.
-- [ ] The question dialog restyled by the mod: deferred until Build's dialogs settle, so both use one layout.
+- [x] Questions redesigned with the owner (2026-11-05, after the first real-project round): plain language enforced by `questions.mjs`, product parts instead of files, the point first, options that say what they mean, Not sure with a new example, one layout built by `questions.mjs ask`, and the mod drawing a line and the engineers' detail above Claude Code's dialog. Build asks the same way.
 
 ## B4 — Build
 

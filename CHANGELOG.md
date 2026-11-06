@@ -2,6 +2,22 @@
 
 Imagineer's releases, newest first. Below 1.0, a `0.y.0` release may change how Imagineer is used; such changes are listed first under **Changes you need to know**. See [docs/proposals/inspect-and-build.md](docs/proposals/inspect-and-build.md#versioning).
 
+## 0.9.0 — unreleased
+
+Clearer questions, for people who do not read code.
+
+### Changes you need to know
+
+- A question's text can no longer hold file names, function names, code names or line numbers: Inspect refuses them and keeps such details in a separate line for engineers. Questions written for 0.8.0 without a `point` or with plain-text suggestions are refused when added.
+
+### New
+
+- Every question starts with its point in one sentence, then what you'd expect, what happens today, and an example, laid out the same way each time.
+- Each answer you can pick says what it means for your people or data, and **Not sure** is always there: Inspect then explains it again with a new example.
+- Which code is critical is asked as parts of your product (sign-in, roles, amounts), not as a list of files.
+- In the terminal and the Desktop app, Imagineer's questions get a calm line above the dialog, and engineers see each question's code details in a dim line there.
+- Build asks its Architect's questions and shows its requirements the same way.
+
 ## 0.8.0 — 2026-11-05
 
 Imagineer checks itself, and you can tell it when it got something wrong.
