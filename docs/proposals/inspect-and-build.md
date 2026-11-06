@@ -7,7 +7,7 @@
 Imagineer makes AI-built software trustworthy without the user having to trust the AI. It does two things:
 
 1. **`/inspect`** an existing repo until it is hard to break.
-2. **`/build`** new work in a new or ongoing repo, to the same quality bar.
+2. **`/build`** new work in a new or ongoing repo, to the same quality thresholds.
 
 **Audience:** people with little or no technical knowledge, and the owner (technical). Used by the owner only, for now.
 **Stack:** JavaScript and TypeScript first. Other stacks later, each with its own tools.
@@ -45,7 +45,7 @@ When a command runs, Claude Code fires a `command.run` event before the skill do
 1. **Research.** Read the docs and the code. At the same time, run the tools (below).
 2. **Ask.** Turn every gap between what the code does and what it seems meant to do into a question for the user (format below).
 3. **Attack.** Try to break the system: permissions, data integrity, double submits, partial saves, errors, inputs. Every break that gets through becomes a test; every "that's not what I meant" becomes a fix.
-4. **Repeat** from 2 until the stop bar is met.
+4. **Repeat** from 2 until the finish thresholds are met.
 
 ### Tools
 
@@ -65,7 +65,7 @@ When a command runs, Claude Code fires a `command.run` event before the skill do
 - **Set up:** use the repo's own version and config. Its config holds decisions already made (ignored files, entry points, thresholds).
 - **Not set up:** run once without installing: `npx fallow`, and Stryker in a throwaway copy of the repo.
 - **Stryker always runs in a throwaway copy**, because it writes a sandbox and reports where it runs.
-- **Thresholds:** if the repo's are stricter than Inspect's bar, the stricter one wins. If looser, report both.
+- **Thresholds:** if the repo's are stricter than Inspect's thresholds, the stricter one wins. If looser, report both.
 - **The report says which run it was**, for example "repo's Fallow 3.38 with its config" or "one-off Fallow 3.40, default settings".
 
 Tool results need judgment. On the bench app, Fallow reports `public/app.js` as unused, but the HTML page loads it. Inspect checks a finding before acting on it, and asks the user when the code cannot settle it.
@@ -125,9 +125,9 @@ Many repos built by prompting have no README, no CLAUDE.md and no docs. Then the
 
 The grade shows it: Matches your intent starts at ? Not checked, and Foundations is Weak until the docs exist. The docs Inspect writes are also what Build's Architect reads later.
 
-### Stop bar
+### Finish thresholds
 
-Inspect stops when all three hold:
+Inspect is finished when all of these hold. They are Imagineer's suggestion, not a standard, and the pane says so:
 
 - Fallow reports no unresolved findings.
 - Stryker catches at least **80%** of breaks in the inspected code (the bench app is at 30%).
@@ -136,7 +136,7 @@ Inspect stops when all three hold:
 
 ## `/build`
 
-**Goal:** new or ongoing work that meets Inspect's bar from the start.
+**Goal:** new or ongoing work that meets Inspect's thresholds from the start.
 
 | Role | Does | Never |
 |---|---|---|
@@ -185,9 +185,9 @@ Which mix of models should Build use? You can change this any time.
 
 - **Design ahead, build now.** The Architect shapes the parts that are expensive to change later, so future needs are easy to add; Dev builds only what is needed today.
 - **QA works from the spec, not the code**, so its tests cannot mirror the implementation. This needs the Architect's interfaces to be exact.
-- **Done** when QA's tests pass and the change meets Inspect's stop bar.
+- **Done** when QA's tests pass and the change meets Inspect's thresholds.
 - **No docs to read.** The Architect needs the user's intent. When the repo has no docs, Build first runs Inspect's big-picture interview and saves the answers, then plans. For a brand-new repo, that interview is the first step, and the Architect writes its decisions into the docs as it goes.
-- To keep the bar on every change, Build may offer to add the tools to the repo (dependency, config, CI check). Only with the user's agreement.
+- To keep the thresholds on every change, Build may offer to add the tools to the repo (dependency, config, CI check). Only with the user's agreement.
 
 ## Grade
 
@@ -225,8 +225,8 @@ Decided 2026-11-05 from the research in [docs/research/grading.md](../research/g
 
 | State | Meaning |
 |---|---|
-| ✓ Strong | Meets the bar, with evidence |
-| ! Weak | Below the bar, or only claimed |
+| ✓ Strong | Meets the threshold, with evidence |
+| ! Weak | Below the threshold, or only claimed |
 | ✕ Failing | A known break or gap that matters |
 | ? Not checked | Not measured yet; shows the reason and the next step |
 
@@ -246,7 +246,7 @@ No headline number or letter. Numbers are one click down, for the owner.
 - Each dimension shows how it was measured: ● the repo's own tool config, ◐ Imagineer's defaults, ○ not measured. It records the commit it measured and shows ⟳ stale once the code changes.
 - Test strength uses Stryker. Fallow's own mutation command skips code that touches the database or files by default (82 of 139 mutants on the bench app, per the research), which is where data and permission bugs live.
 
-**Critical code.** For code the user confirms as critical (money, data, permissions), every surviving mutant must be killed by a test or explained in a recorded answer. Elsewhere the bar is the Stryker percentage in the stop bar.
+**Critical code.** For code the user confirms as critical (money, data, permissions), every surviving mutant must be killed by a test or explained in a recorded answer. Elsewhere the threshold is the Stryker percentage in the finish thresholds.
 
 **Bench app today: ✕ Failing.** Test strength ✕ (30.5%), Data safety ✕ (prod/dev split untested, restore only claimed), Security ! , Intent ?, Structure ! (Fallow 81).
 

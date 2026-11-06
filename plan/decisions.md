@@ -75,3 +75,7 @@ The owner found guard, forge and ground still shipping after the move to Inspect
 ## 2026-11-05 — Stop bar, license, first real project
 
 The owner confirmed Inspect's stop bar at the proposed numbers: Stryker catches 80% of breaks in the inspected code, and 2 attack rounds in a row find nothing new. No license: the plugin stays private, for the owner, and the question returns before any plugin directory submission. B6's first real project is the owner's sales portal, as a dry run scoped to one feature.
+
+## 2026-11-06 — The thresholds are Imagineer's suggestion
+
+The owner asked whether Imagineer should list findings without judging them against its own numbers, since 80% is not a standard and Imagineer is not yet validated. Weighed against that: users without technical knowledge cannot read a raw number, and Inspect and Build need a point at which they stop. The owner chose to keep the thresholds, labelled everywhere as Imagineer's suggestion ("By the thresholds Imagineer suggests…"), not as a standard, and to call them thresholds rather than a "bar", which read as unclear. Thresholds the user sets per repository remain a candidate if the suggestion does not fit their projects.

@@ -16,6 +16,10 @@ export type Dimension = {
   state: GradeState
   measured: Measured
   summary: string
+  /** The list behind the summary (files, attacks, answers), shown under Evidence. */
+  items: string[]
+  /** The area's one measured number and what it counts, for its tile. */
+  metric: { value: string; label: string } | null
   isStale: boolean
   isClaimed: boolean
 }
@@ -27,7 +31,9 @@ export type Run = {
   status: RunStatus
   round: number
   commit: string
-  /** Inspect's stop bar, when the run recorded one. */
+  /** When the run measured the code, as an ISO time; empty when unknown. */
+  at: string
+  /** Inspect's finish thresholds, when the run recorded them: met, or what is still missing. */
   bar: { met: boolean; missing: string[] } | null
 }
 
@@ -50,6 +56,9 @@ export type Results = {
 }
 
 /** What the mod knows about the repo's results file. */
+/** The pane's tabs. */
+export type Tab = 'grade' | 'questions'
+
 export type Summary =
   | { kind: 'none' }
   | { kind: 'unreadable'; reason: string }
@@ -57,6 +66,6 @@ export type Summary =
 
 declare module 'claude-code' {
   interface PluginState {
-    imagineer: { summary: Shaped<Summary> }
+    imagineer: { summary: Shaped<Summary>; tab: Shaped<Tab>; open: string[] }
   }
 }

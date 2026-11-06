@@ -115,7 +115,7 @@ export function selfCheck(repo) {
     else seen.set(key, q.id)
   }
 
-  // A Build that ran four rounds without meeting the bar.
+  // A Build that ran four rounds without meeting the done thresholds.
   const buildDir = join(base, 'build')
   for (const slug of existsSync(buildDir) ? readdirSync(buildDir) : []) {
     const state = readJsonIf(join(buildDir, slug, 'state.json'))

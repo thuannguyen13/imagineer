@@ -7,11 +7,13 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Summary } from '../types'
+import type { Results, Summary, Tab } from '../types'
 import {
   dialogIds,
   FLAGS_PATH,
   findPackedRef,
+  finishLines,
+  firstItems,
   isActive,
   isSameCommit,
   MEASURED_LABEL,
@@ -23,6 +25,8 @@ import {
   readOpenQuestions,
   readResults,
   RESULTS_PATH,
+  rowLayout,
+  whenTested,
   STATE_LABEL,
   statusLine,
   summaryText,
@@ -35,8 +39,13 @@ const POLL_MS = 3000
 // Change the tag when Summary's fields change: a value an earlier version
 // stored is then read as "no results" until the file is read again.
 const summaryAtom = atom({ plugin: 'imagineer', key: 'summary' } as const, { kind: 'none' } as Summary, {
-  shape: 'summary-3',
+  shape: 'summary-4',
 })
+
+// Shaped, so a tab an earlier version stored (overview, evidence) reads as the grade.
+const tabAtom = atom({ plugin: 'imagineer', key: 'tab' } as const, 'grade' as Tab, { shape: 'tab-2' })
+// The areas whose evidence is open, by id; all closed at first.
+const openAtom = atom({ plugin: 'imagineer', key: 'open' } as const, [] as string[])
 
 let lastMtime: number | null = null
 let lastBase: Summary = { kind: 'none' }
@@ -154,79 +163,162 @@ export const register: Register = on => {
   }
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text } = $.ui.resolve(e)
+    const { Box, Button, Text } = $.ui.resolve(e)
     const summary = await read($, summaryAtom)
+    if (summary.kind !== 'results') return <Text dimColor>{summaryText(summary)}</Text>
 
-    if (summary.kind !== 'results') {
-      return <Text dimColor>{summaryText(summary)}</Text>
-    }
-
+    const tab = await read($, tabAtom)
     const overall = STATE_LABEL[summary.overall.state]
-    const groups = [
-      { title: 'Can you trust it?', dimensions: summary.dimensions.filter(one => one.group === 'trust') },
-      { title: 'Is it kept well?', dimensions: summary.dimensions.filter(one => one.group === 'care') },
+    const layout = rowLayout(e.props.bodyColumns)
+    // The numbers line up in their own column, right-aligned, as wide as the widest.
+    const valueWidth = Math.max(0, ...summary.dimensions.map(d => (d.metric && d.metric.value !== '—' ? d.metric.value.length : 0)))
+    const waiting = summary.questions.waiting
+    const opened = await read($, openAtom)
+    const tabs: { id: Tab; label: string }[] = [
+      { id: 'grade', label: 'Grade' },
+      { id: 'questions', label: waiting ? `Questions (${waiting})` : 'Questions' },
     ]
 
-    return (
-      <Box flexDirection="column" gap={1}>
+    // Only what matters at a glance: the verdict, the commit and when it was tested.
+    const tested = whenTested(summary.run.at)
+    const header = (
+      <Box flexDirection="column">
+        <Text color={overall.color} weight="semibold">
+          {overall.icon} {overall.word}
+        </Text>
+        <Text dimColor>{[summary.run.commit, tested ? `tested ${tested}` : ''].filter(Boolean).join(' · ')}</Text>
+      </Box>
+    )
+
+    // One row per area, a button that opens its evidence underneath. Laid out for the pane's
+    // width: icon, name, state and the area's number, with what it counts when there is room;
+    // two lines when the pane is narrow. A row's children are text only, as a button takes.
+    const row = (dimension: Results['dimensions'][number]) => {
+      const label = STATE_LABEL[dimension.state]
+      const isOpen = opened.includes(dimension.id)
+      const arrow = isOpen ? '▾ ' : '▸ '
+      const stateText = `${label.word}${dimension.isStale || summary.isStale ? ' ⟳' : ''}`
+      const metric = dimension.metric && dimension.metric.value !== '—' ? dimension.metric : null
+      const toggle = () => update($, openAtom, ids => (ids.includes(dimension.id) ? ids.filter(id => id !== dimension.id) : [...ids, dimension.id]))
+      const plain = `${arrow}${label.icon} ${dimension.name} ${stateText}${metric ? ` ${metric.value} ${metric.label}` : ''}`
+
+      const button =
+        layout.kind === 'narrow' ? (
+          <Button key={`row-${dimension.id}`} label={plain} plain onPress={toggle}>
+            <Text dimColor>{arrow}</Text>
+            <Text color={label.color}>{label.icon}</Text>
+            {` ${dimension.name}`}
+          </Button>
+        ) : (
+          <Button key={`row-${dimension.id}`} label={plain} plain onPress={toggle}>
+            <Text dimColor>{arrow}</Text>
+            <Text color={label.color}>{`${label.icon}  `}</Text>
+            {dimension.name.padEnd(layout.nameWidth).slice(0, layout.nameWidth)}
+            <Text color={label.color}>{stateText.padEnd(layout.stateWidth)}</Text>
+            {metric ? metric.value.padStart(valueWidth) : ''.padStart(valueWidth)}
+            {metric && layout.kind === 'wide' && metric.label ? <Text dimColor>{`  ${metric.label}`}</Text> : ''}
+          </Button>
+        )
+
+      return (
         <Box flexDirection="column">
-          <Text color={overall.color} weight="semibold">
-            {overall.icon} Overall: {overall.word}
-          </Text>
-          {summary.overall.reason !== '' && <Text dimColor>{summary.overall.reason}</Text>}
-          {summary.isStale && (
-            <Text color="warning">{`⟳ Measured at ${summary.run.commit}; the code has changed since. Run /imagineer:inspect again.`}</Text>
+          {button}
+          {layout.kind === 'narrow' && (
+            <Box paddingLeft={4}>
+              <Text>
+                <Text color={label.color}>{stateText}</Text>
+                {metric ? ` · ${metric.value}` : ''}
+              </Text>
+            </Box>
+          )}
+          {isOpen && (
+            <Box flexDirection="column" paddingLeft={5} marginBottom={1}>
+              {dimension.summary !== '' && <Text>{dimension.summary}</Text>}
+              {firstItems(dimension.items).map(item => (
+                <Box flexDirection="row">
+                  <Box width={2}>
+                    <Text dimColor>•</Text>
+                  </Box>
+                  <Box flexShrink={1}>
+                    <Text dimColor>{item}</Text>
+                  </Box>
+                </Box>
+              ))}
+              <Text dimColor>
+                {MEASURED_LABEL[dimension.measured]}
+                {dimension.isClaimed ? ' · claimed, not re-run' : ''}
+              </Text>
+            </Box>
           )}
         </Box>
-        {groups.map(group => (
-          <Box flexDirection="column">
-            <Text weight="semibold">{group.title}</Text>
-            {group.dimensions.map(dimension => {
-              const label = STATE_LABEL[dimension.state]
-              const notes = [dimension.isStale || summary.isStale ? '⟳ stale' : '', dimension.isClaimed ? 'claimed' : '']
-                .filter(Boolean)
-                .join(' · ')
-              return (
-                <Box flexDirection="column">
-                  <Text color={label.color}>
-                    {label.icon} {label.word}: {dimension.name}
-                    {notes ? ` (${notes})` : ''}
-                  </Text>
-                  {dimension.summary !== '' && <Text dimColor>{`   ${dimension.summary}`}</Text>}
-                  <Text dimColor>{`   ${MEASURED_LABEL[dimension.measured]}`}</Text>
-                </Box>
-              )
-            })}
+      )
+    }
+
+    const grade = (
+      <Box flexDirection="column">
+        {summary.dimensions.map(dimension => row(dimension))}
+        <Box marginTop={1} flexDirection="column">
+          {summary.run.bar &&
+            finishLines(summary.run.bar).map(line => (
+              <Text dimColor={!line.startsWith('✓')} color={line.startsWith('✓') ? 'success' : undefined}>
+                {line}
+              </Text>
+            ))}
+          <Box marginTop={1}>
+            <Text dimColor>Select a row for details.</Text>
           </Box>
-        ))}
-        {summary.run.bar && (
-          <Text color={summary.run.bar.met ? 'success' : 'inactive'}>
-            {summary.run.bar.met ? '✓ Stop bar met.' : `Stop bar not met: ${summary.run.bar.missing.join('; ')}.`}
+        </Box>
+      </Box>
+    )
+
+    const questions = (
+      <Box flexDirection="column" gap={1}>
+        {waiting === 0 ? (
+          <Text dimColor>Nothing is waiting for you.</Text>
+        ) : (
+          <Text color="warning">
+            {waiting} {waiting === 1 ? 'question is' : 'questions are'} waiting. Run /imagineer:inspect to answer.
           </Text>
         )}
-        {summary.questions.waiting > 0 && (
-          <Box flexDirection="column">
-            <Text color="warning">
-              {summary.questions.waiting} {summary.questions.waiting === 1 ? 'question is' : 'questions are'} waiting
-              for you. Run /imagineer:inspect to answer.
-            </Text>
-            {summary.openQuestions.map(q => (
-              <Text dimColor>{`   ${questionLine(q)}`}</Text>
-            ))}
+        {summary.openQuestions.map(q => (
+          <Box flexDirection="row">
+            <Box width={5}>
+              <Text dimColor>{q.id}</Text>
+            </Box>
+            <Box flexShrink={1}>
+              <Text>{q.text}</Text>
+            </Box>
           </Box>
-        )}
+        ))}
         {summary.flags.length > 0 && (
           <Box flexDirection="column">
             <Text color="warning">Imagineer may have gone wrong on its side:</Text>
             {summary.flags.map(flag => (
-              <Text dimColor>{`   ${flag}`}</Text>
+              <Box paddingLeft={2}>
+                <Text dimColor>{flag}</Text>
+              </Box>
             ))}
-            <Text dimColor>   Run /imagineer:feedback to record or share it.</Text>
+            <Text dimColor>Run /imagineer:feedback to record or share it.</Text>
           </Box>
         )}
-        <Text dimColor>
-          {summary.run.commit ? `Measured at ${summary.run.commit} · ` : ''}Imagineer {summary.imagineer}
-        </Text>
+      </Box>
+    )
+
+    return (
+      <Box flexDirection="column" gap={1}>
+        <Box flexDirection="row" gap={1}>
+          {tabs.map(t => (
+            <Button
+              key={`tab-${t.id}`}
+              label={t.label}
+              variant={t.id === tab ? 'primary' : 'secondary'}
+              onPress={() => update($, tabAtom, () => t.id)}
+            />
+          ))}
+        </Box>
+        {header}
+        {tab === 'questions' ? questions : grade}
+        <Text dimColor>Imagineer {summary.imagineer}</Text>
       </Box>
     )
   })

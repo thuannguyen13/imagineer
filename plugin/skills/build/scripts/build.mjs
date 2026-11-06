@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Build's run state, worktree, models, red-first tests, done bar and pull
+// Build's run state, worktree, models, red-first tests, done thresholds and pull
 // request body. The run folder is <repo>/.claude/imagineer/build/<slug>/,
 // kept out of git with the worktrees.
 //
@@ -129,7 +129,7 @@ function red(repo, slug, command) {
   console.log(result.ok ? "QA's tests already pass with no feature code: they do not test the new behaviour. Send them back to QA." : "QA's tests fail before the feature exists, as they should.")
 }
 
-/** Source files changed since the base, which the done bar mutates. */
+/** Source files changed since the base, which the done thresholds mutate. */
 export function changedSources(files) {
   return files.filter(f => /\.(m|c)?[jt]sx?$/.test(f) && !/(^|\/)(test|tests|__tests__|spec|e2e)\/|\.(test|spec)\./.test(f) && !f.startsWith('.claude/'))
 }
@@ -198,7 +198,7 @@ function bar(repo, slug, command, skipMutation) {
   saveState(repo, state)
   banner(repo, state)
   writeJson(join(out, 'bar.json'), { commit, ...result, testsOutput: tests.ok ? '' : tail(tests.stdout + '\n' + tests.stderr, 20) })
-  console.log(result.met ? `Round ${state.round} at ${commit}: the done bar is met.` : `Round ${state.round} at ${commit}: not done. ${result.missing.join('; ')}.`)
+  console.log(result.met ? `Round ${state.round} at ${commit}: the done thresholds are met.` : `Round ${state.round} at ${commit}: not done. ${result.missing.join('; ')}.`)
   if (!tests.ok) console.log(tail(tests.stdout + '\n' + tests.stderr, 20))
 }
 
@@ -229,9 +229,9 @@ export function prBody(state, results = null) {
   if (last) {
     lines.push(`- At ${last.commit}: QA's tests ${last.tests ? 'pass' : 'fail'}; Fallow audit of the change: ${last.audit ?? 'not run'}.`)
     if (last.mutation) lines.push(`- Mutation testing of the changed code: the tests catch ${last.mutation.total ? Math.round((last.mutation.caught / last.mutation.total) * 100) : 0}% of deliberate breaks (${last.mutation.caught} of ${last.mutation.total}).`)
-    lines.push(`- Done bar: ${last.bar.met ? '**met**' : `**not met**: ${last.bar.missing.join('; ')}`}.`)
+    lines.push(`- Done thresholds (Imagineer's suggestion): ${last.bar.met ? '**met**' : `**not met**: ${last.bar.missing.join('; ')}`}.`)
   }
-  lines.push('', '## Rounds', '', '| Round | Commit | Tests | Audit | Breaks caught | Bar |', '|---|---|---|---|---|---|')
+  lines.push('', '## Rounds', '', '| Round | Commit | Tests | Audit | Breaks caught | Done thresholds |', '|---|---|---|---|---|---|')
   for (const r of state.rounds) {
     lines.push(`| ${r.round} | ${r.commit} | ${r.tests ? 'pass' : 'fail'} | ${r.audit ?? '-'} | ${r.mutation ? `${r.mutation.caught} of ${r.mutation.total}` : '-'} | ${r.bar.met ? 'met' : 'not met'} |`)
   }

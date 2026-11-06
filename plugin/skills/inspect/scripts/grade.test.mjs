@@ -43,7 +43,7 @@ test('test strength names the weakest files', () => {
       'src/db.ts': { mutants: [{ status: 'Killed' }] },
     },
   }
-  assert.match(testStrength({ stryker, mutation: report }).summary, /Weakest: src\/server\.ts 0%\./)
+  assert.deepEqual(testStrength({ stryker, mutation: report }).items, ['src/server.ts: 0% of breaks caught'])
 })
 
 test('no tests at all fails test strength; a run that never happened is not checked', () => {
@@ -151,13 +151,14 @@ test('intent: not checked, then failing while a critical question is open, then 
   assert.equal(intent({ ledger: emptyLedger() }).state, 'unchecked')
   const ledger = addQuestions(emptyLedger(), [ask('permissions'), ask('wording')])
   assert.equal(intent({ ledger }).state, 'failing')
-  assert.match(intent({ ledger }).summary, /^2 questions for you; 1 about data, money or permissions still open\./)
+  assert.equal(intent({ ledger }).summary, '2 questions: 2 waiting. 1 about data, money or permissions still need your answer.')
+  assert.equal(intent({ ledger }).items.length, 2)
   answerQuestion(ledger, { id: 'Q1', status: 'answered', answer: 'Only the owner.' })
   assert.equal(intent({ ledger }).state, 'weak')
   answerQuestion(ledger, { id: 'Q2', status: 'deferred', answer: null, reason: 'Later.' })
   const resolved = intent({ ledger })
   assert.equal(resolved.state, 'weak')
-  assert.match(resolved.summary, /1 answer is not yet backed by a test/)
+  assert.equal(resolved.summary, '2 questions: 1 answered by you, 1 deferred. None of your answers is proven by a test yet.')
   ledger.questions[0].test = { file: 'test/q1.test.js', green: true, red: { killed: 2, total: 3 } }
   assert.equal(intent({ ledger }).state, 'weak')
   ledger.questions[0].test = { file: 'test/q1.test.js', green: true, red: { killed: 3, total: 3 } }
@@ -165,7 +166,8 @@ test('intent: not checked, then failing while a critical question is open, then 
   ledger.questions[0].test = { file: 'test/q1.test.js', green: false, red: null }
   const gap = intent({ ledger })
   assert.equal(gap.state, 'failing')
-  assert.match(gap.summary, /does not yet do what you answered for Q1/)
+  assert.match(gap.summary, /does not yet do what you answered for 1 question\./)
+  assert.match(gap.items[0], /^Q1: /)
 })
 
 test('deferring or deciding needs a reason', () => {
@@ -173,7 +175,7 @@ test('deferring or deciding needs a reason', () => {
   assert.throws(() => answerQuestion(ledger, { id: 'Q1', status: 'deferred' }), /needs a reason/)
 })
 
-test('critical code must meet the bar on its own, with every surviving break explained', () => {
+test('critical code must meet the threshold on its own, with every surviving break explained', () => {
   const report = {
     files: {
       'src/auth.ts': { mutants: [{ status: 'Killed', location: { start: { line: 1 } } }, { status: 'Survived', location: { start: { line: 17 } } }] },
@@ -207,10 +209,11 @@ test('security: unchecked until attacked or scanned; a break fails it; otherwise
   const clean = security({ ledger: emptyLedger(), attacks: held, security: { candidates: [], audit: { high: 0, critical: 0 } } })
   assert.equal(clean.state, 'weak')
   assert.match(clean.summary, /secrets not scanned yet/)
-  assert.doesNotMatch(clean.summary, /not yet 2 clean rounds/)
+  assert.doesNotMatch(clean.summary, /have not yet come back clean/)
   const broke = security({ ledger: emptyLedger(), attacks: [...held, attackRow('A3', 3, 'permissions', 'broke')] })
   assert.equal(broke.state, 'failing')
-  assert.match(broke.summary, /1 attack broke through \(A3 title\)/)
+  assert.equal(broke.summary, '1 attack broke through.')
+  assert.deepEqual(broke.items, ['A3: A3 title'])
 })
 
 test('security: a high vulnerability in a shipped dependency fails it', () => {
@@ -228,9 +231,9 @@ test('data safety notes that backups are not drilled yet', () => {
   assert.match(result.summary, /backup restore not drilled/)
 })
 
-test('the stop bar needs strong tests, clean structure and two clean attack rounds', () => {
+test('the finish thresholds need strong tests, clean structure and two clean attack rounds', () => {
   const dims = [{ id: 'test-strength', state: 'strong' }, { id: 'structure', state: 'strong' }]
-  assert.deepEqual(stopBar(dims, [attackRow('A1', 1, 'data', 'broke'), attackRow('A2', 2, 'data', 'held')]).missing, ['not yet 2 clean attack rounds'])
+  assert.deepEqual(stopBar(dims, [attackRow('A1', 1, 'data', 'broke'), attackRow('A2', 2, 'data', 'held')]).missing, ['two attack rounds in a row that find nothing new'])
   assert.equal(stopBar(dims, [attackRow('A1', 1, 'data', 'broke'), attackRow('A2', 2, 'data', 'held'), attackRow('A3', 3, 'permissions', 'held')]).met, true)
   assert.equal(stopBar([{ id: 'test-strength', state: 'weak' }, { id: 'structure', state: 'strong' }], []).met, false)
 })
@@ -315,4 +318,45 @@ test('detect counts test files that skip themselves without a setting', t => {
   writeFileSync(join(repo, 'lib/a.test.ts'), 'describe.skipIf(!process.env.DATABASE_URL)("db", () => {})')
   writeFileSync(join(repo, 'lib/b.test.ts'), 'it("plain", () => {})')
   assert.deepEqual(detect(repo).tests, { files: 2, needSetting: 1 })
+})
+
+import { metricFor } from './grade.mjs'
+
+test('every area\'s number has one shape: done/total and its good outcome', () => {
+  const report = { files: { 'a.ts': { mutants: [...Array.from({ length: 48 }, () => ({ status: 'Killed' })), ...Array.from({ length: 3 }, () => ({ status: 'Survived', location: { start: { line: 1 } } }))] } } }
+  const metric = (d, evidence) => {
+    const { value, label } = metricFor(d, evidence)
+    return `${value} ${label}`
+  }
+  assert.equal(metric({ id: 'test-strength', state: 'strong', summary: '' }, { mutation: report, stryker: { ok: true } }), '48/51 breaks caught')
+  assert.equal(metric({ id: 'test-strength', state: 'unchecked', summary: '728 of 729 breaks timed out' }, { mutation: report }), '— runs timed out')
+  const attacks = [attackRow('A1', 1, 'permissions', 'broke'), attackRow('A2', 1, 'permissions', 'held'), attackRow('A3', 2, 'data', 'held')]
+  assert.equal(metric({ id: 'security', state: 'failing', summary: '' }, { attacks, security: { audit: { critical: 1, high: 6 } } }), '1/2 attacks held')
+  assert.equal(metric({ id: 'data-safety', state: 'weak', summary: '' }, { attacks }), '1/1 attacks held')
+  const ledger = addQuestions(emptyLedger(), [ask('permissions'), ask('data')])
+  assert.equal(metric({ id: 'intent', state: 'failing', summary: '' }, { ledger }), '— no answers yet')
+  answerQuestion(ledger, { id: 'Q1', status: 'answered', answer: 'x' })
+  answerQuestion(ledger, { id: 'Q2', status: 'answered', answer: 'y' })
+  ledger.questions[1].test = { green: true, red: { killed: 2, total: 2 } }
+  assert.equal(metric({ id: 'intent', state: 'weak', summary: '' }, { ledger }), '1/2 answers proven')
+  assert.equal(metric({ id: 'structure', state: 'weak', summary: '' }, { fallow: { health: { health_score: { score: 87.5 } } } }), '87.5/100 Fallow health')
+})
+
+import { testStrengthNeeds } from './grade.mjs'
+
+test('what test strength still needs names the real reason, with today\'s number', () => {
+  const mutant = (status, line = 1, id = String(line)) => ({ id, status, location: { start: { line } } })
+  const report = {
+    files: {
+      'lib/deal-scope.ts': { mutants: [mutant('Killed', 1), mutant('Killed', 2), mutant('Killed', 3), mutant('Survived', 16), mutant('Survived', 24), mutant('Survived', 28)] },
+      'lib/identity.ts': { mutants: Array.from({ length: 45 }, (_, i) => mutant('Killed', i + 1)) },
+    },
+  }
+  const ledger = { ...emptyLedger(), critical: ['lib/deal-scope.ts', 'lib/identity.ts'] }
+  assert.deepEqual(testStrengthNeeds({ stryker: { ok: true }, mutation: report, ledger }), [
+    'every break in critical code caught or explained (3 left in lib/deal-scope.ts, 50% caught)',
+  ])
+  const weak = { files: { 'a.ts': { mutants: [mutant('Killed', 1), mutant('Survived', 2), mutant('Survived', 3)] } } }
+  assert.deepEqual(testStrengthNeeds({ stryker: { ok: true }, mutation: weak }), ['tests that catch at least 80% of deliberate breaks (now 33%)'])
+  assert.deepEqual(testStrengthNeeds({}), ['a measurement of test strength (not measured yet)'])
 })

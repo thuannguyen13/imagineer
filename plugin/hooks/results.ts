@@ -57,6 +57,8 @@ function toDimension(raw: unknown): Dimension | null {
     state: oneOf(raw.state, GRADE_STATES, 'unchecked'),
     measured: oneOf(raw.measured, MEASURED, 'none'),
     summary: text(raw.summary),
+    items: Array.isArray(raw.items) ? raw.items.filter((i): i is string => typeof i === 'string') : [],
+    metric: isObject(raw.metric) && typeof raw.metric.value === 'string' ? { value: raw.metric.value, label: text(raw.metric.label) } : null,
     isStale: raw.stale === true,
     isClaimed: raw.claimed === true,
   }
@@ -70,6 +72,7 @@ function toRun(raw: unknown): Run {
     status: oneOf(run.status, RUN_STATUSES, 'done'),
     round: count(run.round),
     commit: text(run.commit),
+    at: text(run.at),
     bar: isObject(run.bar)
       ? { met: run.bar.met === true, missing: Array.isArray(run.bar.missing) ? run.bar.missing.filter((m): m is string => typeof m === 'string') : [] }
       : null,
@@ -91,7 +94,7 @@ export function readOpenQuestions(source: string | null, limit = 5): OpenQuestio
   const rank = (topic: string) => (TOPIC_ORDER.includes(topic) ? TOPIC_ORDER.indexOf(topic) : TOPIC_ORDER.length)
   return parsed.questions
     .filter((q): q is Json => isObject(q) && q.status === 'open' && typeof q.id === 'string')
-    .map(q => ({ id: String(q.id), topic: text(q.topic, 'behaviour'), text: text(q.expectation).replace(/^My guess \(no docs found\):\s*/, '') }))
+    .map(q => ({ id: String(q.id), topic: text(q.topic, 'behaviour'), text: text(q.point) || text(q.expectation).replace(/^My guess \(no docs found\):\s*/, '') }))
     .sort((a, b) => rank(a.topic) - rank(b.topic) || Number(a.id.slice(1)) - Number(b.id.slice(1)))
     .slice(0, limit)
 }
@@ -191,6 +194,45 @@ const shortText = (value: string, max = 110) => (value.length > max ? `${value.s
 
 export const questionLine = (q: OpenQuestion) => `${q.id} (${q.topic}): ${shortText(q.text)}`
 
+/** How the Overview lays out a row at a pane width: the full row, the number alone, or two lines. */
+export type RowLayout = { kind: 'wide' | 'medium' | 'narrow'; nameWidth: number; stateWidth: number }
+
+export function rowLayout(columns: number): RowLayout {
+  if (columns >= 64) return { kind: 'wide', nameWidth: Math.min(26, Math.floor(columns * 0.32)), stateWidth: 13 }
+  if (columns >= 44) return { kind: 'medium', nameWidth: Math.min(24, columns - 3 - 12 - 10), stateWidth: 12 }
+  return { kind: 'narrow', nameWidth: columns - 3, stateWidth: 0 }
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/** "Nov 6, 14:02" in local time, with the year when it is not this year's. Empty when unknown. */
+export function whenTested(iso: string, now = new Date()): string {
+  const at = new Date(iso)
+  if (!iso || Number.isNaN(at.getTime())) return ''
+  const time = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`
+  const year = at.getFullYear() === now.getFullYear() ? '' : ` ${at.getFullYear()}`
+  return `${MONTHS[at.getMonth()]} ${at.getDate()}${year}, ${time}`
+}
+
+/** Whether Inspect is finished, and if not, what it still needs, in plain words. */
+export function finishLines(bar: { met: boolean; missing: string[] }): string[] {
+  if (bar.met) return ['✓ Finished, by the thresholds Imagineer suggests: tests catch enough breaks, nothing is left to review, and two attack rounds in a row found nothing new.']
+  return [
+    'Not finished yet. By the thresholds Imagineer suggests, Inspect still needs:',
+    ...bar.missing.map(m => `  • ${m}`),
+    'Run /imagineer:inspect to continue.',
+  ]
+}
+
+/** How many items Evidence shows per area before "and N more". */
+export const ITEMS_SHOWN = 5
+
+/** The first items of a list, with a last line counting the rest. */
+export function firstItems(items: string[], shown = ITEMS_SHOWN): string[] {
+  if (items.length <= shown) return items
+  return [...items.slice(0, shown), `…and ${items.length - shown} more in the run's report`]
+}
+
 export const STATE_LABEL: Record<OverallState, { icon: string; word: string; color: string }> = {
   strong: { icon: '✓', word: 'Strong', color: 'success' },
   weak: { icon: '!', word: 'Weak', color: 'warning' },
@@ -237,9 +279,10 @@ export function summaryText(summary: Summary): string {
     lines.push(
       `  ${label.icon} ${dimension.name}: ${label.word}${dimension.summary ? `. ${dimension.summary}` : ''}${notes.length ? ` [${notes.join(', ')}]` : ''}`,
     )
+    for (const item of firstItems(dimension.items)) lines.push(`      • ${item}`)
   }
   if (summary.run.bar) {
-    lines.push(summary.run.bar.met ? 'Stop bar: met.' : `Stop bar not met: ${summary.run.bar.missing.join('; ')}.`)
+    lines.push(...finishLines(summary.run.bar))
   }
   if (summary.questions.waiting > 0) {
     lines.push(`${summary.questions.waiting} questions waiting for you.`)

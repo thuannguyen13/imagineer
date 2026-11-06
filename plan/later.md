@@ -32,3 +32,9 @@ A mod that holds such a command and shows what it would change, with Proceed and
 **Trigger:** a project whose tests skip themselves without a database, as the sales portal's 43 test files do.
 
 Inspect would start a disposable database (Postgres in Docker, or PGlite where it fits), apply the project's migrations as its CI does, and set the variable the tests read, so mutation testing sees the same tests CI runs.
+
+## Thresholds the user sets per repository
+
+**Trigger:** the owner, or a user, finds the thresholds Imagineer suggests (80% of breaks caught, every break in critical code explained, two clean attack rounds) wrong for a project: too strict for a prototype, too loose for payments.
+
+Inspect would ask once how strict the project should be (prototype, standard, critical, or their own numbers), keep it with the repository, and judge against it, saying "your thresholds" instead of "the thresholds Imagineer suggests".

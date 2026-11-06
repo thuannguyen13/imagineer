@@ -56,6 +56,8 @@ function prepare(repo, out) {
   writeJson(join(out, 'copy.json'), {
     path,
     source: repo,
+    // When this run measured the code: the time the results show.
+    at: new Date().toISOString(),
     commit: head.stdout.trim(),
     dirty,
     install: { ok: install.ok, seconds: install.seconds, output: install.ok ? '' : tail(install.stderr || install.stdout) },

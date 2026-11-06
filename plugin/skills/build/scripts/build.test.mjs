@@ -22,7 +22,7 @@ test('only changed source files are mutated, never tests or Imagineer files', ()
 
 const passing = { tests: { ok: true }, typecheck: { present: true, ok: true }, audit: { ok: true, verdict: 'pass' }, critical: [] }
 
-test('the done bar: tests pass, typecheck passes, the audit is clean, 80% of breaks caught, critical code fully covered', () => {
+test('the done thresholds: tests pass, typecheck passes, the audit is clean, 80% of breaks caught, critical code fully covered', () => {
   assert.deepEqual(barFrom({ ...passing, mutation: { caught: 9, total: 10 } }), { met: true, missing: [] })
   assert.deepEqual(barFrom({ ...passing, mutation: { caught: 7, total: 10 } }).missing, ['tests catch 70% of breaks in the changed code, below 80%'])
   assert.match(barFrom({ ...passing, tests: { ok: false }, mutation: { caught: 9, total: 10 } }).missing[0], /QA's tests do not pass/)
@@ -44,7 +44,7 @@ test('the pull request body leads with requirements and their evidence', () => {
   assert.match(body, /\| R1 \| An approver decides .* \| `test\/approval\.test\.ts` \|/)
   assert.match(body, /\*\*failed\*\* at aaa1111, before the feature existed/)
   assert.match(body, /catch 90% of deliberate breaks \(18 of 20\)/)
-  assert.match(body, /Done bar: \*\*met\*\*/)
+  assert.match(body, /Done thresholds \(Imagineer's suggestion\): \*\*met\*\*/)
 })
 
 test('the pull request carries the repository grade as it stood before the change', () => {
@@ -60,7 +60,7 @@ test('the pull request carries the repository grade as it stood before the chang
   assert.match(prBody({ request: 'x', requirements: [], rounds: [] }, results), /## Repository grade/)
 })
 
-test('the done bar is not met when most breaks timed out', () => {
+test('the done thresholds are not met when most breaks timed out', () => {
   const result = barFrom({ tests: { ok: true }, typecheck: { present: true, ok: true }, audit: { ok: true, verdict: 'pass' }, critical: [], mutation: { caught: 20, total: 20, timeouts: 19 } })
   assert.equal(result.met, false)
   assert.match(result.missing[0], /19 of 20 breaks timed out/)
