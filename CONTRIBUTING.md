@@ -12,7 +12,7 @@ For people changing Imagineer itself. Using it: see [README.md](README.md).
 
 To try a local checkout, run `claude --plugin-dir <path to this repository>/plugin`.
 
-A change to anything under `plugin/` goes into the changelog entry of the next, untagged version. Only the first change after a release bumps `version` in `plugin/.claude-plugin/plugin.json`: a patch (`0.9.1`) by default, the middle number (`0.10.0`) only when how Imagineer is used changes or a command is added. Releases are batched. CI checks this with `scripts/check-version.sh`. The full policy: [Versioning](docs/proposals/inspect-and-build.md#versioning).
+A change to anything under `plugin/` goes into the changelog entry of the next, untagged version. Only the first change after a release bumps `version` in `plugin/.claude-plugin/plugin.json`: a patch (`0.2.1`) by default, the middle number (`0.3.0`) only when how Imagineer is used changes or a command is added. Releases are batched. CI checks this with `scripts/check-version.sh`. The full policy: [Versioning](docs/proposals/inspect-and-build.md#versioning).
 
 ## The earlier skills
 

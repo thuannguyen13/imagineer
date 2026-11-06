@@ -320,10 +320,10 @@ Semantic versioning in `plugin.json`, bumped in the pull request that changes wh
 | `y` (0.**2**.0) | Something users must know about: a change to how Imagineer is used (a command, question or file format works differently, or something is removed), or a new command. Listed under **Changes you need to know** |
 | `z` (0.2.**1**) | Everything else: fixes, wording, new checks and options, pane improvements |
 
-Up to 0.8.0, every new check or option raised `y`, and every merged pull request was released on its own, so the version went from 0.2.0 to 0.8.0 in one day. From 0.9.0 the rules above apply, and releases are batched (below).
+At first every new check or option raised `y` and every merged pull request was released on its own, so the version reached 0.10.0 in two days. Those releases were folded into one baseline, `0.2.0` (2026-11-06), and the rules above apply from there, with releases batched (below).
 
 - `v0.1.0` is the three-skill plugin as it is on `main` today: tagged once, as the baseline the bench compares against.
-- `v0.2.0` is the first release of the two-command design, when B1 merges.
+- `v0.2.0` is the baseline of the two-command design: Inspect, Build, the grade pane and Feedback, as validated by the first dry run (B6).
 
 **From `1.0.0`**, after B6 validates Inspect and Build on a real project, the usual rules apply:
 
