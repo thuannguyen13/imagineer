@@ -71,3 +71,7 @@ Decided by the owner: the audience includes people with little or no technical k
 ## 2026-11-05 — Old skills removed before their replacements
 
 The owner found guard, forge and ground still shipping after the move to Inspect and Build, and chose to remove them in 0.2.0 rather than at B5. The plugin then shows only the new design, at the cost of no working forge until Build exists. Their text stays at tag `v0.1.0`, which users can still install and which the bench prepares by default, so the baseline is unchanged.
+
+## 2026-11-05 — Stop bar, license, first real project
+
+The owner confirmed Inspect's stop bar at the proposed numbers: Stryker catches 80% of breaks in the inspected code, and 2 attack rounds in a row find nothing new. No license: the plugin stays private, for the owner, and the question returns before any plugin directory submission. B6's first real project is the owner's sales portal, as a dry run scoped to one feature.

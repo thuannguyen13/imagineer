@@ -12,9 +12,9 @@ Evidence gathered 2026-11-05: Stryker on `bench/app` kills 30.5% of mutants (`se
 
 ## B0 — Design
 
-- [ ] Design doc, decisions entry and this plan reviewed by the owner; committed.
+- [x] Design doc, decisions entry and this plan reviewed by the owner; committed (PR #9, 2026-11-05).
 - [x] Grading scale researched and chosen (2026-11-05): six dimensions, four states, weakest link, care dimensions capped at Weak, claims never Strong, every survivor in critical code explained. Research: [docs/research/grading.md](../docs/research/grading.md).
-- [ ] Stop bar numbers confirmed (proposed: Stryker 80% on inspected code, 2 clean attack rounds).
+- [x] Stop bar numbers confirmed by the owner (2026-11-05): Stryker 80% on inspected code, 2 clean attack rounds.
 
 ## B1 — Skeleton and status
 
@@ -78,5 +78,5 @@ Built in slices, each released on its own.
 
 ## Still open from before
 
-- [ ] Choose a license before submitting to a plugin directory.
+- [x] No license (2026-11-05): the plugin stays private, for the owner. Revisit before any plugin directory submission.
 - [ ] Decide what happens to `plan/guard-low-risk-test` (unpushed guard test notes) and `forge/p5` (Bench v4).
