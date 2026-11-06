@@ -16,7 +16,7 @@ const SAMPLE = {
       state: 'failing',
       measured: 'default',
       summary: 'Tests catch 30% of deliberate breaks.',
-      metric: { value: '30%', label: '51 of 167 breaks caught' },
+      metric: { value: '51/167', label: 'breaks caught' },
     },
     { id: 'intent', name: 'Matches your intent', group: 'trust', state: 'unchecked', measured: 'none', summary: '' },
     {
@@ -125,8 +125,9 @@ test('status opens the pane: an aligned overview first, on every surface', async
     expect((await ui.find({ type: 'Text', text: /^✕ Failing$/ }))?.text).toBe('✕ Failing')
     expect(await ui.find({ type: 'Text', text: /^Test strength$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^Matches your intent$/ })).toBeDefined()
-    // A third column: the area's one measured number and what it counts.
-    expect(await ui.find({ type: 'Text', text: /^30%  51 of 167 breaks caught$/ })).toBeDefined()
+    // The area's number in its own column, then what it counts.
+    expect(await ui.find({ type: 'Text', text: /^51\/167$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^breaks caught$/ })).toBeDefined()
     expect(await ui.find({ type: 'Button', key: 'tab-evidence' })).toBeDefined()
     expect(await ui.find({ type: 'Button', key: 'tab-questions' })).toBeDefined()
     // The overview holds no evidence text: that is the Evidence tab's.
@@ -364,16 +365,17 @@ test('the Overview row fits the pane: full row, number alone, or two lines', asy
   const at = (bodyColumns: number) => ({ ...PANE, props: { ...PANE.props, bodyColumns } })
 
   const wide = await $.ui.mount({ ...at(90), surface: 'terminal' })
-  expect(await wide.find({ type: 'Text', text: /^30%  51 of 167 breaks caught$/ })).toBeDefined()
+  expect(await wide.find({ type: 'Text', text: /^51\/167$/ })).toBeDefined()
+  expect(await wide.find({ type: 'Text', text: /^breaks caught$/ })).toBeDefined()
   await wide.unmount()
 
   const medium = await $.ui.mount({ ...at(50), surface: 'terminal' })
-  expect(await medium.find({ type: 'Text', text: /^30%$/ })).toBeDefined()
+  expect(await medium.find({ type: 'Text', text: /^51\/167$/ })).toBeDefined()
   expect(await medium.find({ type: 'Text', text: /breaks caught/ })).toBeUndefined()
   await medium.unmount()
 
   const narrow = await $.ui.mount({ ...at(32), surface: 'terminal' })
   expect(await narrow.find({ type: 'Text', text: /^✕ Test strength$/ })).toBeDefined()
-  expect(await narrow.find({ type: 'Text', text: /^Failing · 30%$/ })).toBeDefined()
+  expect(await narrow.find({ type: 'Text', text: /^Failing · 51\/167$/ })).toBeDefined()
   await narrow.unmount()
 })

@@ -265,41 +265,39 @@ export function dataSafety(evidence) {
   return dimension('data-safety', name, 'trust', 'weak', 'default', `${sentenceCase(gaps.join('; '))}.`)
 }
 
+/** Shown where an area has nothing measured. */
 const NONE = label => ({ value: '—', label })
 
-/** One measured number per area, for its tile: never a blended score. */
+const ratio = (done, total) => ({ done, total, value: `${done}/${total}` })
+
+/**
+ * One measured number per area, in one shape for every area: `done/total`, then what is
+ * counted and its good outcome, so a higher number is always better. Never a blended score;
+ * anything else an area knows (vulnerabilities, contradicted answers, open findings) is in its
+ * summary and items, under Evidence.
+ */
 export function metricFor(d, evidence) {
   const ledger = evidence.ledger ?? emptyLedger()
   if (d.id === 'test-strength') {
     const report = evidence.mutation
     if (!report || d.state === 'unchecked') return NONE(evidence.stryker?.skipped ? 'no test command' : /timed out/.test(d.summary) ? 'runs timed out' : 'not measured')
-    const { caught, total, score } = mutationScore(report)
-    return { value: percent(score), label: `${caught} of ${total} breaks caught` }
+    const { caught, total } = mutationScore(report)
+    return { ...ratio(caught, total), label: 'breaks caught' }
   }
   if (d.id === 'intent') {
-    const asked = ledger.questions.length
-    if (!asked) return NONE('no questions yet')
-    const waiting = ledger.questions.filter(q => q.status === 'open').length
-    if (waiting) return { value: String(waiting), label: waiting === 1 ? 'question waiting' : 'questions waiting' }
     const answered = ledger.questions.filter(q => q.status === 'answered')
-    const contradicted = answered.filter(q => q.test && q.test.green === false).length
-    if (contradicted) return { value: `${contradicted} of ${answered.length}`, label: 'answers contradicted' }
-    return { value: `${answered.filter(isProven).length} of ${answered.length}`, label: 'answers proven' }
+    if (!answered.length) return NONE(ledger.questions.length ? 'no answers yet' : 'no questions yet')
+    return { ...ratio(answered.filter(isProven).length, answered.length), label: 'answers proven' }
   }
   if (d.id === 'security' || d.id === 'data-safety') {
     const mine = (evidence.attacks ?? []).filter(a => a.category === (d.id === 'security' ? 'permissions' : 'data') && !a.void)
-    const audit = d.id === 'security' ? evidence.security?.audit : null
-    const vulns = audit && !audit.skipped ? (audit.critical ?? 0) + (audit.high ?? 0) : 0
-    const vulnNote = vulns ? ` · ${audit.critical} critical, ${audit.high} high` : ''
-    if (!mine.length) return vulns ? { value: String(vulns), label: 'high or critical vulnerabilities' } : NONE('not tested')
-    const held = mine.filter(a => a.result === 'held').length
-    return { value: `${held} of ${mine.length}`, label: `attacks held${vulnNote}` }
+    if (!mine.length) return NONE('not attacked yet')
+    return { ...ratio(mine.filter(a => a.result === 'held').length, mine.length), label: 'attacks held' }
   }
   if (d.id === 'structure') {
     const score = evidence.fallow?.health?.health_score?.score
     if (score === undefined || d.state === 'unchecked') return NONE('not measured')
-    const open = (evidence.findings ?? []).filter(i => i.kind !== 'mutant' && i.kind !== 'security' && !(i.key in ledger.dismissed)).length
-    return { value: String(score), label: `Fallow health · ${open} open` }
+    return { ...ratio(score, 100), label: 'Fallow health' }
   }
   if (d.id === 'foundations') {
     const { detect, copy, checks } = evidence
@@ -312,7 +310,7 @@ export function metricFor(d, evidence) {
       detect.ci.runsTests,
       detect.env.missing.length === 0,
     ]
-    return { value: `${results.filter(Boolean).length} of ${results.length}`, label: 'checks pass' }
+    return { ...ratio(results.filter(Boolean).length, results.length), label: 'checks pass' }
   }
   return NONE('')
 }

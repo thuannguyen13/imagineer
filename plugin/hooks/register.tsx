@@ -165,6 +165,8 @@ export const register: Register = on => {
     const tab = await read($, tabAtom)
     const overall = STATE_LABEL[summary.overall.state]
     const layout = rowLayout(e.props.bodyColumns)
+    // The numbers line up in their own column, right-aligned, as wide as the widest.
+    const valueWidth = Math.max(0, ...summary.dimensions.map(d => (d.metric && d.metric.value !== '—' ? d.metric.value.length : 0)))
     const waiting = summary.questions.waiting
     const tabs: { id: Tab; label: string }[] = [
       { id: 'overview', label: 'Overview' },
@@ -221,11 +223,13 @@ export const register: Register = on => {
             <Text color={label.color}>{stateText}</Text>
           </Box>
           {metric && (
-            <Box flexShrink={1}>
-              <Text>
-                {metric.value}
-                {layout.kind === 'wide' && metric.label ? <Text dimColor>{`  ${metric.label}`}</Text> : ''}
-              </Text>
+            <Box width={valueWidth} justifyContent="flex-end">
+              <Text tabular>{metric.value}</Text>
+            </Box>
+          )}
+          {metric && layout.kind === 'wide' && metric.label !== '' && (
+            <Box flexShrink={1} paddingLeft={2}>
+              <Text dimColor>{metric.label}</Text>
             </Box>
           )}
         </Box>

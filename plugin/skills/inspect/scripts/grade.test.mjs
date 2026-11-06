@@ -322,17 +322,22 @@ test('detect counts test files that skip themselves without a setting', t => {
 
 import { metricFor } from './grade.mjs'
 
-test('each tile gets one measured number, never a blended score', () => {
+test('every area\'s number has one shape: done/total and its good outcome', () => {
   const report = { files: { 'a.ts': { mutants: [...Array.from({ length: 48 }, () => ({ status: 'Killed' })), ...Array.from({ length: 3 }, () => ({ status: 'Survived', location: { start: { line: 1 } } }))] } } }
-  assert.deepEqual(metricFor({ id: 'test-strength', state: 'strong', summary: '' }, { mutation: report, stryker: { ok: true } }), { value: '94%', label: '48 of 51 breaks caught' })
-  assert.deepEqual(metricFor({ id: 'test-strength', state: 'unchecked', summary: '728 of 729 breaks timed out' }, { mutation: report }), { value: '—', label: 'runs timed out' })
+  const metric = (d, evidence) => {
+    const { value, label } = metricFor(d, evidence)
+    return `${value} ${label}`
+  }
+  assert.equal(metric({ id: 'test-strength', state: 'strong', summary: '' }, { mutation: report, stryker: { ok: true } }), '48/51 breaks caught')
+  assert.equal(metric({ id: 'test-strength', state: 'unchecked', summary: '728 of 729 breaks timed out' }, { mutation: report }), '— runs timed out')
   const attacks = [attackRow('A1', 1, 'permissions', 'broke'), attackRow('A2', 1, 'permissions', 'held'), attackRow('A3', 2, 'data', 'held')]
-  assert.deepEqual(metricFor({ id: 'security', state: 'failing', summary: '' }, { attacks, security: { audit: { critical: 1, high: 6 } } }), { value: '1 of 2', label: 'attacks held · 1 critical, 6 high' })
-  assert.deepEqual(metricFor({ id: 'data-safety', state: 'weak', summary: '' }, { attacks }), { value: '1 of 1', label: 'attacks held' })
+  assert.equal(metric({ id: 'security', state: 'failing', summary: '' }, { attacks, security: { audit: { critical: 1, high: 6 } } }), '1/2 attacks held')
+  assert.equal(metric({ id: 'data-safety', state: 'weak', summary: '' }, { attacks }), '1/1 attacks held')
   const ledger = addQuestions(emptyLedger(), [ask('permissions'), ask('data')])
-  assert.deepEqual(metricFor({ id: 'intent', state: 'failing', summary: '' }, { ledger }), { value: '2', label: 'questions waiting' })
+  assert.equal(metric({ id: 'intent', state: 'failing', summary: '' }, { ledger }), '— no answers yet')
   answerQuestion(ledger, { id: 'Q1', status: 'answered', answer: 'x' })
   answerQuestion(ledger, { id: 'Q2', status: 'answered', answer: 'y' })
-  ledger.questions[0].test = { green: false }
-  assert.deepEqual(metricFor({ id: 'intent', state: 'failing', summary: '' }, { ledger }), { value: '1 of 2', label: 'answers contradicted' })
+  ledger.questions[1].test = { green: true, red: { killed: 2, total: 2 } }
+  assert.equal(metric({ id: 'intent', state: 'weak', summary: '' }, { ledger }), '1/2 answers proven')
+  assert.equal(metric({ id: 'structure', state: 'weak', summary: '' }, { fallow: { health: { health_score: { score: 87.5 } } } }), '87.5/100 Fallow health')
 })
