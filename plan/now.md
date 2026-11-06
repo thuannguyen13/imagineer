@@ -46,7 +46,7 @@ Built in slices, each released on its own.
 
 - [x] Grade computed from the results file only, per the chosen scale: `grade.mjs` sets every state from evidence (B2).
 - [x] Pane shows the overall grade, each dimension with how it was measured, the stop bar, and the open questions, and marks the grade stale once HEAD moves past the measured commit (0.6.0). Evidence (2026-11-05): 13 mod tests pass; in a real headless session `/imagineer:status` listed the bar and the top 5 open questions at 0 turns, and showed ⟳ stale after a new commit; `claude plugin validate` still lists only file reads, the timer, state and drawing.
-- [ ] The same grade goes into the pull request Build opens (B4).
+- [x] The same grade goes into the pull request Build opens: `build.mjs pr-body` adds the repository's grade as it stood before the change, with the reminder to inspect again after merging.
 - [ ] The question dialog restyled by the mod: deferred until Build's dialogs settle, so both use one layout.
 
 ## B4 — Build
@@ -61,7 +61,7 @@ Built in slices, each released on its own.
 
 - [x] guard, forge and ground, forge's agents and its reviewer hook removed from the plugin in 0.2.0 (2026-11-05, chosen by the owner), ahead of B2 and B4, so the plugin shows only the new design. Their text stays at tag `v0.1.0`; B2 takes ground's checklist and hooks from there, B4 forge's run folder, state, finding IDs and reviewer hook, and Dev's practices take guard's rules. `bench/prepare.sh` installs the skills of `IMAGINEER_REF`, default `v0.1.0`, so the existing scenarios still run as the baseline.
 - [x] README rewritten around the commands.
-- [ ] Decide whether the mod replaces the Python reviewer hook when Build brings review agents back, and gives a destructive-command guard buttons.
+- [x] Decided (2026-11-05): role limits stay in a settings hook, `hooks/role-guard.mjs`, in Node like the rest, so the mod stays read-only. A destructive-command guard with buttons is a candidate for `plan/later.md`, not this plan.
 
 ## B5.5 — Learning from runs
 

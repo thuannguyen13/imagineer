@@ -199,7 +199,25 @@ function bar(repo, slug, command, skipMutation) {
   if (!tests.ok) console.log(tail(tests.stdout + '\n' + tests.stderr, 20))
 }
 
-export function prBody(state) {
+const STATE_WORD = { strong: '✓ Strong', weak: '! Weak', failing: '✕ Failing', unchecked: '? Not checked', 'not-proven': '? Not proven yet' }
+
+/** The repository's grade from its last Inspect run, as it stood before this change. */
+export function gradeSection(results) {
+  if (!results || !Array.isArray(results.dimensions) || results.dimensions.length === 0) {
+    return ['## Repository grade', '', 'Not inspected yet. Run `/imagineer:inspect` after merging for a grade.']
+  }
+  const lines = [
+    '## Repository grade',
+    '',
+    `Before this change, at ${results.run?.commit || 'an earlier commit'}: **${STATE_WORD[results.overall?.state] ?? results.overall?.state}**${results.overall?.reason ? ` (${results.overall.reason})` : ''}`,
+    '',
+  ]
+  for (const d of results.dimensions) lines.push(`- ${STATE_WORD[d.state] ?? d.state} ${d.name}${d.summary ? `: ${d.summary}` : ''}`)
+  lines.push('', 'Run `/imagineer:inspect` after merging for the grade with this change.')
+  return lines
+}
+
+export function prBody(state, results = null) {
   const last = state.rounds.at(-1)
   const lines = [`${state.request}`, '', '## Requirements', '', '| ID | Requirement | Tests |', '|---|---|---|']
   for (const r of state.requirements) lines.push(`| ${r.id} | ${r.text} | ${r.tests.length ? r.tests.map(t => `\`${t}\``).join(', ') : 'none'} |`)
@@ -214,6 +232,7 @@ export function prBody(state) {
   for (const r of state.rounds) {
     lines.push(`| ${r.round} | ${r.commit} | ${r.tests ? 'pass' : 'fail'} | ${r.audit ?? '-'} | ${r.mutation ? `${r.mutation.caught} of ${r.mutation.total}` : '-'} | ${r.bar.met ? 'met' : 'not met'} |`)
   }
+  lines.push('', ...gradeSection(results))
   if (state.models) lines.push('', `Models: Architect ${state.models.architect}, Dev ${state.models.dev} (${state.models.devCritical} for data, money and permissions), QA ${state.models.qa}.`)
   return lines.join('\n')
 }
@@ -277,7 +296,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       bar(repo, slug, arg('run'), process.argv.includes('--skip-mutation'))
     } else if (step === 'pr-body') {
       need(repo, slug)
-      console.log(prBody(loadState(repo, slug)))
+      console.log(prBody(loadState(repo, slug), readJsonIf(join(repo, '.claude/imagineer/results.json'))))
     } else {
       throw new Error('Steps: models, start, state, list, worktree, require, red, bar, pr-body')
     }

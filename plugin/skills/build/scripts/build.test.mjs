@@ -2,7 +2,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { barFrom, changedSources, modelsFrom, prBody } from './build.mjs'
+import { barFrom, changedSources, gradeSection, modelsFrom, prBody } from './build.mjs'
 
 test('model presets: recommended mixes, budget and maximum are uniform, custom is checked', () => {
   assert.deepEqual(modelsFrom('recommended'), { preset: 'recommended', architect: 'opus', dev: 'sonnet', devCritical: 'opus', qa: 'opus' })
@@ -45,4 +45,17 @@ test('the pull request body leads with requirements and their evidence', () => {
   assert.match(body, /\*\*failed\*\* at aaa1111, before the feature existed/)
   assert.match(body, /catch 90% of deliberate breaks \(18 of 20\)/)
   assert.match(body, /Done bar: \*\*met\*\*/)
+})
+
+test('the pull request carries the repository grade as it stood before the change', () => {
+  const results = {
+    run: { commit: 'b903e13' },
+    overall: { state: 'failing', reason: 'Failing: test strength.' },
+    dimensions: [{ name: 'Test strength', state: 'failing', summary: 'Tests catch 31% of deliberate breaks.' }],
+  }
+  const lines = gradeSection(results).join('\n')
+  assert.match(lines, /Before this change, at b903e13: \*\*✕ Failing\*\* \(Failing: test strength\.\)/)
+  assert.match(lines, /- ✕ Failing Test strength: Tests catch 31%/)
+  assert.match(gradeSection(null).join('\n'), /Not inspected yet/)
+  assert.match(prBody({ request: 'x', requirements: [], rounds: [] }, results), /## Repository grade/)
 })
