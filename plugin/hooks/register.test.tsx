@@ -271,13 +271,13 @@ const LEDGER = JSON.stringify({
   ],
 })
 
-test('the pane lists open questions, most consequential first, and the stop bar', async ($, on) => {
+test('the pane lists open questions, most consequential first, and the finish thresholds', async ($, on) => {
   files(on, { [RESULTS]: JSON.stringify(SAMPLE), '.claude/imagineer/questions.json': LEDGER })
   on('ui.open', () => ({ value: { isPlaced: true } }))
   await $.command.run(typed('imagineer:status'))
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect(await ui.find({ type: 'Text', text: /^Not finished yet\. By the bar Imagineer suggests, Inspect still needs:$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Not finished yet\. By the thresholds Imagineer suggests, Inspect still needs:$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^  • two attack rounds in a row that find nothing new$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^Run \/imagineer:inspect to continue\.$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /Stop bar/ })).toBeUndefined()

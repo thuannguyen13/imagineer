@@ -55,7 +55,7 @@ They live in this skill's folder under `scripts/` (the folder named "Base direct
 11. **Report.** The grade pane shows the result; `/imagineer:status` opens it at any time. In your reply:
    - The overall grade first, with its reason, in one or two sentences.
    - Then each dimension: its state, what it means in plain words, and the evidence. For test strength, name the weakest files and say what a low score means ("if this code broke, no test would notice"). For structure, list the findings and say they are not yet reviewed with the user. For foundations, list what failed.
-   - Whether Inspect is finished (`run.bar` in the results file): tests catch at least 80% of deliberate breaks, nothing is left to review, and two attack rounds in a row found nothing new. If not, say what it still needs, in those words; never call it the "stop bar" to the user.
+   - Whether Inspect is finished (`run.bar` in the results file): tests catch at least 80% of deliberate breaks, nothing is left to review, and two attack rounds in a row found nothing new. If not, say what it still needs, in those words; call these "the thresholds Imagineer suggests", never a "bar".
    - What was not checked, and why.
    - Where the evidence is: `$O`.
 

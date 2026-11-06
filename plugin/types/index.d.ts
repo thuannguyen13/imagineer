@@ -33,7 +33,7 @@ export type Run = {
   commit: string
   /** When the run measured the code, as an ISO time; empty when unknown. */
   at: string
-  /** Inspect's stop bar, when the run recorded one. */
+  /** Inspect's finish thresholds, when the run recorded them: met, or what is still missing. */
   bar: { met: boolean; missing: string[] } | null
 }
 

@@ -216,9 +216,9 @@ export function whenTested(iso: string, now = new Date()): string {
 
 /** Whether Inspect is finished, and if not, what it still needs, in plain words. */
 export function finishLines(bar: { met: boolean; missing: string[] }): string[] {
-  if (bar.met) return ['✓ Finished, by the bar Imagineer suggests: tests catch enough breaks, nothing is left to review, and two attack rounds in a row found nothing new.']
+  if (bar.met) return ['✓ Finished, by the thresholds Imagineer suggests: tests catch enough breaks, nothing is left to review, and two attack rounds in a row found nothing new.']
   return [
-    'Not finished yet. By the bar Imagineer suggests, Inspect still needs:',
+    'Not finished yet. By the thresholds Imagineer suggests, Inspect still needs:',
     ...bar.missing.map(m => `  • ${m}`),
     'Run /imagineer:inspect to continue.',
   ]

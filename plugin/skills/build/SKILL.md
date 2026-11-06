@@ -1,6 +1,6 @@
 ---
 name: build
-description: Build a feature in this repository to Imagineer's bar. An Architect designs it from your goal, the docs and the code; QA writes the tests from that design before any code exists; Dev implements until they pass; and the change is measured like Inspect does, in its own branch and worktree. Ends with a pull request you review. JavaScript and TypeScript only for now.
+description: Build a feature in this repository to the thresholds Imagineer suggests. An Architect designs it from your goal, the docs and the code; QA writes the tests from that design before any code exists; Dev implements until they pass; and the change is measured like Inspect does, in its own branch and worktree. Ends with a pull request you review. JavaScript and TypeScript only for now.
 argument-hint: "<what to build> | (empty to resume)"
 disable-model-invocation: true
 ---
@@ -51,10 +51,10 @@ Input: $ARGUMENTS
 7. **Build.** Spawn `imagineer:dev` with the worktree, `$B`, the tasks and the test command. Use the preset's `devCritical` model when any of its tasks is marked `critical`, else `dev`. Split the tasks over several Dev spawns only when they do not touch the same files.
 
 8. **Round.** Run `node $BS bar --repo $R --slug <slug> --run "<test command>"` (it measures a copy of the worktree's last commit; mutation testing of the changed code can take a while: run it in the background and tell the user). Then spawn the Architect again (fresh, model `architect`) on the **review** task with the base and the round's commit. Tell the user the round's result in two or three plain sentences.
-   - **Bar met and no findings**: go to step 9.
+   - **Done thresholds met and no findings**: go to step 9.
    - **Breaks no test noticed** (in `$B/round-<n>/mutation.json`, status `Survived` or `NoCoverage`): spawn QA with them as file:line and change, to add tests against the spec. Commit them as in step 6.
    - **Findings, failing tests or a failing audit**: spawn Dev with one fix list (`F1`… with file:line and the fix, plus the failing output).
-   - Then run the next round. Stop after 4 rounds without the bar met, and ask the user: more rounds, ship with the gaps listed, or stop.
+   - Then run the next round. Stop after 4 rounds without the done thresholds met, and ask the user: more rounds, ship with the gaps listed, or stop.
 
 9. **Pull request.** `node $BS state --repo $R --slug <slug> --status done`. Show the user what was built, per requirement, and `node $BS pr-body --repo $R --slug <slug>`. Ask whether to push the branch and open a pull request with that body. If yes, push and open it from the worktree. Give the link. Never merge.
 

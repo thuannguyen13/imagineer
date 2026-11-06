@@ -7,7 +7,7 @@ Make AI-built software trustworthy without having to trust the AI. Imagineer is 
 | Command | What it does | Status |
 | --- | --- | --- |
 | `/imagineer:inspect` | Researches an existing repo, asks you plain-language questions about what it should do, and tries to break it until it can't, using tools like Fallow and Stryker | Coming in B2 |
-| `/imagineer:build` | Builds new work with an Architect, Dev and QA agents, to the same bar as Inspect | Coming in B4 |
+| `/imagineer:build` | Builds new work with an Architect, Dev and QA agents, to the same thresholds as Inspect | Coming in B4 |
 | `/imagineer:status` | Shows the repo's grade in a pane beside the chat, at once and at no cost | Available (0.2.0) |
 | `/imagineer:feedback` | Tells Imagineer it got something wrong, so it can improve | Coming in B5.5 |
 

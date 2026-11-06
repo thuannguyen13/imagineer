@@ -44,7 +44,7 @@ This page is format `1`. A reader that meets another format says so and asks for
 | `run.round` | The current round, from 1 |
 | `run.commit` | The commit the grade was measured at |
 | `run.at` | When the code was measured, as an ISO time (from 0.10.0) |
-| `run.bar` | Optional. Inspect's stop bar: `{ "met": false, "missing": ["not yet 2 clean attack rounds"] }` |
+| `run.bar` | Optional. Inspect's finish thresholds, Imagineer's suggestion: `{ "met": false, "missing": ["two attack rounds in a row that find nothing new"] }`, each missing item in plain words |
 | `overall.state` | `strong`, `weak`, `failing`, `unchecked` or `not-proven` |
 | `overall.reason` | One plain sentence: why the overall grade is what it is |
 | `dimensions[].id`, `name` | A stable id and the name shown to the user |

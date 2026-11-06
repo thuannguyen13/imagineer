@@ -65,7 +65,7 @@ export function testStrength(evidence) {
     )
   }
   const band = n => (n >= 0.8 ? 'strong' : n >= 0.6 ? 'weak' : 'failing')
-  // Code the user confirmed as critical (money, data, permissions) must meet the bar
+  // Code the user confirmed as critical (money, data, permissions) must meet the threshold
   // on its own, and every break no test noticed there must be explained.
   const critical = files.filter(f => f.total > 0 && isCritical(ledger, f.path))
   const unexplained = critical.flatMap(f =>
@@ -318,7 +318,7 @@ export function metricFor(d, evidence) {
   return NONE('')
 }
 
-/** Inspect's stop bar: test strength meets the bar, no open structure findings, and 2 attack rounds in a row found nothing new. */
+/** Inspect's finish thresholds: test strength meets its threshold, no open structure findings, and 2 attack rounds in a row found nothing new. */
 /**
  * What test strength still needs, with today's number beside the goal: the overall 80%, the
  * 80% in each critical file, and every break in critical code caught or explained.
@@ -440,7 +440,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   }
   excludeFromGit(repo)
   writeJson(join(repo, RESULTS), results)
-  console.log(`${grade.state}: ${grade.reason || 'every dimension meets the bar.'}`)
-  console.log(bar.met ? 'Finished, by the bar Imagineer suggests.' : `Not finished yet. By the bar Imagineer suggests, Inspect still needs: ${bar.missing.join('; ')}.`)
+  console.log(`${grade.state}: ${grade.reason || 'every area meets the thresholds Imagineer suggests.'}`)
+  console.log(bar.met ? 'Finished, by the thresholds Imagineer suggests.' : `Not finished yet. By the thresholds Imagineer suggests, Inspect still needs: ${bar.missing.join('; ')}.`)
   for (const d of dimensions) console.log(`  ${d.state.padEnd(9)} ${d.name}: ${d.summary}`)
 }

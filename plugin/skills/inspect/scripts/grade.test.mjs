@@ -175,7 +175,7 @@ test('deferring or deciding needs a reason', () => {
   assert.throws(() => answerQuestion(ledger, { id: 'Q1', status: 'deferred' }), /needs a reason/)
 })
 
-test('critical code must meet the bar on its own, with every surviving break explained', () => {
+test('critical code must meet the threshold on its own, with every surviving break explained', () => {
   const report = {
     files: {
       'src/auth.ts': { mutants: [{ status: 'Killed', location: { start: { line: 1 } } }, { status: 'Survived', location: { start: { line: 17 } } }] },
@@ -231,7 +231,7 @@ test('data safety notes that backups are not drilled yet', () => {
   assert.match(result.summary, /backup restore not drilled/)
 })
 
-test('the stop bar needs strong tests, clean structure and two clean attack rounds', () => {
+test('the finish thresholds need strong tests, clean structure and two clean attack rounds', () => {
   const dims = [{ id: 'test-strength', state: 'strong' }, { id: 'structure', state: 'strong' }]
   assert.deepEqual(stopBar(dims, [attackRow('A1', 1, 'data', 'broke'), attackRow('A2', 2, 'data', 'held')]).missing, ['two attack rounds in a row that find nothing new'])
   assert.equal(stopBar(dims, [attackRow('A1', 1, 'data', 'broke'), attackRow('A2', 2, 'data', 'held'), attackRow('A3', 3, 'permissions', 'held')]).met, true)
