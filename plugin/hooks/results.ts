@@ -193,6 +193,15 @@ const shortText = (value: string, max = 110) => (value.length > max ? `${value.s
 
 export const questionLine = (q: OpenQuestion) => `${q.id} (${q.topic}): ${shortText(q.text)}`
 
+/** How the Overview lays out a row at a pane width: the full row, the number alone, or two lines. */
+export type RowLayout = { kind: 'wide' | 'medium' | 'narrow'; nameWidth: number; stateWidth: number }
+
+export function rowLayout(columns: number): RowLayout {
+  if (columns >= 64) return { kind: 'wide', nameWidth: Math.min(26, Math.floor(columns * 0.32)), stateWidth: 13 }
+  if (columns >= 44) return { kind: 'medium', nameWidth: Math.min(24, columns - 3 - 12 - 10), stateWidth: 12 }
+  return { kind: 'narrow', nameWidth: columns - 3, stateWidth: 0 }
+}
+
 /** How many items Evidence shows per area before "and N more". */
 export const ITEMS_SHOWN = 5
 

@@ -24,6 +24,7 @@ import {
   readOpenQuestions,
   readResults,
   RESULTS_PATH,
+  rowLayout,
   STATE_LABEL,
   statusLine,
   summaryText,
@@ -163,8 +164,7 @@ export const register: Register = on => {
 
     const tab = await read($, tabAtom)
     const overall = STATE_LABEL[summary.overall.state]
-    const nameWidth = Math.min(26, Math.max(16, Math.floor(e.props.bodyColumns * 0.35)))
-    const stateWidth = 13
+    const layout = rowLayout(e.props.bodyColumns)
     const waiting = summary.questions.waiting
     const tabs: { id: Tab; label: string }[] = [
       { id: 'overview', label: 'Overview' },
@@ -187,27 +187,44 @@ export const register: Register = on => {
       </Box>
     )
 
-    const row = (dimension: Results['dimensions'][number]) => {
+    // One row per area, laid out for the pane's width: icon, name, state and the area's number,
+    // with what the number counts when there is room; two lines when the pane is narrow.
+    const row = (dimension: Results['dimensions'][number], withMetric = true) => {
       const label = STATE_LABEL[dimension.state]
+      const stateText = `${label.word}${dimension.isStale || summary.isStale ? ' ⟳' : ''}`
+      const metric = withMetric && dimension.metric && dimension.metric.value !== '—' ? dimension.metric : null
+
+      if (layout.kind === 'narrow') {
+        return (
+          <Box flexDirection="column">
+            <Text>
+              <Text color={label.color}>{label.icon}</Text> {dimension.name}
+            </Text>
+            <Box paddingLeft={2}>
+              <Text>
+                <Text color={label.color}>{stateText}</Text>
+                {metric ? ` · ${metric.value}` : ''}
+              </Text>
+            </Box>
+          </Box>
+        )
+      }
       return (
         <Box flexDirection="row">
           <Box width={3}>
             <Text color={label.color}>{label.icon}</Text>
           </Box>
-          <Box width={nameWidth}>
+          <Box width={layout.nameWidth}>
             <Text>{dimension.name}</Text>
           </Box>
-          <Box width={stateWidth}>
-            <Text color={label.color}>
-              {label.word}
-              {dimension.isStale || summary.isStale ? ' ⟳' : ''}
-            </Text>
+          <Box width={layout.stateWidth}>
+            <Text color={label.color}>{stateText}</Text>
           </Box>
-          {dimension.metric && dimension.metric.value !== '—' && (
+          {metric && (
             <Box flexShrink={1}>
               <Text>
-                {dimension.metric.value}
-                <Text dimColor>{dimension.metric.label ? `  ${dimension.metric.label}` : ''}</Text>
+                {metric.value}
+                {layout.kind === 'wide' && metric.label ? <Text dimColor>{`  ${metric.label}`}</Text> : ''}
               </Text>
             </Box>
           )}
@@ -217,7 +234,7 @@ export const register: Register = on => {
 
     const overview = (
       <Box flexDirection="column">
-        {summary.dimensions.map(row)}
+        {summary.dimensions.map(dimension => row(dimension))}
         {summary.run.bar && (
           <Box marginTop={1}>
             <Text dimColor>{summary.run.bar.met ? '✓ Stop bar met.' : `Stop bar not met: ${summary.run.bar.missing.join('; ')}.`}</Text>
@@ -230,7 +247,7 @@ export const register: Register = on => {
       <Box flexDirection="column" gap={1}>
         {summary.dimensions.map(dimension => (
           <Box flexDirection="column">
-            {row(dimension)}
+            {row(dimension, false)}
             <Box flexDirection="column" paddingLeft={3}>
               {dimension.summary !== '' && <Text>{dimension.summary}</Text>}
               {firstItems(dimension.items).map(item => (

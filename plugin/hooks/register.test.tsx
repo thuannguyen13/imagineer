@@ -40,7 +40,7 @@ const PANE = {
   props: {
     title: 'Imagineer',
     isFocused: false,
-    bodyColumns: 60,
+    bodyColumns: 90,
     placement: 'dock',
     scroll: { offset: 0, bodyRows: 40 },
     view: {},
@@ -355,4 +355,25 @@ test('other questions keep Claude Code\'s dialog untouched', async ($, on) => {
   const ui = await $.ui.mount({ ...DIALOG(), surface: 'terminal' })
   expect(await ui.find({ type: 'Text', text: /Imagineer asks/ })).toBeUndefined()
   await ui.unmount()
+})
+
+test('the Overview row fits the pane: full row, number alone, or two lines', async ($, on) => {
+  files(on, { [RESULTS]: JSON.stringify(SAMPLE) })
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  await $.command.run(typed('imagineer:status'))
+  const at = (bodyColumns: number) => ({ ...PANE, props: { ...PANE.props, bodyColumns } })
+
+  const wide = await $.ui.mount({ ...at(90), surface: 'terminal' })
+  expect(await wide.find({ type: 'Text', text: /^30%  51 of 167 breaks caught$/ })).toBeDefined()
+  await wide.unmount()
+
+  const medium = await $.ui.mount({ ...at(50), surface: 'terminal' })
+  expect(await medium.find({ type: 'Text', text: /^30%$/ })).toBeDefined()
+  expect(await medium.find({ type: 'Text', text: /breaks caught/ })).toBeUndefined()
+  await medium.unmount()
+
+  const narrow = await $.ui.mount({ ...at(32), surface: 'terminal' })
+  expect(await narrow.find({ type: 'Text', text: /^✕ Test strength$/ })).toBeDefined()
+  expect(await narrow.find({ type: 'Text', text: /^Failing · 30%$/ })).toBeDefined()
+  await narrow.unmount()
 })
