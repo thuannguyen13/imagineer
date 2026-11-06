@@ -29,11 +29,11 @@ commit "Expenses app"
 # Skills, forge's agents and the plugin's reviewer hook under test: whatever this repository has checked out,
 # copied in the way a project without the plugin installs them, so the commands stay /forge, /ground, /guard.
 mkdir -p .claude/skills .claude/agents .claude/hooks
-cp -R "$repo/skills/." .claude/skills/
-cp "$repo"/agents/*.md .claude/agents/
-cp "$repo/hooks/forge-reviewer-guard.py" .claude/hooks/
+cp -R "$repo/plugin/skills/." .claude/skills/
+cp "$repo"/plugin/agents/*.md .claude/agents/
+cp "$repo/plugin/hooks/forge-reviewer-guard.py" .claude/hooks/
 # A grounded product has ground's hooks installed too.
-cp "$repo/skills/ground/hooks/block-destructive.py" "$repo/skills/ground/hooks/check-before-stop.py" .claude/hooks/
+cp "$repo/plugin/skills/ground/hooks/block-destructive.py" "$repo/plugin/skills/ground/hooks/check-before-stop.py" .claude/hooks/
 printf 'npm test\n' > .claude/hooks/fast-checks.txt
 printf 'APP_ENV=prod\nPROD_DATA_DIR\ndata/prod\nbackups/prod\n' > .claude/hooks/production-patterns.txt
 cat > .claude/settings.json <<'JSON'

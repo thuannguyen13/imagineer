@@ -1,4 +1,4 @@
-"""Run: python3 -I skills/ground/hooks/test_hooks.py"""
+"""Run: python3 -I plugin/skills/ground/hooks/test_hooks.py"""
 import json
 import os
 import subprocess

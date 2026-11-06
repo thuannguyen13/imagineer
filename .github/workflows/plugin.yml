@@ -1,0 +1,14 @@
+name: plugin
+
+on:
+  pull_request:
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Version bumped when plugin files change
+        run: scripts/check-version.sh "origin/${{ github.base_ref }}"
