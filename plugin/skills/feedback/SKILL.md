@@ -3,11 +3,12 @@ name: feedback
 description: Tell Imagineer it got something wrong (a problem it missed, a question not worth your time, a false alarm) or right. About Imagineer's own behaviour, never your code. Kept on your machine; you choose whether to share it.
 argument-hint: "[what went wrong, in your words]"
 disable-model-invocation: true
+allowed-tools: Bash(node ${CLAUDE_PLUGIN_ROOT}/skills/*)
 ---
 
 # Feedback
 
-The user is telling Imagineer about Imagineer: what it said or did, and what actually happened. This is never about the user's code, and the record never contains their code. `$F` is `node <this skill's folder>/scripts/feedback.mjs`, `$R` the repository's absolute path.
+The user is telling Imagineer about Imagineer: what it said or did, and what actually happened. This is never about the user's code, and the record never contains their code. `$F` is `node ${CLAUDE_SKILL_DIR}/scripts/feedback.mjs`, `$R` the repository's absolute path.
 
 1. **Self-check first.** Run `$F check --repo $R`. If it lists flags, mention them in one line each: they may be what the user means.
 2. **Understand it.** If the input does not already say, ask with AskUserQuestion, in plain words:

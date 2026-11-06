@@ -40,7 +40,7 @@ Most of your questions are about something new, so there is nothing to compare w
 }
 ```
 
-When a question is about how the app **already** behaves, and the feature depends on it, write a **check** instead, asked blind: `"kind": "check"`, a `point` asking what should happen, an `example`, two or three `outcomes` (each `label` and `means`, none marked as recommended or current), `today`: the label of the outcome the app does now, and `actual`: what a person sees today, shown only if the user's answer differs. See [Inspect's format](../skills/inspect/SKILL.md#how-to-write-a-question).
+When a question is about how the app **already** behaves, and the feature depends on it, write a **check** instead, asked blind: `"kind": "check"`, a `point` asking what should happen, an `example`, two or three `outcomes` (each `label` and `means`, none marked as recommended or current), `today`: the label of the outcome the app does now, and `actual`: what a person sees today, shown only if the user's answer differs. See [Inspect's format](../skills/inspect/references/questions.md#how-to-write-a-question).
 
 - `topic`: `data`, `money`, `permissions`, `behaviour` or `wording`.
 - `point`: the one thing at stake, at most 100 characters. It is what the user reads first.

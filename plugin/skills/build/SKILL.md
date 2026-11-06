@@ -3,6 +3,7 @@ name: build
 description: Build a feature in this repository to the thresholds Imagineer suggests. An Architect designs it from your goal, the docs and the code; QA writes the tests from that design before any code exists; Dev implements until they pass; and the change is measured like Inspect does, in its own branch and worktree. Ends with a pull request you review. JavaScript and TypeScript only for now.
 argument-hint: "<what to build> | (empty to resume)"
 disable-model-invocation: true
+allowed-tools: Bash(node ${CLAUDE_PLUGIN_ROOT}/skills/*)
 ---
 
 # Build
@@ -23,7 +24,7 @@ Input: $ARGUMENTS
 
 ## Scripts
 
-`node <this skill's folder>/scripts/build.mjs`, below `$BS`. Inspect's scripts are used too: `$IS` is `<this skill's folder>/../inspect/scripts`. `$R` is the repository's absolute path, `<slug>` a short name for the feature (lowercase, hyphens), and `$B` the run folder `$R/.claude/imagineer/build/<slug>`.
+`node ${CLAUDE_SKILL_DIR}/scripts/build.mjs`, below `$BS`. Inspect's scripts are used too: `$IS` is `${CLAUDE_PLUGIN_ROOT}/skills/inspect/scripts`. `$R` is the repository's absolute path, `<slug>` a short name for the feature (lowercase, hyphens), and `$B` the run folder `$R/.claude/imagineer/build/<slug>`.
 
 ## Steps
 
@@ -36,10 +37,10 @@ Input: $ARGUMENTS
    - Their own words, saved as a JSON map, for example `{"architect":"opus","dev":"sonnet","devCritical":"opus","qa":"sonnet"}`.
    Record the models on the run: `node $BS state --repo $R --slug <slug> --models '<json>'`.
 
-3. **Intent.** Read the repository's docs and `$R/.claude/imagineer/questions.json` if it exists. If there are no docs and no answers, ask Inspect's big-picture questions first (what the app is for, who uses it, what is sensitive, what must never happen, which code handles money, personal data or permissions), with `node $IS/questions.mjs` as [Inspect](../inspect/SKILL.md#questions) describes.
+3. **Intent.** Read the repository's docs and `$R/.claude/imagineer/questions.json` if it exists. If there are no docs and no answers, ask Inspect's big-picture questions first (what the app is for, who uses it, what is sensitive, what must never happen, which code handles money, personal data or permissions), with `node $IS/questions.mjs` as [Inspect](../inspect/references/questions.md) describes.
 
 4. **Design.** Spawn `imagineer:architect` (model: the preset's `architect`) on the **design** task with `$R`, `$B`, the request and the answers. When it returns:
-   - If it wrote `$B/questions.json`, add them to the repository's question ledger: `node $IS/questions.mjs add --repo $R < $B/questions.json`. If the script refuses one (code in the text, a missing example, a suggestion without what it means), spawn the Architect again with the refusal to rewrite it; never reword it yourself. Then ask and record them exactly as [Inspect does](../inspect/SKILL.md#asking): `questions.mjs ask`, AskUserQuestion, then `answer` for a choice, `pick` and `decide` for a check, or `not-sure`. The answers stay in the ledger, so Inspect does not ask them again and can prove them later. Spawn the Architect again with the answers if they change the design.
+   - If it wrote `$B/questions.json`, add them to the repository's question ledger: `node $IS/questions.mjs add --repo $R < $B/questions.json`. If the script refuses one (code in the text, a missing example, a suggestion without what it means), spawn the Architect again with the refusal to rewrite it; never reword it yourself. Then ask and record them exactly as [Inspect does](../inspect/references/questions.md#asking): `questions.mjs ask`, AskUserQuestion, then `answer` for a choice, `pick` and `decide` for a check, or `not-sure`. The answers stay in the ledger, so Inspect does not ask them again and can prove them later. Spawn the Architect again with the answers if they change the design.
    - Show the user the requirements R1… in plain words, with no files or code, and ask them to approve or change them. Nothing is built before they approve. Without a user, go on only if the request itself says the requirements may be approved as drafted; otherwise list them and stop.
    - Record each approved requirement: `node $BS require --repo $R --slug <slug> --id R1 --text "<requirement>"`.
    - `node $BS state --repo $R --slug <slug> --phase tests`.
@@ -64,7 +65,7 @@ Without a user (AskUserQuestion not available): use the recommended model preset
 
 At the end of every run, after the report:
 
-1. Run `node <this skill's folder>/../feedback/scripts/feedback.mjs check --repo $R`. If it lists flags (an agent stepped outside its role, a tool did not run, a proven answer an attack broke, questions answered mostly in the user's own words, a Build stuck at its round limit), say each in one plain line and offer `/imagineer:feedback` to record and share it.
+1. Run `node ${CLAUDE_PLUGIN_ROOT}/skills/feedback/scripts/feedback.mjs check --repo $R`. If it lists flags (an agent stepped outside its role, a tool did not run, a proven answer an attack broke, questions answered mostly in the user's own words, a Build stuck at its round limit), say each in one plain line and offer `/imagineer:feedback` to record and share it.
 2. Ask two optional questions in one AskUserQuestion call: "Was anything asked that wasn't worth your time?" and "Did we miss anything you know about?", each with "No" first. Record any yes with `/imagineer:feedback`'s record step.
 
 Without a user, run the check and list its flags; ask nothing.
