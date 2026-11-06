@@ -1,8 +1,10 @@
 # Imagineer: Inspect and Build
 
-**Status:** direction set by the owner on 2026-11-05. Supersedes the three-skill entry points in [skillset.md](skillset.md): guard, forge and ground become parts of these two commands. The failure research in skillset.md §1 still applies.
+**Status:** direction set by the owner on 2026-11-05. What Inspect checks in each area set on 2026-11-06 ([What Inspect checks](#what-inspect-checks)); parts marked *Planned* are not built yet. Supersedes the three-skill entry points in [skillset.md](skillset.md): guard, forge and ground become parts of these two commands. The failure research in skillset.md §1 still applies.
 
 ## Purpose
+
+**Mission:** help people who dream up software turn it into real work they can trust, even with little or no technical knowledge.
 
 Imagineer makes AI-built software trustworthy without the user having to trust the AI. It does two things:
 
@@ -38,7 +40,7 @@ When a command runs, Claude Code fires a `command.run` event before the skill do
 
 ## `/inspect`
 
-**Goal:** research, review and re-validate with the user, asking until no question is left unresolved, and try to break the system until it cannot be broken any more. The outcome is a stronger system with less duplicate, dead and needlessly complex code.
+**Goal:** keep trying to break the system, in every way Inspect knows, and turn what it finds into a grade that shows the owner where the codebase needs to improve. Along the way it asks the user what the app should do, until no question is left unresolved, because only the user can say whether a behaviour is a bug. The outcome is a stronger system with fewer hidden breaks, leaks and needlessly complex code, and a record of what the user wants that the next round, and Build, start from.
 
 ### Steps
 
@@ -53,6 +55,12 @@ When a command runs, Claude Code fires a `command.run` event before the skill do
 |---|---|
 | Fallow | Duplicate code, dead code, complexity, circular dependencies |
 | Stryker | Mutation testing: code where a deliberate break is not caught by any test |
+| `npm audit` | Known-vulnerable packages the app ships with |
+| *Planned:* gitleaks | Secrets in the files and in the git history: API keys, tokens, private keys, passwords. A pinned release, downloaded once into Imagineer's tools folder outside the repo and checked against its checksum, like Stryker |
+| *Planned:* fast-check | Property-based tests: many generated inputs, to prove an answer holds for every case, not a few picked ones |
+| *Planned:* c8 (Node's own coverage) | Code no test runs at all, as a second number beside test strength |
+| *Planned:* ESLint with sonarjs rules | A second opinion on cognitive complexity, from a throwaway config |
+| *Planned:* a code-review agent | What tools cannot judge: abstractions nobody needs (YAGNI), unclear names, code hard for a person to follow |
 
 **Detection.** During research, check whether the repo already uses each tool:
 
@@ -69,6 +77,41 @@ When a command runs, Claude Code fires a `command.run` event before the skill do
 - **The report says which run it was**, for example "repo's Fallow 3.38 with its config" or "one-off Fallow 3.40, default settings".
 
 Tool results need judgment. On the bench app, Fallow reports `public/app.js` as unused, but the HTML page loads it. Inspect checks a finding before acting on it, and asks the user when the code cannot settle it.
+
+### What Inspect checks
+
+One section per area of the grade. *Today* is what Inspect does in 0.3.0; *Planned* is decided but not built. Each planned part ships as its own release, in the order of the [roadmap](#roadmap).
+
+**Test: would the tests notice if something broke?**
+
+- *Today:* mutation testing with Stryker. Inspect plants small bugs in a throwaway copy (`>` becomes `>=`, a line is removed) and counts how many the tests catch. Coverage alone is not enough: a test can run every line and check nothing, which AI-written tests often do. Each user answer is proven by a test that must catch the planted bugs on the lines it is about.
+- *Planned:* property-based tests (fast-check) when proving answers, so "an expense needs a description" is tested against every kind of blank, not only `""`. Coverage (c8) as a second number that explains a low score: code no test even runs. Stryker's incremental mode, so a later run re-tests only what changed (the sales portal's run took 18 minutes).
+
+**Intention: does it do what the user meant?**
+
+- *Today:* a big-picture interview of up to 5 questions, then a question for each finding that matters, asked blind: the user says what should happen before seeing what the app does, and only a difference becomes "fix it or keep it?". Answers are kept, proven by tests, used by the attacks, and saved as docs when the repo has none.
+- *Planned:* **ask from more than one angle**, for answers about data, money and permissions, where a wrong guess costs most. The same intent is asked again later, from another side (another role, another example, the opposite case), to tell what the user really wants from an answer given in passing. Wording and general behaviour keep one question, so the user is not asked everything twice. Answers that disagree mark the intent as unclear: Inspect says so, asks once more, and writes no test on a guess until it is settled.
+- *Planned:* **a scaffold for repos with no docs**, filled in layer by layer (see [When the repo has no docs](#when-the-repo-has-no-docs)). Each round fills the gaps the last one left, and the confirmed picture is the foundation the next round of inspection, and Build, start from.
+
+**Security: can someone see or do what they shouldn't, or find what should stay secret?**
+
+- *Today:* Fallow's possible weaknesses, checked in the code or asked about; `npm audit`; attacks on permissions (a role doing what it must not, refusals that exist only in the interface).
+- *Planned:* **secret scanning**, of the files and of the git history, since a key deleted last month is still in the history and still leaked. With gitleaks, run from Imagineer's tools folder, so nothing is installed in the repo or asked of the user; if it cannot be downloaded, the secret scan shows as not checked, with the reason, rather than a weaker scan. Also what those tools miss: committed `.env` files, secret-looking values in variables shipped to the browser (`NEXT_PUBLIC_`, `VITE_`), tokens written to logs, real credentials in test fixtures. Whether exposed on purpose or by accident, each is reported by file, line and kind of key, never the secret itself. Until this exists, Security reaches Weak at best.
+
+**Data safety: could the user lose or mix up their data?**
+
+- *Today:* attacks on data (production and development data mixed up, a partial save after a failure, a double submit, a value stored that must not be), and the user's answers about data.
+- *Planned:* migrations that destroy data or cannot be rolled back; several writes that should be one transaction; missing uniqueness or idempotency where a double submit is possible; input not validated where it enters the system; personal data that is stored, logged or never deleted. Backups and restores cannot be seen in the code, so they become a question for the user, and stay "claimed" until Imagineer can restore one in a throwaway copy.
+
+**Code quality: is the code easy to change safely, and easy for a person to read?** (called Structure before 0.3.0)
+
+- *Today:* Fallow as one tool among several: dead code (unused files and exports, part of YAGNI), duplication (DRY), complexity, and its health score. Each finding is reviewed with the user or settled from the docs.
+- *Planned:* **readability as a main focus.** A code-review agent reads what tools cannot judge and explains each finding in plain words with a simpler shape: functions too long or too deeply nested, unclear names, clever code, abstractions with a single use, parameters never passed, options that never vary (the rest of YAGNI). ESLint's sonarjs rules give a second opinion on complexity. Inspect still changes no code: it reports, and the user, or Build, makes the change.
+
+**Foundations: can someone else run and check it?**
+
+- *Today:* lockfile, install, typecheck, tests, CI running the tests, documented environment variables.
+- *Planned:* a lint setup that passes; the build succeeds; the Node version is pinned; unused and badly outdated dependencies; a README that says how to run the app; CI that also runs the typecheck and lint.
 
 ### Questions
 
@@ -126,6 +169,7 @@ Where there is nothing to compare with (the big picture, or a design decision fo
 - **Not sure is always offered.** It keeps the question open and asks again with a new example from another angle; after two, the question is deferred with that reason.
 - **The script lays out every dialog the same way** (`questions.mjs ask`), so the format does not depend on the Lead's wording.
 - Most consequential first: data, money, permissions, then behaviour, then wording; a few per round; nothing a test, doc or recorded decision already answers.
+- *Planned:* **the same intent from more than one angle.** An answer about data, money or permissions is checked by a second question from another side, in a later round, never back to back. Agreement makes it settled; disagreement makes it unclear, and Inspect asks once more with both answers side by side before writing any test.
 - Every confirmed answer becomes a test named after the question, so it is checked from then on.
 
 ### When the repo has no docs
@@ -134,6 +178,7 @@ Many repos built by prompting have no README, no CLAUDE.md and no docs. Then the
 
 1. **Detect.** During research, classify the docs as none, thin (a README with setup only) or present. Report it under Foundations.
 2. **Ask the big picture first.** Before any line-level question, a short interview of at most 5 questions, with suggestions drawn from the code: what the app is for, who uses it and in which roles, what is sensitive (money, personal data), and what must never happen. These answers rank every later question.
+   *Planned:* a scaffold, filled in a layer per round, each layer asked only once the one above it is settled: what the app is for → who uses it, in which roles → what data it keeps and what is sensitive → the main flows, step by step → the rules (who may do what, what must never happen). The pane shows which layers are confirmed.
 3. **Reconstruct from the code.** Agents draft what the app seems to do: features, roles and permissions, the data and its lifecycle, outside services. Every statement is marked *inferred from code* until the user confirms it.
 4. **Never treat the code as intent.** Code written by prompting can be wrong, so documenting current behaviour as intended would bake in its bugs. Checks are asked blind for this reason: the user says what should happen before seeing what the code does.
 5. **Save what was confirmed.** With the user's agreement, asked once, Inspect writes the confirmed answers as short, plain docs in the repo: what the app is for, roles and permissions, the data model, and decisions. It adds a pointer in CLAUDE.md so later AI sessions read them. Anything not confirmed stays marked as inferred.
@@ -148,6 +193,15 @@ Inspect is finished when all of these hold. They are Imagineer's suggestion, not
 - Stryker catches at least **80%** of breaks in the inspected code (the bench app is at 30%).
 - **2** attack rounds in a row find nothing new.
 - In code the user confirms as critical (money, data, permissions), every surviving mutant is killed by a test or explained in a recorded answer.
+
+### Roadmap
+
+Each step is its own release, measured on the bench app before and after, and kept only if it finds at least as much at no more cost.
+
+1. **Secret scanning.** The biggest risk with no cover today, and the tools exist.
+2. **Intent from more than one angle, and the no-docs scaffold.** What sets Imagineer apart from a scanner: it finds out what the user wants, not only what the code does.
+3. **The readability review agent, and property-based tests in proofs.**
+4. **The data safety and foundations additions.**
 
 ## `/build`
 
@@ -229,11 +283,11 @@ Decided 2026-11-05 from the research in [docs/research/grading.md](../research/g
 
 | Group | Dimension | Plain question | Main evidence |
 |---|---|---|---|
-| Trust | Test strength | Would the tests notice if something broke? | Stryker kill rate |
+| Trust | Test strength | Would the tests notice if something broke? | Stryker kill rate; coverage beside it (planned) |
 | Trust | Matches your intent | Does it do what you meant? | Questions resolved; each answer backed by a test seen failing, then passing |
-| Trust | Security and permissions | Can someone see or do what they shouldn't? | Role × action tests, refusals checked on the server |
-| Trust | Data safety | Could you lose or mix up your data? | Prod and dev kept apart, backups restored in a throwaway copy |
-| Care | Structure | Is the code tidy enough to change safely? | Fallow |
+| Trust | Security and permissions | Can someone see or do what they shouldn't, or find a secret? | Role × action tests, refusals checked on the server, known-vulnerable packages, secret scanning of files and history (planned) |
+| Trust | Data safety | Could you lose or mix up your data? | Data attacks, prod and dev kept apart, safe migrations and transactions (planned), backups restored in a throwaway copy |
+| Care | Code quality | Is the code easy to change safely, and easy to read? | Fallow, a readability review (planned) |
 | Care | Foundations | Can someone else run and check it? | Lockfile, typecheck, CI runs the tests, README commands work, env vars documented |
 
 **Four states**, each always shown with an icon, a word and a colour, so it reads without colour too:
@@ -242,16 +296,16 @@ Decided 2026-11-05 from the research in [docs/research/grading.md](../research/g
 |---|---|
 | ✓ Strong | Meets the threshold, with evidence |
 | ! Weak | Below the threshold, or only claimed |
-| ✕ Failing | A known break or gap that matters |
+| ✕ At risk (`failing` in the results file; called Failing before 0.3.0) | A known break or gap that matters |
 | ? Not checked | Not measured yet; shows the reason and the next step |
 
 No headline number or letter. Numbers are one click down, for the owner.
 
 **Overall: the weakest link, never an average.**
 
-- Any trust dimension Failing makes the overall Failing.
+- Any trust dimension At risk makes the overall At risk.
 - Any trust dimension Not checked makes the overall "Not proven yet"; it cannot be Strong.
-- Structure and Foundations can pull the overall down to Weak, never to Failing.
+- Structure and Foundations can pull the overall down to Weak, never to At risk.
 
 **Evidence rules.**
 
@@ -263,7 +317,7 @@ No headline number or letter. Numbers are one click down, for the owner.
 
 **Critical code.** For code the user confirms as critical (money, data, permissions), every surviving mutant must be killed by a test or explained in a recorded answer. Elsewhere the threshold is the Stryker percentage in the finish thresholds.
 
-**Bench app today: ✕ Failing.** Test strength ✕ (30.5%), Data safety ✕ (prod/dev split untested, restore only claimed), Security ! , Intent ?, Structure ! (Fallow 81).
+**Bench app today: ✕ At risk.** Test strength ✕ (30.5%), Data safety ✕ (prod/dev split untested, restore only claimed), Security ! , Intent ?, Structure ! (Fallow 81).
 
 ## Improving Imagineer
 

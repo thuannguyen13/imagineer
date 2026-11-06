@@ -87,3 +87,11 @@ The owner found the version moved too fast: 0.2.0 to 0.10.0 in two days, because
 ## 2026-11-06 — Questions asked blind
 
 The owner found the question format led the user: showing "You'd expect" (Inspect's guess) and "Today" (the code) before the answer invites agreement, and leaves a non-engineer to spot the difference between two similar sentences. An empty box asking for their expectation first was weighed and set aside: typing an expectation from scratch is hard without technical knowledge, and vague answers cannot be proven by a test. Chosen: predict, then reveal. A check describes a situation and offers possible outcomes, one of them what the app does today, unmarked and in an order that does not give it away. A match is confirmed in one step; a difference becomes a gap, and only then is today's behaviour shown, with "Fix it" or "Keep it as it is". The big picture and design decisions, where there is nothing to compare with, stay choices with a recommended suggestion. Released as 0.3.0, since the question format and how answers are recorded change.
+
+## 2026-11-06 — What Inspect checks, per area
+
+The owner restated Inspect's goal: keep trying to break the system and turn what it finds into a grade that shows where the codebase needs to improve, for people who dream up software with little technical knowledge. The design doc's "What Inspect checks" section now says, per area, what Inspect does today and what is planned, with a roadmap: secret scanning; intent asked from more than one angle and a scaffold for repos with no docs; a readability review agent and property-based tests in proofs; then data safety and foundations additions. Three choices settled:
+
+- **Secret scanning uses gitleaks**, which also searches the git history, where a deleted key still leaks. No weaker fallback: a pinned release is downloaded into Imagineer's tools folder (outside the repo, checksum checked, as Stryker is installed), and if that fails the scan shows as not checked with the reason.
+- **Structure is renamed Code quality**, since readability becomes a main focus. The area's id stays `structure`, so earlier results still load.
+- **A second angle only for answers about data, money and permissions**, where a wrong guess costs most; other answers keep one question, so the user is not asked everything twice.
