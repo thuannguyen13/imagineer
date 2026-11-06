@@ -106,7 +106,10 @@ function fallow(out) {
 
 function stryker(out, isEstimate) {
   const { copy, repoFacts } = state(out)
-  const concurrency = Math.max(1, Math.min(8, availableParallelism() - 2))
+  // Each mutant runs the whole test suite, which usually uses every core itself: running
+  // many at once slows each past its time limit, and breaks then time out instead of being
+  // caught. A quarter of the cores, at most four, keeps runs near their own speed.
+  const concurrency = Math.max(1, Math.min(4, Math.floor(availableParallelism() / 4)))
   const own = repoFacts.tools.stryker.inRepo
   // Imagineer's own Stryker lives in a tools folder of its own, never in the project's
   // node_modules: adding a package there can make npm drop the project's platform binaries.
@@ -143,14 +146,17 @@ function stryker(out, isEstimate) {
         reporters: ['json', 'clear-text'],
         jsonReporter: { fileName: 'reports/mutation/mutation.json' },
         tempDirName: '.stryker-tmp',
-        timeoutMS: 60_000,
+        // A mutant's limit is the clean run's time × timeoutFactor + timeoutMS.
+        timeoutFactor: 3,
+        timeoutMS: 30_000,
       }),
     )
   }
 
   const argv = [...command, config, '--concurrency', String(concurrency), '--reporters', 'json,clear-text']
   const mutate = arg('mutate')
-  if (mutate) argv.push('--mutate', mutate)
+  // Tests are never mutated, whatever the scope names.
+  if (mutate) argv.push('--mutate', [mutate, '!**/*.test.*', '!**/*.spec.*', '!**/__tests__/**', '!**/test/**', '!**/tests/**'].join(','))
   if (isEstimate) argv.push('--dryRunOnly')
   const result = run(argv, { cwd: copy.path, timeoutMs: isEstimate ? 15 * 60_000 : 6 * 60 * 60_000 })
   const log = result.stdout + '\n' + result.stderr
@@ -158,7 +164,8 @@ function stryker(out, isEstimate) {
   if (isEstimate) {
     const mutants = Number(log.match(/with (\d+) mutant/)?.[1] ?? NaN)
     const testSeconds = Number(log.match(/Ran [\d.]+ tests? in ([\d.]+) seconds?/)?.[1] ?? NaN)
-    const minutes = Number.isFinite(mutants) && Number.isFinite(testSeconds) ? Math.ceil((mutants * testSeconds) / concurrency / 60) : null
+    // Runs side by side slow each other down; 1.5 is what the first real project showed at this concurrency.
+    const minutes = Number.isFinite(mutants) && Number.isFinite(testSeconds) ? Math.ceil((mutants * testSeconds * 1.5) / concurrency / 60) : null
     writeJson(join(out, 'stryker-estimate.json'), { ok: result.ok, mutants, testSeconds, concurrency, minutes, output: result.ok ? '' : tail(log) })
     console.log(result.ok ? `Stryker: ${mutants} mutants, about ${minutes} minutes with ${concurrency} at a time.` : `Stryker dry run failed:\n${tail(log)}`)
     return

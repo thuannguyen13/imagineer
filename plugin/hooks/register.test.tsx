@@ -282,3 +282,34 @@ test('the self-check’s flags about Imagineer itself are shown, with the way to
   expect(result.text).toContain('Q8 was proven by a test, yet attack A7 broke the same behaviour.')
   expect(result.text).toContain('/imagineer:feedback')
 })
+
+const DIALOG = (metadataSource?: string) => ({
+  plugin: 'imagineer',
+  component: 'AskUserQuestion',
+  props: {
+    tool: 'AskUserQuestion',
+    questions: [{ question: 'Bo can still read deal notes after losing Pipeline access.', header: 'Q4 Access', multiSelect: false, options: [{ label: 'Must not happen', description: 'Bo stops seeing them.' }, { label: 'Not sure', description: 'Explain it another way.' }] }],
+    ...(metadataSource ? { metadataSource } : {}),
+  },
+})
+
+test('Imagineer\'s question dialog gets a calm line and the engineers\' detail above Claude Code\'s own', async ($, on) => {
+  files(on, { '.claude/imagineer/questions.json': JSON.stringify({ questions: [{ id: 'Q4', detail: 'The notes rule skips the Pipeline View check (features/notes/rules.ts:14).' }] }) })
+  // Stands for Claude Code's own dialog, which the tree must hold exactly once.
+  on('ui.render', () => ({ type: 'engine', ref: 0 }))
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...DIALOG('imagineer'), surface })
+    expect(await ui.find({ type: 'Text', text: /Imagineer asks what your app should do/ })).toBeDefined()
+    expect((await ui.find({ type: 'Text', text: /For engineers/ }))?.text).toBe('For engineers · Q4: The notes rule skips the Pipeline View check (features/notes/rules.ts:14).')
+    await ui.unmount()
+  }
+})
+
+test('other questions keep Claude Code\'s dialog untouched', async ($, on) => {
+  files(on, {})
+  // Stands for Claude Code's own dialog, which the tree must hold exactly once.
+  on('ui.render', () => ({ type: 'engine', ref: 0 }))
+  const ui = await $.ui.mount({ ...DIALOG(), surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /Imagineer asks/ })).toBeUndefined()
+  await ui.unmount()
+})

@@ -72,40 +72,45 @@ Tool results need judgment. On the bench app, Fallow reports `public/app.js` as 
 
 ### Questions
 
-Every question goes to the user in plain language, with technical choices translated into consequences.
+Every question goes to the user in plain language, about people and features, never files or code.
 
 ```
-YOUR EXPECTATION:       what the user seems to want
-ACTUAL IMPLEMENTATION:  what the code does, as behaviour, not code
-EXAMPLE:                a concrete case, shown up front for data, money and permissions
-SUGGESTIONS:            2 to 4 answers to pick from, each with its consequence
-                        Other: type your own answer
+<the point, in one sentence>
+
+You'd expect: what the user seems to want
+Today:        what happens now, as something a person sees
+For example:  a concrete case with names and values
+
+What should happen?
+  ○ <suggestion>   what choosing it means for people or data
+  ○ <suggestion>   …
+  ○ Not sure       explain it another way, with a new example
+  ○ Other          type your own answer
 ```
 
-For example, on the bench app:
+For example, from the sales portal:
 
 ```
-YOUR EXPECTATION:       Only the person who created an expense can submit it.
-ACTUAL IMPLEMENTATION:  When an approver tries to submit a teammate's expense, they see
-                        "Only drafts can be submitted", which hints the expense exists.
-EXAMPLE:                Carol (approver) opens Alice's expense and presses Submit.
-                        She sees "Only drafts can be submitted".
-SUGGESTIONS:
-  1. Show "Not found" instead (recommended): Carol learns nothing about
-     expenses that are not hers.
-  2. Show "You can't submit someone else's expense": clearer for Carol, but it
-     confirms the expense exists.
-  3. Keep it as it is: no change, and the message stays misleading.
-  Other: type your own answer.
+Someone who loses access to the pipeline can still read its deal notes.
+
+You'd expect: Only people who can open a deal read the notes written on it.
+Today:        A person still listed on a deal keeps reading its notes after
+              their role loses the pipeline.
+For example:  Bo is on the Acme renewal. An admin moves Bo to a Marketing role
+              with no pipeline access. Bo opens Acme and reads every note.
+
+  ○ Must not happen   Bo stops seeing the deal's notes when the role changes.
+  ○ Fine as it is     Anyone still listed on a deal keeps reading its notes.
+  ○ Not sure          Explain it another way, with a new example.
 ```
 
-- **Suggestions** are written in plain language, each followed by what it means for the user's people or data. Put the recommended one first, say why, and include "keep it as it is" when that is a real option.
-- **Other is always offered**, so the user is never forced into an answer that does not fit. In Claude Code, ask with the AskUserQuestion tool, which adds the type-your-own option itself.
-- **A typed answer that is unclear** gets one follow-up question with a new example, not a guess.
-- Most consequential first: data, money, permissions, then behaviour, then wording.
-- A few questions per round, not all at once.
-- Do not ask what a test, doc or recorded decision already answers; cite it instead.
-- "Resolved" means answered, decided with a recorded reason, or explicitly deferred.
+- **Plain language is enforced.** The question script refuses a question whose user-facing text holds a file name, a function call, a code name or a line number. Those go in the question's `detail`, which the grade pane shows engineers in a dim line above the dialog.
+- **Ask about the product, not the code.** Which code is critical is asked as parts of the product a person knows (sign-in, roles, amounts); Inspect maps the answer to files itself.
+- **The point comes first**: one sentence of at most 100 characters.
+- **Every suggestion says what it means** for the user's people or data, the recommended one first.
+- **Not sure is always offered.** It keeps the question open and asks again with a new example from another angle; after two, the question is deferred with that reason.
+- **The script lays out every dialog the same way** (`questions.mjs ask`), so the format does not depend on the Lead's wording.
+- Most consequential first: data, money, permissions, then behaviour, then wording; a few per round; nothing a test, doc or recorded decision already answers.
 - Every confirmed answer becomes a test named after the question, so it is checked from then on.
 
 ### When the repo has no docs

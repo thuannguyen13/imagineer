@@ -26,8 +26,9 @@ const lines = n => `${n} ${n === 1 ? 'line' : 'lines'}`
 /** Stryker's mutation score: breaks the tests noticed, of breaks that ran. */
 export function mutationScore(report) {
   const files = Object.entries(report.files ?? {}).map(([path, file]) => {
-    const counts = { caught: 0, total: 0 }
+    const counts = { caught: 0, total: 0, timeouts: 0 }
     for (const mutant of file.mutants ?? []) {
+      if (mutant.status === 'Timeout') counts.timeouts += 1
       if (mutant.status === 'Killed' || mutant.status === 'Timeout') counts.caught += 1
       if (['Killed', 'Timeout', 'Survived', 'NoCoverage'].includes(mutant.status)) counts.total += 1
     }
@@ -35,7 +36,8 @@ export function mutationScore(report) {
   })
   const caught = files.reduce((n, f) => n + f.caught, 0)
   const total = files.reduce((n, f) => n + f.total, 0)
-  return { caught, total, score: total ? caught / total : 0, files }
+  const timeouts = files.reduce((n, f) => n + f.timeouts, 0)
+  return { caught, total, timeouts, score: total ? caught / total : 0, files }
 }
 
 export function testStrength(evidence) {
@@ -46,8 +48,20 @@ export function testStrength(evidence) {
   if (stryker.skipped) return dimension('test-strength', name, 'trust', 'failing', 'default', stryker.skipped)
   if (!stryker.ok || !mutation) return dimension('test-strength', name, 'trust', 'unchecked', 'none', 'Mutation testing could not run, so test strength is unknown.')
 
-  const { caught, total, score, files } = mutationScore(mutation)
+  const { caught, total, timeouts, score, files } = mutationScore(mutation)
   if (total === 0) return dimension('test-strength', name, 'trust', 'unchecked', stryker.measured, 'No code was mutated, so test strength is unknown.')
+  // A timeout counts as caught only when it is rare (a break that hangs the app). When most
+  // breaks time out, the runs were too slow to tell, and nothing about the tests is known.
+  if (timeouts > 10 && timeouts / total > 0.2) {
+    return dimension(
+      'test-strength',
+      name,
+      'trust',
+      'unchecked',
+      'none',
+      `${timeouts} of ${total} breaks timed out instead of being caught or missed, so this run cannot say whether the tests would notice. Measure again with fewer runs at once.`,
+    )
+  }
   const band = n => (n >= 0.8 ? 'strong' : n >= 0.6 ? 'weak' : 'failing')
   // Code the user confirmed as critical (money, data, permissions) must meet the bar
   // on its own, and every break no test noticed there must be explained.

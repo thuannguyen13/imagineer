@@ -39,8 +39,8 @@ Input: $ARGUMENTS
 3. **Intent.** Read the repository's docs and `$R/.claude/imagineer/questions.json` if it exists. If there are no docs and no answers, ask Inspect's big-picture questions first (what the app is for, who uses it, what is sensitive, what must never happen, which code handles money, personal data or permissions), with `node $IS/questions.mjs` as [Inspect](../inspect/SKILL.md#questions) describes.
 
 4. **Design.** Spawn `imagineer:architect` (model: the preset's `architect`) on the **design** task with `$R`, `$B`, the request and the answers. When it returns:
-   - Ask its questions, if any, with AskUserQuestion, and spawn it again with the answers if they change the design.
-   - Show the user the requirements R1… in plain words and ask them to approve or change them. Nothing is built before they approve. Without a user, go on only if the request itself says the requirements may be approved as drafted; otherwise list them and stop.
+   - Ask its questions, if any, with AskUserQuestion, the way [Inspect asks](../inspect/SKILL.md#how-to-write-a-question): plain language with no files or code, the point first, then what you'd expect, what happens today and an example; options that each say what they mean, and Not sure. Spawn it again with the answers if they change the design.
+   - Show the user the requirements R1… in plain words, with no files or code, and ask them to approve or change them. Nothing is built before they approve. Without a user, go on only if the request itself says the requirements may be approved as drafted; otherwise list them and stop.
    - Record each approved requirement: `node $BS require --repo $R --slug <slug> --id R1 --text "<requirement>"`.
    - `node $BS state --repo $R --slug <slug> --phase tests`.
 

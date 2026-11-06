@@ -122,7 +122,18 @@ test('detect finds env variables missing from .env.example, and no docs', t => {
   assert.equal(facts.lockfile, null)
 })
 
-const ask = (topic, extra = {}) => ({ topic, expectation: 'e', actual: 'a', example: 'x', suggestions: ['yes', 'no'], ...extra })
+const ask = (topic, extra = {}) => ({
+  topic,
+  point: 'Bo can still read deal notes after losing Pipeline access.',
+  expectation: 'Notes follow Pipeline access.',
+  actual: 'Anyone still on the deal reads its notes.',
+  example: 'Bo moves to Marketing and still reads the Acme notes.',
+  suggestions: [
+    { label: 'Must not happen', means: 'Bo stops seeing the notes.' },
+    { label: 'Fine as it is', means: 'Bo keeps reading them.' },
+  ],
+  ...extra,
+})
 
 test('questions are ranked data, money, permissions, behaviour, wording', () => {
   const ledger = addQuestions(emptyLedger(), [ask('wording'), ask('behaviour'), ask('permissions'), ask('data')])
@@ -132,7 +143,7 @@ test('questions are ranked data, money, permissions, behaviour, wording', () => 
 
 test('a question needs an example and at least two suggestions', () => {
   assert.throws(() => addQuestions(emptyLedger(), [ask('data', { example: '' })]), /example/)
-  assert.throws(() => addQuestions(emptyLedger(), [ask('data', { suggestions: ['only one'] })]), /two suggestions/)
+  assert.throws(() => addQuestions(emptyLedger(), [ask('data', { suggestions: [{ label: 'only one', means: 'x' }] })]), /two or three suggestions/)
   assert.throws(() => addQuestions(emptyLedger(), [ask('security')]), /Unknown topic/)
 })
 
@@ -222,4 +233,70 @@ test('the stop bar needs strong tests, clean structure and two clean attack roun
   assert.deepEqual(stopBar(dims, [attackRow('A1', 1, 'data', 'broke'), attackRow('A2', 2, 'data', 'held')]).missing, ['not yet 2 clean attack rounds'])
   assert.equal(stopBar(dims, [attackRow('A1', 1, 'data', 'broke'), attackRow('A2', 2, 'data', 'held'), attackRow('A3', 3, 'permissions', 'held')]).met, true)
   assert.equal(stopBar([{ id: 'test-strength', state: 'weak' }, { id: 'structure', state: 'strong' }], []).met, false)
+})
+
+import { askInput, dialogFor, notSure, plainLanguageProblem } from './questions.mjs'
+
+test('questions are plain language: code goes in detail, never in what the user reads', () => {
+  assert.equal(plainLanguageProblem('Bo can still read deal notes after losing Pipeline access.'), null)
+  assert.equal(plainLanguageProblem('canReadNote lets him in'), 'a code name in camelCase')
+  assert.equal(plainLanguageProblem('see features/notes/rules.ts'), 'a file name')
+  assert.equal(plainLanguageProblem('canSeeOpportunity(deal) is true'), 'a function call')
+  assert.equal(plainLanguageProblem('it is in `rules`'), 'backticks')
+  assert.equal(plainLanguageProblem('line :14 is wrong'), 'a line number')
+  assert.throws(() => addQuestions(emptyLedger(), [ask('permissions', { actual: 'canReadNote never checks it.' })]), /code details in "detail"/)
+  const ledger = addQuestions(emptyLedger(), [ask('permissions', { detail: 'canReadNote (features/notes/rules.ts:14) uses canSeeOpportunity.' })])
+  assert.match(ledger.questions[0].detail, /rules\.ts:14/)
+})
+
+test('every suggestion says what it means for people or data', () => {
+  assert.throws(() => addQuestions(emptyLedger(), [ask('data', { suggestions: [{ label: 'Yes', means: '' }, { label: 'No', means: 'x' }] })]), /needs "means"/)
+  assert.throws(() => addQuestions(emptyLedger(), [ask('data', { point: 'x'.repeat(120) })]), /at most 100 characters/)
+})
+
+test('the dialog leads with the point, then expectation, today and an example, and always offers Not sure', () => {
+  const ledger = addQuestions(emptyLedger(), [ask('permissions')])
+  const dialog = dialogFor(ledger.questions[0])
+  assert.equal(dialog.header, 'Q1 Access')
+  assert.match(dialog.question, /^Bo can still read deal notes after losing Pipeline access\.\n\nYou'd expect: Notes follow Pipeline access\.\nToday: .*\nFor example: .*\n\nWhat should happen\?$/)
+  assert.deepEqual(dialog.options.map(o => o.label), ['Must not happen', 'Fine as it is', 'Not sure'])
+  assert.equal(dialog.options[0].description, 'Bo stops seeing the notes.')
+  assert.ok(dialog.header.length <= 12)
+  const input = askInput(addQuestions(emptyLedger(), [ask('wording'), ask('data'), ask('money'), ask('behaviour'), ask('permissions')]))
+  assert.equal(input.questions.length, 4)
+  assert.equal(input.metadata.source, 'imagineer')
+  assert.deepEqual(input.questions.map(q => q.header.split(' ')[1]), ['Data', 'Money', 'Access', 'Behaviour'])
+})
+
+test('Not sure keeps the question open with a new example', () => {
+  const ledger = addQuestions(emptyLedger(), [ask('permissions')])
+  notSure(ledger, { id: 'Q1', example: 'Sam, an intern with no Pipeline access, opens a client he once covered.' })
+  assert.equal(ledger.questions[0].status, 'open')
+  assert.equal(ledger.questions[0].notSure, 1)
+  assert.match(dialogFor(ledger.questions[0]).question, /For example: Sam, an intern/)
+  assert.throws(() => notSure(ledger, { id: 'Q1', example: 'canReadNote returns true' }), /camelCase/)
+})
+
+test('detect: CI that runs the test command directly counts, and named env examples count', t => {
+  const repo = mkdtempSync(join(tmpdir(), 'imagineer-test-'))
+  t.after(() => rmSync(repo, { recursive: true, force: true }))
+  mkdirSync(join(repo, '.github/workflows'), { recursive: true })
+  mkdirSync(join(repo, 'lib'))
+  writeFileSync(join(repo, 'package.json'), JSON.stringify({ scripts: { test: 'vitest run' } }))
+  writeFileSync(join(repo, '.github/workflows/checks.yml'), 'jobs:\n  tests:\n    steps:\n      - run: npx vitest run --shard=${{ matrix.shard }}/3\n')
+  writeFileSync(join(repo, 'lib/db.ts'), 'const url = process.env.DATABASE_URL; const onVercel = process.env.VERCEL; const env = process.env.VERCEL_ENV')
+  writeFileSync(join(repo, '.env.local.example'), 'DATABASE_URL=postgres://localhost/app\n')
+  const facts = detect(repo)
+  assert.equal(facts.ci.runsTests, true)
+  assert.equal(facts.env.example, '.env.local.example')
+  assert.deepEqual(facts.env.missing, [])
+})
+
+test('test strength: a run where most breaks timed out says nothing, and is never Strong', () => {
+  const report = { files: { 'lib/permissions.ts': { mutants: [...Array.from({ length: 728 }, () => ({ status: 'Timeout' })), { status: 'Killed' }] } } }
+  const result = testStrength({ stryker: { ok: true, measured: 'default' }, mutation: report })
+  assert.equal(result.state, 'unchecked')
+  assert.match(result.summary, /728 of 729 breaks timed out/)
+  const rare = { files: { 'a.ts': { mutants: [...Array.from({ length: 95 }, () => ({ status: 'Killed' })), ...Array.from({ length: 5 }, () => ({ status: 'Timeout' }))] } } }
+  assert.equal(testStrength({ stryker: { ok: true, measured: 'default' }, mutation: rare }).state, 'strong')
 })

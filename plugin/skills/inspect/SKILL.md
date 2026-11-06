@@ -63,14 +63,16 @@ Keep the report short. Never change the repository's code: a test that shows the
 
 ## Questions
 
-The user is the only one who knows what the code should do. Ask them, in plain language, and record every answer with `node $S/questions.mjs`. The ledger is `$R/.claude/imagineer/questions.json`; it lasts across runs, so never ask again what it already answers.
+The user is the only one who knows what the code should do. Ask them, and record every answer with `node $S/questions.mjs`. The ledger is `$R/.claude/imagineer/questions.json`; it lasts across runs, so never ask again what it already answers.
+
+**Write for someone who has never read code.** Questions name people, features and what happens to them, never files, functions or line numbers. `questions.mjs add` refuses a question whose user-facing text holds a file name, a function call, a code name or a line number; that belongs in `detail`, which only engineers see.
 
 ### What to ask about
 
-1. **The big picture, first.** When the ledger is empty, start with at most 5 questions, each with suggestions drawn from the code: what the app is for; who uses it and in which roles; what is sensitive (money, personal data); what must never happen; and **which parts of the code handle money, personal data or permissions**. Record the last one's answer with `--critical <glob>,<glob>`, naming the files in the question so the user confirms them (for example "`src/auth.ts` (sign-in) and `src/expenses.ts` (approvals)"). When the repo has no docs (`detect.json`: `docs.level` is `none`), these answers are also what step 10 saves as docs.
-2. **Then the findings.** Run `node $S/questions.mjs findings --repo $R --out $O`. Each item is a Fallow finding or a line of code where breaks went unnoticed (`kind: mutant`, with the `code` line), or a possible security weakness (`kind: security`). Read the code around each one. Most consequential first: items in critical code (`critical: true`), then data, money and permissions, then behaviour, then wording.
-   - Group items that are about one behaviour into one question, and list their `key`s under `about`.
-   - **Do not ask what is already answered.** If the repository's docs, tests or a recorded decision settle it, add it as a question all the same, with a real `expectation`, `actual` and `example` saying what was settled, then record it yourself as `--status decided` with the reason citing the file, and `--dismiss` its keys. The ledger must say what was decided, not only that something was. A break that changes nothing anyone can observe (only an error message's text, a log line) is also decided by you, with that reason.
+1. **The big picture, first.** When the ledger is empty, ask at most 5 questions, each with suggestions drawn from the code: what the app is for; who uses it and in which roles; what is sensitive (money, personal data); what must never happen; and **which parts of the product handle money, personal data or who may do what**. Ask that last one about parts of the product a person knows ("Sign-in", "Roles and permissions", "Amounts and commission"), as a multiple choice (`"multi": true`), never about files. You map the answer to the code: record it with `--critical <glob>,<glob>`, and put which files each part means in the question's `detail`. When the repo has no docs (`detect.json`: `docs.level` is `none`), these answers are also what step 10 saves as docs.
+2. **Then the findings.** Run `node $S/questions.mjs findings --repo $R --out $O`. Each item is a Fallow finding, a line of code where breaks went unnoticed (`kind: mutant`, with the `code` line), or a possible security weakness (`kind: security`). Read the code around each one. Most consequential first: items in critical code (`critical: true`), then data, money and permissions, then behaviour, then wording.
+   - Group items about one behaviour into one question, and list their `key`s under `about`.
+   - **Do not ask what is already answered.** If the repository's docs, tests or a recorded decision settle it, add it all the same in plain words saying what was settled, then record it yourself as `--status decided` with the reason citing the file, and `--dismiss` its keys. A break no one could observe (only an error message's text, a log line) is also decided by you, with that reason.
    - Leave out what does not matter for this repo. Ask about at most 12 items in a run.
 
 ### How to write a question
@@ -80,29 +82,37 @@ Each question is a JSON object for `node $S/questions.mjs add --repo $R` (an arr
 ```json
 {
   "topic": "permissions",
-  "expectation": "Sign-in by user id works only on a developer's machine, never in production.",
-  "actual": "Nothing checks this: if the check that blocks it in production were removed, no test would notice.",
-  "example": "Someone sends 'x-user-id: 5' to the live app and is signed in as Erin, an admin.",
-  "suggestions": ["Must never work in production (recommended): add a test that fails if it does", "It is fine either way: the live app has its own sign-in in front"],
-  "about": ["mutant:src/auth.ts:17"]
+  "point": "Someone who loses access to the pipeline can still read its deal notes.",
+  "expectation": "Only people who can open a deal read the notes written on it.",
+  "actual": "A person still listed on a deal keeps reading its notes after their role loses the pipeline.",
+  "example": "Bo is on the Acme renewal. An admin moves Bo to a Marketing role with no pipeline access. Bo opens Acme and reads every note on the deal.",
+  "suggestions": [
+    { "label": "Must not happen", "means": "Bo stops seeing the deal's notes the moment the role changes." },
+    { "label": "Fine as it is", "means": "Anyone still listed on a deal keeps reading its notes." }
+  ],
+  "detail": "The notes rule checks only that the person is on the deal, not that their role has Pipeline View (features/notes/rules.ts:14).",
+  "about": []
 }
 ```
 
-- `topic` is one of `data`, `money`, `permissions`, `behaviour`, `wording`.
-- `expectation` is what the user seems to want. Without docs, start it with "My guess (no docs found):".
-- `actual` is what the code does, as behaviour a person sees, never code.
-- `example` is a concrete case with names and values. Always give one for data, money and permissions.
-- `suggestions`: 2 to 4 answers, the recommended one first and marked, each with what it means for the user's people or data. Include "keep it as it is" when that is a real option.
+- `point`: the one thing at stake, in one sentence of at most 100 characters. It is what the user reads first.
+- `expectation`: what the user seems to want. Without docs, start it with "My guess (no docs found):".
+- `actual`: what happens today, as something a person sees.
+- `example`: a concrete case with names and values. Always give one for data, money and permissions.
+- `suggestions`: two or three, the recommended one first, each a short `label` (at most 40 characters) and `means`: what choosing it means for the user's people or data. Include "Keep it as it is" when that is a real option. Do not add "Not sure": it is always added for you.
+- `detail`: optional, for engineers: the files, functions and lines behind it. Never shown in the question; the grade pane shows it in a dim line above the dialog.
 
 ### Asking
 
-1. `node $S/questions.mjs next --repo $R --limit 4` gives the next questions, most consequential first.
-2. Ask them with one AskUserQuestion call: for each, a header of at most 12 characters, the question text holding the expectation, the actual behaviour and the example on separate lines, and the suggestions as options. AskUserQuestion adds "Other" for the user's own words.
-3. Record each answer: `node $S/questions.mjs answer --repo $R --id Q3 --status answered --answer "<their words or the option>"`, adding `--own` when they typed their own answer instead of picking a suggestion. When the answer says a break does not matter, add `--dismiss` with its `about` keys. When it confirms the behaviour, dismiss nothing: the next version proves it with a test. When a typed answer is unclear, ask one follow-up with a new example before recording it.
-4. Regrade: `node $S/grade.mjs --repo $R --out $O --status waiting` while questions are open, `--status done` once none are.
-5. After a round, ask whether to go on with the next questions or stop for now. Open questions stay in the ledger for the next run.
+1. Run `node $S/questions.mjs ask --repo $R --limit 4` and pass its output **as it is** to AskUserQuestion: its `questions` and `metadata`. It lays each question out the same way: the point first, then "You'd expect", "Today" and "For example", with the suggestions and "Not sure". The `metadata` marks the dialog as Imagineer's, so the grade pane draws its line and the engineers' detail above it.
+2. Record each answer:
+   - **A suggestion:** `node $S/questions.mjs answer --repo $R --id Q3 --status answered --answer "<the option and what it means>"`. When it says a break does not matter, add `--dismiss` with its `about` keys. When it confirms the behaviour, dismiss nothing: it is proven with a test next.
+   - **Their own words** (Other): record them as they wrote them, with `--own`. If they are unclear, treat it as Not sure.
+   - **Not sure:** do not record an answer. Write a new example, from another angle, and if it helps say the point another way: `node $S/questions.mjs not-sure --repo $R --id Q3 --example "<new example>" [--point "<said another way>"]`. It stays open and comes back in the next ask. After two Not sures, defer it with `--status deferred` and the reason "Not sure after two examples", or settle it from the docs if they answer it.
+3. Regrade: `node $S/grade.mjs --repo $R --out $O --status waiting` while questions are open, `--status done` once none are.
+4. After a round, ask whether to go on with the next questions or stop for now. Open questions stay in the ledger for the next run.
 
-**Without a user** (AskUserQuestion is not available, as in `claude -p` or a scheduled run): add the questions, regrade with `--status waiting`, list the open questions in your report with their suggestions, and stop.
+**Without a user** (AskUserQuestion is not available, as in `claude -p` or a scheduled run): add the questions, regrade with `--status waiting`, list the open questions in your report with their point and suggestions, and stop.
 
 
 ## When the repository has no docs

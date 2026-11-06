@@ -2,6 +2,28 @@
 
 Imagineer's releases, newest first. Below 1.0, a `0.y.0` release may change how Imagineer is used; such changes are listed first under **Changes you need to know**. See [docs/proposals/inspect-and-build.md](docs/proposals/inspect-and-build.md#versioning).
 
+## 0.9.0 — unreleased
+
+Clearer questions, for people who do not read code.
+
+### Changes you need to know
+
+- A question's text can no longer hold file names, function names, code names or line numbers: Inspect refuses them and keeps such details in a separate line for engineers. Questions written for 0.8.0 without a `point` or with plain-text suggestions are refused when added.
+
+### New
+
+- Every question starts with its point in one sentence, then what you'd expect, what happens today, and an example, laid out the same way each time.
+- Each answer you can pick says what it means for your people or data, and **Not sure** is always there: Inspect then explains it again with a new example.
+- Which code is critical is asked as parts of your product (sign-in, roles, amounts), not as a list of files.
+- In the terminal and the Desktop app, Imagineer's questions get a calm line above the dialog, and engineers see each question's code details in a dim line there.
+- Build asks its Architect's questions and shows its requirements the same way.
+
+### Fixed
+
+- **Test strength could read Strong when it had measured nothing.** On the first real project, 728 of 729 breaks timed out because eight copies of a full test suite ran at once, and timeouts counted as caught: a false 100%. Now a run where most breaks time out reads as not checked, never Strong (and Build's done bar is not met); mutants run a quarter of the cores at a time with a limit based on the suite's real duration; the estimate allows for runs slowing each other; and test files are never mutated.
+- Attack and proof tests no longer stay in the throwaway copy after they run: a test that broke through fails on purpose, and made every later measurement of the copy fail.
+- Foundations no longer says CI skips the tests when a workflow runs the test command directly (for example `npx vitest run --shard=1/3`), and it recognises named env examples such as `.env.local.example`. Variables the hosting platform sets itself (Vercel, Netlify, Render, Fly, GitHub) need no example. Both were found on the first real project.
+
 ## 0.8.0 — 2026-11-05
 
 Imagineer checks itself, and you can tell it when it got something wrong.

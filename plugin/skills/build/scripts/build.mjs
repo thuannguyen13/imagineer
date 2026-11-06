@@ -143,6 +143,9 @@ export function barFrom({ tests, typecheck, audit, mutation, critical }) {
   if (mutation === 'skipped') missing.push('mutation testing skipped')
   else if (mutation) {
     if (mutation.total === 0) missing.push('no changed source code to mutate')
+    else if ((mutation.timeouts ?? 0) > 10 && mutation.timeouts / mutation.total > 0.2) {
+      missing.push(`${mutation.timeouts} of ${mutation.total} breaks timed out, so the run cannot say whether the tests would notice`)
+    }
     else if (mutation.caught / mutation.total < 0.8) {
       missing.push(`tests catch ${Math.round((mutation.caught / mutation.total) * 100)}% of breaks in the changed code, below 80%`)
     }

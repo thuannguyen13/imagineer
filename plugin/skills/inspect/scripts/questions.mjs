@@ -5,6 +5,8 @@
 //   node questions.mjs findings --repo <repo> --out <run folder>   what needs a question, as JSON
 //   node questions.mjs add      --repo <repo>                       questions as a JSON array on stdin
 //   node questions.mjs next     --repo <repo> [--limit 4]           open questions, most consequential first
+//   node questions.mjs ask      --repo <repo> [--limit 4]           the next questions as AskUserQuestion input
+//   node questions.mjs not-sure --repo <repo> --id Q3 --example "<a new example>" [--point "<said another way>"]
 //   node questions.mjs answer   --repo <repo> --id Q3 --status answered|decided|deferred
 //                               --answer "<the user's words>" [--reason "<why>"]
 //                               [--dismiss <key>,<key>] [--critical <glob>,<glob>] [--own]   --own: the user typed their own answer
@@ -100,29 +102,107 @@ export function findings(out) {
 
 const rank = question => TOPICS.indexOf(question.topic) * 10_000 + Number(question.id.slice(1))
 
+/** Words a person without technical knowledge reads, by topic, for the dialog's chip. */
+export const TOPIC_WORD = { data: 'Data', money: 'Money', permissions: 'Access', behaviour: 'Behaviour', wording: 'Wording' }
+
+const CODE_PATTERNS = [
+  [/`/, 'backticks'],
+  [/\b[\w./-]+\.(?:[cm]?[jt]sx?|py|rb|go|sql|json|ya?ml|css|html|md)\b/i, 'a file name'],
+  [/\b[A-Za-z_$][\w$]*\(/, 'a function call'],
+  [/\b[a-z]+[A-Z][A-Za-z0-9]*\b/, 'a code name in camelCase'],
+  [/\b[a-z]+_[a-z_]+\b/, 'a code name with underscores'],
+  [/:\d+\b/, 'a line number'],
+]
+
+/** Why a text a user reads is not plain language, or null. Code details belong in `detail`. */
+export function plainLanguageProblem(text) {
+  for (const [pattern, what] of CODE_PATTERNS) if (pattern.test(text ?? '')) return what
+  return null
+}
+
+const MAX_POINT = 100
+const MAX_LABEL = 40
+
+/** A suggestion: a short label and what choosing it means for people or data. */
+function toSuggestion(raw, id) {
+  const suggestion = typeof raw === 'string' ? { label: raw, means: '' } : { label: raw?.label ?? '', means: raw?.means ?? '' }
+  if (!suggestion.label.trim()) throw new Error(`${id}: each suggestion needs a label.`)
+  if (suggestion.label.length > MAX_LABEL) throw new Error(`${id}: the suggestion "${suggestion.label}" is longer than ${MAX_LABEL} characters; put the rest in "means".`)
+  if (!suggestion.means.trim()) throw new Error(`${id}: the suggestion "${suggestion.label}" needs "means": what choosing it means for people or data.`)
+  return suggestion
+}
+
 export function addQuestions(ledger, incoming) {
   let next = ledger.questions.reduce((n, q) => Math.max(n, Number(q.id.slice(1))), 0)
   for (const raw of incoming) {
+    const id = `Q${next + 1}`
     if (!TOPICS.includes(raw.topic)) throw new Error(`Unknown topic "${raw.topic}". Topics: ${TOPICS.join(', ')}`)
-    for (const field of ['expectation', 'actual', 'example']) {
-      if (typeof raw[field] !== 'string' || !raw[field].trim()) throw new Error(`Each question needs a "${field}".`)
+    for (const field of ['point', 'expectation', 'actual', 'example']) {
+      if (typeof raw[field] !== 'string' || !raw[field].trim()) throw new Error(`${id} needs a "${field}".`)
     }
-    if (!Array.isArray(raw.suggestions) || raw.suggestions.length < 2) throw new Error('Each question needs at least two suggestions.')
+    if (raw.point.length > MAX_POINT) throw new Error(`${id}: "point" is one short sentence, at most ${MAX_POINT} characters.`)
+    if (!Array.isArray(raw.suggestions) || raw.suggestions.length < 2 || raw.suggestions.length > 3) {
+      throw new Error(`${id} needs two or three suggestions; "Not sure" is added for you.`)
+    }
+    const suggestions = raw.suggestions.map(s => toSuggestion(s, id))
+    const userFacing = [raw.point, raw.expectation, raw.actual, raw.example, ...suggestions.flatMap(s => [s.label, s.means])]
+    for (const text of userFacing) {
+      const problem = plainLanguageProblem(text)
+      if (problem) throw new Error(`${id}: "${text.slice(0, 60)}…" holds ${problem}. Say it as behaviour a person sees, and put code details in "detail".`)
+    }
     next += 1
     ledger.questions.push({
-      id: `Q${next}`,
+      id,
       topic: raw.topic,
+      point: raw.point,
       expectation: raw.expectation,
       actual: raw.actual,
       example: raw.example,
-      suggestions: raw.suggestions,
+      suggestions,
+      multi: raw.multi === true,
+      detail: raw.detail ?? '',
       about: raw.about ?? [],
       status: 'open',
       answer: null,
       reason: null,
       test: null,
+      notSure: 0,
     })
   }
+  return ledger
+}
+
+export const NOT_SURE = { label: 'Not sure', description: 'Explain it another way, with a new example.' }
+
+/** The dialog for one question: the point, then what you would expect, what happens today, and an example. */
+export function dialogFor(q) {
+  const question = `${q.point}\n\nYou'd expect: ${q.expectation}\nToday: ${q.actual}\nFor example: ${q.example}\n\nWhat should happen?`
+  return {
+    question,
+    header: `${q.id} ${TOPIC_WORD[q.topic] ?? 'Question'}`.slice(0, 12),
+    multiSelect: q.multi === true,
+    options: [...q.suggestions.map(s => ({ label: s.label, description: s.means })), NOT_SURE],
+  }
+}
+
+/** AskUserQuestion's input for the next open questions, marked as Imagineer's so the mod can draw beside them. */
+export const askInput = (ledger, limit = 4) => ({
+  questions: openQuestions(ledger).slice(0, Math.min(limit, 4)).map(dialogFor),
+  metadata: { source: 'imagineer' },
+})
+
+/** "Not sure": the question stays open with a new example, said another way, for one more try. */
+export function notSure(ledger, { id, example, point }) {
+  const question = ledger.questions.find(q => q.id === id)
+  if (!question) throw new Error(`No question ${id}.`)
+  if (!example?.trim()) throw new Error('A "Not sure" needs a new example to ask with.')
+  for (const text of [example, point].filter(Boolean)) {
+    const problem = plainLanguageProblem(text)
+    if (problem) throw new Error(`"${text.slice(0, 60)}…" holds ${problem}; say it as behaviour a person sees.`)
+  }
+  question.notSure = (question.notSure ?? 0) + 1
+  question.example = example
+  if (point) question.point = point
   return ledger
 }
 
@@ -173,6 +253,13 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       const ledger = addQuestions(loadLedger(repo), Array.isArray(incoming) ? incoming : [incoming])
       save(repo, ledger)
       console.log(`${ledger.questions.length} questions; ${openQuestions(ledger).length} open.`)
+    } else if (step === 'ask') {
+      console.log(JSON.stringify(askInput(loadLedger(repo), Number(arg('limit', '4'))), null, 2))
+    } else if (step === 'not-sure') {
+      const ledger = notSure(loadLedger(repo), { id: arg('id'), example: arg('example'), point: arg('point') })
+      save(repo, ledger)
+      const q = ledger.questions.find(x => x.id === arg('id'))
+      console.log(`${q.id} stays open with a new example (Not sure ${q.notSure} ${q.notSure === 1 ? 'time' : 'times'}).${q.notSure >= 2 ? ' Twice not sure: defer it with a reason, or settle it from the docs.' : ''}`)
     } else if (step === 'next') {
       console.log(JSON.stringify(openQuestions(loadLedger(repo)).slice(0, Number(arg('limit', '4'))), null, 2))
     } else if (step === 'answer') {
@@ -198,7 +285,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     } else if (step === 'summary') {
       console.log(JSON.stringify(summary(loadLedger(repo)), null, 2))
     } else {
-      throw new Error('Steps: findings, add, next, answer, equivalent, summary')
+      throw new Error('Steps: findings, add, next, ask, not-sure, answer, equivalent, summary')
     }
   } catch (error) {
     console.error(error.message)
