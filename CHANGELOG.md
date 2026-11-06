@@ -21,6 +21,7 @@ Questions asked blind.
 
 ### Fixed
 
+- In the Desktop app, VS Code and on mobile, the pane's area rows were one flat line each, without colours or columns, because those apps draw a button as its plain label. Each row is now laid out in columns there, with its colours, and a **Details** button opens its evidence. The terminal is unchanged.
 - The self-check said "done bar" about a Build stuck at its round limit; it now says "done thresholds".
 
 ## 0.2.1 — unreleased

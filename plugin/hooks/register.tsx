@@ -189,6 +189,7 @@ export const register: Register = on => {
     if (summary.kind !== 'results') return <Text dimColor>{summaryText(summary)}</Text>
 
     const tab = await read($, tabAtom)
+    const isTerminal = e.surface === 'terminal'
     const overall = STATE_LABEL[summary.overall.state]
     const layout = rowLayout(e.props.bodyColumns)
     // The numbers line up in their own column, right-aligned, as wide as the widest.
@@ -230,8 +231,33 @@ export const register: Register = on => {
       const toggle = () => update($, openAtom, ids => (ids.includes(dimension.id) ? ids.filter(id => id !== dimension.id) : [...ids, dimension.id]))
       const plain = `${arrow}${label.icon} ${dimension.name} ${stateText}${metric ? ` ${metric.value} ${metric.label}` : ''}`
 
-      const button =
-        layout.kind === 'narrow' ? (
+      // Desktop, VS Code and mobile draw a Button as a native button with its plain label, so the
+      // terminal's styled row would arrive as one flat line. There the row is a layout of its own,
+      // columns that line up in a proportional font, with a small Details button to open it.
+      const button = !isTerminal ? (
+        <Box flexDirection="row" alignItems="center" gap={1}>
+          <Box width={2}>
+            <Text color={label.color}>{label.icon}</Text>
+          </Box>
+          <Box flexGrow={1} flexShrink={1}>
+            <Text>{dimension.name}</Text>
+          </Box>
+          <Box width={layout.kind === 'narrow' ? 10 : 13}>
+            <Text color={label.color}>{stateText}</Text>
+          </Box>
+          {layout.kind !== 'narrow' && (
+            <Box width={10} justifyContent="flex-end">
+              <Text>{metric ? metric.value : ''}</Text>
+            </Box>
+          )}
+          {layout.kind === 'wide' && (
+            <Box width={16}>
+              <Text dimColor>{metric?.label ?? ''}</Text>
+            </Box>
+          )}
+          <Button key={`row-${dimension.id}`} label={isOpen ? 'Hide' : 'Details'} dimColor onPress={toggle} />
+        </Box>
+      ) : layout.kind === 'narrow' ? (
           <Button key={`row-${dimension.id}`} label={plain} plain onPress={toggle}>
             <Text dimColor>{arrow}</Text>
             <Text color={label.color}>{label.icon}</Text>
@@ -251,7 +277,7 @@ export const register: Register = on => {
       return (
         <Box flexDirection="column">
           {button}
-          {layout.kind === 'narrow' && (
+          {isTerminal && layout.kind === 'narrow' && (
             <Box paddingLeft={4}>
               <Text>
                 <Text color={label.color}>{stateText}</Text>
@@ -260,7 +286,7 @@ export const register: Register = on => {
             </Box>
           )}
           {isOpen && (
-            <Box flexDirection="column" paddingLeft={5} marginBottom={1}>
+            <Box flexDirection="column" paddingLeft={isTerminal ? 5 : 3} marginBottom={1}>
               {dimension.summary !== '' && <Text>{dimension.summary}</Text>}
               {firstItems(dimension.items).map(item => (
                 <Box flexDirection="row">
@@ -307,7 +333,7 @@ export const register: Register = on => {
             </Box>
           )}
           <Box marginTop={1}>
-            <Text dimColor>Select a row for details.</Text>
+            <Text dimColor>{isTerminal ? 'Select a row for details.' : 'Press Details on a row to see its evidence.'}</Text>
           </Box>
         </Box>
       </Box>

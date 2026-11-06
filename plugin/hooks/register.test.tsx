@@ -126,10 +126,19 @@ test('status opens the pane: an aligned overview first, on every surface', async
     // The header: the verdict, the commit and when it was tested, nothing else.
     expect(await ui.find({ type: 'Text', text: /^abc1234 · tested Nov 6, 14:02$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /Test strength and data safety are failing/ })).toBeUndefined()
-    // One row per area, each a button: name, state, the number and what it counts.
+    // One row per area: name, state, the number and what it counts. In the terminal the row is
+    // the button; elsewhere a button draws only its plain label, so the row is columns of text,
+    // each part its own Text with its colour, and a Details button opens it.
     const row = await ui.find({ type: 'Button', key: 'row-test-strength' })
-    expect(row?.text).toMatch(/Test strength/)
-    expect(row?.text).toMatch(/51\/167/)
+    if (surface === 'terminal') {
+      expect(row?.text).toMatch(/Test strength/)
+      expect(row?.text).toMatch(/51\/167/)
+    } else {
+      expect(row?.text).toBe('Details')
+      expect(await ui.find({ type: 'Text', text: /^Test strength$/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /^51\/167$/ })).toBeDefined()
+      expect((await ui.findAll({ type: 'Text', text: /^Failing$/ })).length).toBeGreaterThan(0)
+    }
     expect(await ui.find({ type: 'Button', key: 'row-intent' })).toBeDefined()
     expect(await ui.find({ type: 'Button', key: 'tab-questions' })).toBeDefined()
     // All rows start closed: no evidence until a row is pressed.
