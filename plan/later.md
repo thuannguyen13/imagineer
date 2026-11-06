@@ -20,3 +20,9 @@ Possible scope: turn an incident into a regression test and a decision record. A
 - A separate verify-fix-repeat skill: forge owns the loop.
 - Full architecture review on each change.
 - Copying each application's architecture into this repository.
+
+## Destructive-command guard with buttons
+
+**Trigger:** users of Inspect or Build ask for protection against destructive commands (`rm -rf`, force pushes, database drops) in their own sessions.
+
+A mod that holds such a command and shows what it would change, with Proceed and Cancel, as Anthropic's `blast-radius` sample does. It would be the plugin's first mod that changes tool calls, so it needs its own on/off switch and stays out of the read-only grade mod.

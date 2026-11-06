@@ -2,7 +2,36 @@
 
 Imagineer's releases, newest first. Below 1.0, a `0.y.0` release may change how Imagineer is used; such changes are listed first under **Changes you need to know**. See [docs/proposals/inspect-and-build.md](docs/proposals/inspect-and-build.md#versioning).
 
-## 0.6.0 — unreleased
+## 0.8.0 — unreleased
+
+Imagineer checks itself, and you can tell it when it got something wrong.
+
+### New
+
+- **Self-check.** At the end of each Inspect and Build run, Imagineer looks at its own records for signs it went wrong: an agent that tried to step outside its role (the role guard keeps a record of each refusal), a tool that did not run, an answer it called proven that one of its own attacks broke, questions you mostly answered in your own words or that came back twice, and a Build stuck at its round limit. The pane shows them too.
+- **`/imagineer:feedback`** records what Imagineer said or did and what actually happened, as behaviour only, never your code, on your machine. You can then open a pre-filled GitHub issue and submit it yourself, save it as a file, or keep it private.
+- Each run ends with two optional questions: was anything asked that wasn't worth your time, and did we miss anything you know about.
+- Proofs and QA's tests cover every case a person would count as the same answer: for "required", also spaces, tabs, line breaks and invisible characters. Learned from a real miss (bench scenario L1).
+- Build waits for each agent it spawns, so a run without a user does not end early with an agent still working.
+- Inspect keeps its own Stryker in a tools folder outside the project, instead of adding it to the copy's `node_modules`, where npm could drop the project's platform binaries (found on the first real project: its test runner's binary went missing).
+- Build's pull request now carries the repository's grade as it stood before the change, with a reminder to inspect again after merging.
+
+## 0.7.0 — unreleased
+
+Build arrives.
+
+### New
+
+- `/imagineer:build <what to build>` builds a feature to Imagineer's bar, in its own branch and worktree:
+  - an **Architect** turns your goal, the docs and the code into requirements you approve, and a design with exact interfaces;
+  - **QA** writes the tests from that design before any code exists, and they must fail first;
+  - **Dev** implements until they pass;
+  - each round is measured like Inspect does: the typecheck, Fallow on what changed, and mutation testing of the changed code (80% of breaks caught, every break in critical code caught), then the Architect reviews the change against the design.
+- Roles are enforced, not just asked for: a hook refuses Dev any write to tests, QA any write outside tests, and the Architect and Inspect's attacker any write outside Imagineer's own files, and keeps all but Dev from committing and everyone from pushing.
+- Choose the models once: Recommended, Budget, Maximum or your own mix, saved for you across repositories.
+- The run ends with a pull request body that leads with each requirement and its evidence. Build never pushes, opens a pull request or merges without your yes, and never merges.
+
+## 0.6.0 — 2026-11-05
 
 The grade pane tells you more.
 
@@ -12,7 +41,7 @@ The grade pane tells you more.
 - The pane shows Inspect's stop bar, met or what is missing.
 - The pane lists the questions waiting for you, most consequential first, not only how many.
 
-## 0.5.0 — unreleased
+## 0.5.0 — 2026-11-05
 
 Inspect proves your answers and tries to break the app.
 
@@ -28,7 +57,7 @@ Inspect proves your answers and tries to break the app.
 - Inspect's stop bar: test strength meets the bar, no open structure findings, and 2 attack rounds in a row find nothing new. The report says what is missing.
 - When the repository has no docs, every guess is marked as one, and with your agreement the answers you confirmed are saved as short docs, with a pointer in `CLAUDE.md`.
 
-## 0.4.0 — unreleased
+## 0.4.0 — 2026-11-05
 
 Inspect asks you what the code should do.
 
@@ -42,7 +71,7 @@ Inspect asks you what the code should do.
   - Structure findings you resolve no longer count against it.
 - Without a user to answer (`claude -p`, a scheduled run), Inspect records the questions, marks the run as waiting, and lists them.
 
-## 0.3.0 — unreleased
+## 0.3.0 — 2026-11-05
 
 The first slice of Inspect: a real grade from measurements.
 

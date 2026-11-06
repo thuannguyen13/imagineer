@@ -9,12 +9,14 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Summary } from '../types'
 import {
+  FLAGS_PATH,
   findPackedRef,
   isActive,
   isSameCommit,
   MEASURED_LABEL,
   parseHead,
   QUESTIONS_PATH,
+  readFlags,
   questionLine,
   readOpenQuestions,
   readResults,
@@ -31,7 +33,7 @@ const POLL_MS = 3000
 // Change the tag when Summary's fields change: a value an earlier version
 // stored is then read as "no results" until the file is read again.
 const summaryAtom = atom({ plugin: 'imagineer', key: 'summary' } as const, { kind: 'none' } as Summary, {
-  shape: 'summary-2',
+  shape: 'summary-3',
 })
 
 let lastMtime: number | null = null
@@ -89,6 +91,7 @@ async function refresh($: EngineInterface): Promise<Summary> {
       ...lastBase,
       isStale: head !== null && !isSameCommit(head, lastBase.run.commit),
       openQuestions: readOpenQuestions(await readIf($, QUESTIONS_PATH)),
+      flags: readFlags(await readIf($, FLAGS_PATH)),
     }
   }
 
@@ -208,6 +211,15 @@ export const register: Register = on => {
             {summary.openQuestions.map(q => (
               <Text dimColor>{`   ${questionLine(q)}`}</Text>
             ))}
+          </Box>
+        )}
+        {summary.flags.length > 0 && (
+          <Box flexDirection="column">
+            <Text color="warning">Imagineer may have gone wrong on its side:</Text>
+            {summary.flags.map(flag => (
+              <Text dimColor>{`   ${flag}`}</Text>
+            ))}
+            <Text dimColor>   Run /imagineer:feedback to record or share it.</Text>
           </Box>
         )}
         <Text dimColor>

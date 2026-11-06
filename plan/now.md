@@ -12,9 +12,9 @@ Evidence gathered 2026-11-05: Stryker on `bench/app` kills 30.5% of mutants (`se
 
 ## B0 — Design
 
-- [ ] Design doc, decisions entry and this plan reviewed by the owner; committed.
+- [x] Design doc, decisions entry and this plan reviewed by the owner; committed (PR #9, 2026-11-05).
 - [x] Grading scale researched and chosen (2026-11-05): six dimensions, four states, weakest link, care dimensions capped at Weak, claims never Strong, every survivor in critical code explained. Research: [docs/research/grading.md](../docs/research/grading.md).
-- [ ] Stop bar numbers confirmed (proposed: Stryker 80% on inspected code, 2 clean attack rounds).
+- [x] Stop bar numbers confirmed by the owner (2026-11-05): Stryker 80% on inspected code, 2 clean attack rounds.
 
 ## B1 — Skeleton and status
 
@@ -46,30 +46,31 @@ Built in slices, each released on its own.
 
 - [x] Grade computed from the results file only, per the chosen scale: `grade.mjs` sets every state from evidence (B2).
 - [x] Pane shows the overall grade, each dimension with how it was measured, the stop bar, and the open questions, and marks the grade stale once HEAD moves past the measured commit (0.6.0). Evidence (2026-11-05): 13 mod tests pass; in a real headless session `/imagineer:status` listed the bar and the top 5 open questions at 0 turns, and showed ⟳ stale after a new commit; `claude plugin validate` still lists only file reads, the timer, state and drawing.
-- [ ] The same grade goes into the pull request Build opens (B4).
+- [x] The same grade goes into the pull request Build opens: `build.mjs pr-body` adds the repository's grade as it stood before the change, with the reminder to inspect again after merging.
 - [ ] The question dialog restyled by the mod: deferred until Build's dialogs settle, so both use one layout.
 
 ## B4 — Build
 
-- [ ] Agents: architect, dev, qa, each with its default model; the user's preset (Recommended, Budget, Maximum, or their own) saved per user and passed at spawn.
-- [ ] QA writes tests from the Architect's spec before or apart from Dev's code; Dev runs them and never edits tests.
-- [ ] Done when QA's tests pass and the change meets Inspect's bar.
-- [ ] Reuse from forge: run folder, state file and resume, finding IDs, reviewer hook.
-- [ ] Evidence: Build catches at least what forge's baseline catches on the forge bench scenarios.
+- [x] Agents: architect, dev, qa, each with its default model; the user's preset (Recommended, Budget, Maximum, or their own) saved per user in `~/.claude/imagineer/preferences.json` and passed at spawn.
+- [x] QA writes tests from the Architect's spec before Dev starts, and they must fail first; Dev runs them and never edits tests. Enforced by `hooks/role-guard.mjs` (8 tests).
+- [x] Done when QA's tests pass and the change meets the bar: typecheck, Fallow audit against the base, mutation testing of changed code at 80% with critical code fully covered (`build.mjs bar`).
+- [x] Reuse from forge: run folder, state file and resume, finding IDs (`F<k>` from the Architect's review), role guard in place of the reviewer hook.
+- [x] Evidence (2026-11-05): a headless Build of the bench's approvals feature, from a brief with the interface named, passed all four forge oracles it was never shown (F1, F2, F4, F5), with 59 of 59 tests and the typecheck passing. QA's tests failed before the feature existed. 8 agent spawns, $5.74. Round 2 caught 79% of breaks in the changed code (194 of 245), just under the bar; the run then ended early because the Lead had left QA running in the background, so Build now waits for every agent.
 
 ## B5 — Retire the old entry points
 
 - [x] guard, forge and ground, forge's agents and its reviewer hook removed from the plugin in 0.2.0 (2026-11-05, chosen by the owner), ahead of B2 and B4, so the plugin shows only the new design. Their text stays at tag `v0.1.0`; B2 takes ground's checklist and hooks from there, B4 forge's run folder, state, finding IDs and reviewer hook, and Dev's practices take guard's rules. `bench/prepare.sh` installs the skills of `IMAGINEER_REF`, default `v0.1.0`, so the existing scenarios still run as the baseline.
 - [x] README rewritten around the commands.
-- [ ] Decide whether the mod replaces the Python reviewer hook when Build brings review agents back, and gives a destructive-command guard buttons.
+- [x] Decided (2026-11-05): role limits stay in a settings hook, `hooks/role-guard.mjs`, in Node like the rest, so the mod stays read-only. A destructive-command guard with buttons is a candidate for `plan/later.md`, not this plan.
 
 ## B5.5 — Learning from runs
 
-- [ ] Self-check in the mod: rule broken, stuck, tool trouble, grade contradiction, poor questions, mod fault, cost.
-- [ ] `/imagineer:feedback` and the end-of-run retro write feedback records with a fingerprint to a local log.
-- [ ] Sharing: the user reviews the record, then a pre-filled GitHub issue or a saved file.
-- [ ] Owner-side triage and learn skills in the Imagineer repo (not in the plugin): label, group, rank, decide, turn an accepted issue into a bench scenario with an oracle.
-- [ ] Evidence: one real miss turned into a scenario that fails before the fix and passes after; one self-check flag raised on purpose in a test.
+- [x] Self-check (`feedback.mjs check`): role-guard refusals (logged by the hook), tools that did not run, a proven answer broken by an attack, questions answered mostly in the user's own words or asked twice, a Build stuck at 4 rounds. Shown in the pane and at the end of each run. Cost signals not yet: the run records do not hold cost.
+- [x] `/imagineer:feedback` and the end-of-run retro write feedback records with a fingerprint to `~/.claude/imagineer/feedback.jsonl`.
+- [x] Sharing: the user reviews the record, then opens a pre-filled GitHub issue and submits it, or saves a file.
+- [x] Owner-side triage and learn steps in `.claude/skills/triage-feedback/` (this repository only).
+- [x] Evidence (2026-11-05): a self-check flag raised on purpose in tests for each signal, including the role guard writing its refusal and the contradiction the bench run produced (Q8 proven, attack A7 broke it); 46 script tests and 14 mod tests pass.
+- [x] One real miss turned into a bench scenario that fails before the fix and passes after: L1, from A7. Before the boundary-case guidance the proof of "a description is required" passed (missed); after it, the proof fails on the app's invisible-character gap (caught). One run each: `bench/results/2026-11-05-learn-L1.md`.
 
 ## B6 — Real project
 
@@ -78,5 +79,5 @@ Built in slices, each released on its own.
 
 ## Still open from before
 
-- [ ] Choose a license before submitting to a plugin directory.
+- [x] No license (2026-11-05): the plugin stays private, for the owner. Revisit before any plugin directory submission.
 - [ ] Decide what happens to `plan/guard-low-risk-test` (unpushed guard test notes) and `forge/p5` (Bench v4).

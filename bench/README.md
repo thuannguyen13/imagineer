@@ -18,6 +18,7 @@ Seeded-defect scenarios that decide whether a skill is **validated** (`plan/deci
 | forge | F1 record scope, F2 rule checked after the write, F4 data leak, F5 invalid transition, F6 clean (false-positive trap), F8 resume, F9 dry run, F10 merge wait (manual, needs a disposable GitHub repo) |
 | ground | G1 access rules off, G2 secret in the browser, G3 dev on prod data, G4 backups never restored, G5 clean |
 | guard | guard-low, guard-medium, guard-high |
+| inspect (learned) | L1 a proof that misses invisible characters |
 
 G1–G5 need the ground skill. F3 (race) and F7 (unprovable requirement) were retired: PGlite runs one transaction at a time, so a race cannot happen in this app, and R6 in every forge scenario already tests how a requirement without a QA driver is handled.
 

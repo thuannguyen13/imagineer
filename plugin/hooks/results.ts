@@ -16,6 +16,9 @@ import type {
 /** Where Inspect and Build write their results, relative to the repo root. */
 export const RESULTS_PATH = '.claude/imagineer/results.json'
 
+/** The self-check's flags, written by /imagineer:feedback's check. */
+export const FLAGS_PATH = '.claude/imagineer/flags.json'
+
 /** The question ledger Inspect keeps beside the results. */
 export const QUESTIONS_PATH = '.claude/imagineer/questions.json'
 
@@ -93,6 +96,18 @@ export function readOpenQuestions(source: string | null, limit = 5): OpenQuestio
     .slice(0, limit)
 }
 
+/** What the self-check said about Imagineer itself, as plain lines. Never throws. */
+export function readFlags(source: string | null): string[] {
+  if (source === null) return []
+  try {
+    const parsed: unknown = JSON.parse(source)
+    if (!isObject(parsed) || !Array.isArray(parsed.flags)) return []
+    return parsed.flags.filter(isObject).map(f => text(f.said)).filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
 /** Where `.git/HEAD` points: a ref to look up, or a commit when detached. */
 export function parseHead(head: string): { ref: string } | { sha: string } | null {
   const line = head.trim()
@@ -147,6 +162,7 @@ export function readResults(source: string): Summary {
     questions: { waiting: count(questions.waiting), resolved: count(questions.resolved) },
     isStale: false,
     openQuestions: [],
+    flags: [],
   }
 
   return results
@@ -209,6 +225,11 @@ export function summaryText(summary: Summary): string {
   if (summary.questions.waiting > 0) {
     lines.push(`${summary.questions.waiting} questions waiting for you.`)
     for (const q of summary.openQuestions) lines.push(`  ${questionLine(q)}`)
+  }
+  if (summary.flags.length) {
+    lines.push('Imagineer may have gone wrong on its side:')
+    for (const flag of summary.flags) lines.push(`  ${flag}`)
+    lines.push('Run /imagineer:feedback to record or share it.')
   }
   if (summary.run.commit) lines.push(`Measured at commit ${summary.run.commit}.`)
 

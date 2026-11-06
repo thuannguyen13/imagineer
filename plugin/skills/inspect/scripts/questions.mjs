@@ -7,7 +7,7 @@
 //   node questions.mjs next     --repo <repo> [--limit 4]           open questions, most consequential first
 //   node questions.mjs answer   --repo <repo> --id Q3 --status answered|decided|deferred
 //                               --answer "<the user's words>" [--reason "<why>"]
-//                               [--dismiss <key>,<key>] [--critical <glob>,<glob>]
+//                               [--dismiss <key>,<key>] [--critical <glob>,<glob>] [--own]   --own: the user typed their own answer
 //   node questions.mjs equivalent --repo <repo> --mutant <file>#<id> --reason "<why no one could tell>"
 //   node questions.mjs summary  --repo <repo>
 
@@ -128,7 +128,7 @@ export function addQuestions(ledger, incoming) {
 
 export const openQuestions = ledger => ledger.questions.filter(q => q.status === 'open').sort((a, b) => rank(a) - rank(b))
 
-export function answerQuestion(ledger, { id, status, answer, reason, dismiss = [], critical = [] }) {
+export function answerQuestion(ledger, { id, status, answer, reason, dismiss = [], critical = [], ownWords = false }) {
   const question = ledger.questions.find(q => q.id === id)
   if (!question) throw new Error(`No question ${id}.`)
   if (!RESOLVED.includes(status)) throw new Error(`Status must be one of ${RESOLVED.join(', ')}.`)
@@ -136,6 +136,7 @@ export function answerQuestion(ledger, { id, status, answer, reason, dismiss = [
   question.status = status
   question.answer = answer ?? null
   question.reason = reason ?? null
+  question.ownWords = ownWords
   for (const key of dismiss) ledger.dismissed[key] = { question: id, reason: answer ?? reason }
   for (const glob of critical) if (!ledger.critical.includes(glob)) ledger.critical.push(glob)
   return ledger
@@ -182,6 +183,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         reason: arg('reason'),
         dismiss: list(arg('dismiss')),
         critical: list(arg('critical')),
+        ownWords: process.argv.includes('--own'),
       })
       save(repo, ledger)
       console.log(JSON.stringify(summary(ledger)))

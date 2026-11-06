@@ -125,8 +125,8 @@ The grade shows it: Matches your intent starts at ? Not checked, and Foundations
 Inspect stops when all three hold:
 
 - Fallow reports no unresolved findings.
-- Stryker catches at least **80%** of breaks in the inspected code (proposed; the bench app is at 30%).
-- **2** attack rounds in a row find nothing new (proposed).
+- Stryker catches at least **80%** of breaks in the inspected code (the bench app is at 30%).
+- **2** attack rounds in a row find nothing new.
 - In code the user confirms as critical (money, data, permissions), every surviving mutant is killed by a test or explained in a recorded answer.
 
 ## `/build`
@@ -346,7 +346,6 @@ The mod needs Claude Code 2.1.287 or later. It checks the running version and, o
 
 ## Open
 
-- Confirm the stop bar numbers (80%, 2 rounds).
 - Who reviews Dev's code for design and duplication beyond Fallow. Proposed: the Architect reviews each round's diff against its own design, in a fresh spawn.
 - What decides when Dev runs on Opus. Proposed: the Architect marks each task that touches data, money or permissions.
 - How existing parts fold in. Proposed: forge's run folder, state file, finding IDs and reviewer hook into Build; ground's checklist and the Inspector idea into Inspect; guard's rules into Dev's practices. The old skills and agents were removed in 0.2.0; their text stays at tag `v0.1.0` for these phases to draw on.

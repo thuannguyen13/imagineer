@@ -20,5 +20,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Inspect's grading and detection scripts
-        run: node --test 'plugin/skills/inspect/scripts/*.test.mjs'
+      - name: Inspect and Build scripts, and the role guard
+        run: node --test 'plugin/skills/inspect/scripts/*.test.mjs' 'plugin/skills/build/scripts/*.test.mjs' 'plugin/skills/feedback/scripts/*.test.mjs' plugin/hooks/role-guard.test.mjs

@@ -270,3 +270,15 @@ test('a worktree is followed to its own HEAD', async ($, on) => {
   const result = await $.command.run({ command: 'imagineer:status', args: '' })
   expect(result.text).toContain('the code has changed since')
 })
+
+test('the self-check’s flags about Imagineer itself are shown, with the way to report them', async ($, on) => {
+  files(on, {
+    [RESULTS]: JSON.stringify(SAMPLE),
+    '.claude/imagineer/flags.json': JSON.stringify({ flags: [{ kind: 'grade-contradiction', said: 'Q8 was proven by a test, yet attack A7 broke the same behaviour.' }] }),
+  })
+  on('ui.open', () => ({ value: { isPlaced: false, reason: 'no-surface' } }))
+  const result = await $.command.run({ command: 'imagineer:status', args: '' })
+  expect(result.text).toContain('Imagineer may have gone wrong on its side:')
+  expect(result.text).toContain('Q8 was proven by a test, yet attack A7 broke the same behaviour.')
+  expect(result.text).toContain('/imagineer:feedback')
+})

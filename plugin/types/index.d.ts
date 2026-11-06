@@ -45,6 +45,8 @@ export type Results = {
   /** True once the repository's HEAD is no longer the commit the grade was measured at. */
   isStale: boolean
   openQuestions: OpenQuestion[]
+  /** The self-check's flags about Imagineer itself, as plain lines. */
+  flags: string[]
 }
 
 /** What the mod knows about the repo's results file. */
