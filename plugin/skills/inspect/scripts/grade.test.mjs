@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { foundations, intent, mutationScore, overall, structure, testStrength } from './grade.mjs'
+import { foundations, gradeRun, intent, markPending, mutationScore, overall, structure, testStrength } from './grade.mjs'
 import { addQuestions, answerQuestion, emptyLedger, matches, openQuestions } from './questions.mjs'
 import { detect } from './detect.mjs'
 
@@ -359,4 +359,33 @@ test('what test strength still needs names the real reason, with today\'s number
   const weak = { files: { 'a.ts': { mutants: [mutant('Killed', 1), mutant('Survived', 2), mutant('Survived', 3)] } } }
   assert.deepEqual(testStrengthNeeds({ stryker: { ok: true }, mutation: weak }), ['tests that catch at least 80% of deliberate breaks (now 33%)'])
   assert.deepEqual(testStrengthNeeds({}), ['a measurement of test strength (not measured yet)'])
+})
+
+test('while Inspect runs, areas it has not reached yet are coming up, not "not checked"', () => {
+  const out = mkdtempSync(join(tmpdir(), 'imagineer-pending-'))
+  try {
+    writeFileSync(join(out, 'fallow.json'), JSON.stringify({ ok: false }))
+    const running = gradeRun(out, null, 'running').dimensions
+    const byId = Object.fromEntries(running.map(d => [d.id, d]))
+    // Fallow ran and failed: that is a result, not something still to come.
+    assert.equal(byId.structure.pending, false)
+    assert.match(byId.structure.summary, /could not run/)
+    for (const id of ['test-strength', 'foundations', 'security', 'data-safety', 'intent']) {
+      assert.equal(byId[id].pending, true, id)
+      assert.equal(byId[id].state, 'unchecked', id)
+      assert.equal(byId[id].summary, 'Inspect gets to this later in this run.')
+    }
+    // Once the run is done, nothing is coming up: what was not measured is not checked.
+    assert.ok(gradeRun(out, null, 'done').dimensions.every(d => d.pending === false))
+    assert.ok(gradeRun(out, null, 'waiting').dimensions.every(d => d.pending === false))
+  } finally {
+    rmSync(out, { recursive: true, force: true })
+  }
+})
+
+test('test strength the user chose not to measure is not checked, with the reason, and not coming up', () => {
+  const d = testStrength({ stryker: { ok: false, declined: 'it would take about 45 minutes' } })
+  assert.equal(d.state, 'unchecked')
+  assert.equal(d.summary, 'Not measured this time: it would take about 45 minutes')
+  assert.equal(markPending([d], { stryker: { ok: false, declined: 'x' } }, 'running')[0].pending, false)
 })

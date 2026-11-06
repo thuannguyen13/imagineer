@@ -1,6 +1,6 @@
 {
   "name": "imagineer",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Make AI-built software trustworthy without trusting the AI. Inspect checks an existing repo: it asks you in plain words what the app should do, proves your answers with tests and tries to break it. Build makes new features with an Architect, a Dev and a QA agent. A pane shows the grade.",
   "author": {
     "name": "thuannguyen13",

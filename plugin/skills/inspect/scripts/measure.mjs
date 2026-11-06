@@ -5,7 +5,7 @@
 //   node measure.mjs prepare  --repo <repo> --out <run folder>
 //   node measure.mjs checks   --out <run folder>
 //   node measure.mjs fallow   --out <run folder>
-//   node measure.mjs stryker  --out <run folder> [--estimate] [--mutate <glob>,<glob>]
+//   node measure.mjs stryker  --out <run folder> [--estimate] [--mutate <glob>,<glob>] [--decline "<why not this time>"]
 //   node measure.mjs audit    --out <run folder> --base <ref>     Fallow on what changed since <ref>
 //   node measure.mjs security --out <run folder>
 //   node measure.mjs cleanup  --out <run folder>
@@ -245,7 +245,11 @@ try {
   if (step === 'prepare') prepare(resolve(arg('repo') ?? '.'), out)
   else if (step === 'checks') checks(out)
   else if (step === 'fallow') fallow(out)
-  else if (step === 'stryker') stryker(out, process.argv.includes('--estimate'))
+  else if (step === 'stryker' && arg('decline')) {
+    // The user chose not to run it this time: recorded, so the grade says so instead of waiting for it.
+    writeJson(join(out, 'stryker.json'), { ok: false, declined: arg('decline') })
+    console.log('Test strength not measured this time.')
+  } else if (step === 'stryker') stryker(out, process.argv.includes('--estimate'))
   else if (step === 'security') security(out)
   else if (step === 'audit') audit(out, arg('base') ?? 'main')
   else if (step === 'cleanup') cleanup(out)

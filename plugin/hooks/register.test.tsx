@@ -386,3 +386,72 @@ test('the Overview row fits the pane: full row, number alone, or two lines', asy
   expect(await narrow.find({ type: 'Text', text: /^Failing · 51\/167$/ })).toBeDefined()
   await narrow.unmount()
 })
+
+const RUNNING = {
+  ...SAMPLE,
+  run: { ...SAMPLE.run, status: 'running', round: 1, step: 'Measuring test strength (about 18 minutes)', bar: { met: false, missing: ['x'] } },
+  overall: { state: 'not-proven', reason: '' },
+  dimensions: [
+    { id: 'foundations', name: 'Foundations', group: 'care', state: 'weak', measured: 'default', summary: 'No CI.' },
+    { id: 'test-strength', name: 'Test strength', group: 'trust', state: 'unchecked', measured: 'none', summary: 'Inspect gets to this later in this run.', pending: true },
+  ],
+  questions: { waiting: 0, resolved: 0 },
+}
+
+test('a first inspect opens the pane at once, saying it is starting', async ($, on) => {
+  files(on, {})
+  let opened = 0
+  on('ui.open', () => {
+    opened += 1
+    return { value: { isPlaced: true } }
+  })
+  on('command.run', () => ({ text: 'skill ran' }))
+
+  await $.command.run(typed('imagineer:inspect'))
+  expect(opened).toBe(1)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /^◌ Inspect is starting$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /fills in here as it is measured/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('inspect does not open the pane unasked on the main screen, where it would cover the transcript', async ($, on) => {
+  files(on, {})
+  let opened = 0
+  on('ui.open', () => {
+    opened += 1
+    return { value: { isPlaced: true } }
+  })
+  on('command.run', () => ({ text: 'skill ran' }))
+
+  await $.command.run({ ...typed('imagineer:inspect'), presentation: { isFullscreen: false, columns: 120 } })
+  expect(opened).toBe(0)
+})
+
+test('while Inspect runs, the pane says what it is doing, and areas not reached yet are coming up', async ($, on) => {
+  const disk = files(on, {})
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('command.run', () => ({ text: 'skill ran' }))
+  await $.command.run(typed('imagineer:inspect'))
+
+  // The first results arrive while the pane is open; the poll picks them up.
+  disk.change(RESULTS, JSON.stringify(RUNNING))
+  await $.command.run(typed('imagineer:status'))
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /^◌ Inspect is running$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Measuring test strength \(about 18 minutes\)$/ })).toBeDefined()
+  expect((await ui.find({ type: 'Button', key: 'row-test-strength' }))?.text).toMatch(/◌\s+Test strength\s+Coming up/)
+  expect((await ui.find({ type: 'Button', key: 'row-foundations' }))?.text).toMatch(/!\s+Foundations\s+Weak/)
+  // Not a verdict, and not "not finished" while it is still measuring.
+  expect(await ui.find({ type: 'Text', text: /Not proven yet/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /Not finished yet/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /Areas fill in as Inspect measures them/ })).toBeDefined()
+  await ui.unmount()
+
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await band.find({ type: 'Text', text: /Imagineer ·/ }))?.text).toBe('Imagineer · Inspecting · round 1 · Measuring test strength (about 18 minutes) ')
+  expect((await band.find({ type: 'Text', text: /^◌ $/ }))).toBeDefined()
+  await band.unmount()
+})

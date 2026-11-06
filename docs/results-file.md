@@ -44,6 +44,7 @@ This page is format `1`. A reader that meets another format says so and asks for
 | `run.round` | The current round, from 1 |
 | `run.commit` | The commit the grade was measured at |
 | `run.at` | Optional. When the code was measured, as an ISO time |
+| `run.step` | Optional. While `running` or `waiting`: what the run is doing now, in plain words, for example "Measuring test strength (about 18 minutes, until 14:30)". The pane shows it in place of the verdict while `running` |
 | `run.bar` | Optional. Inspect's finish thresholds, Imagineer's suggestion: `{ "met": false, "missing": ["two attack rounds in a row that find nothing new"] }`, each missing item in plain words |
 | `overall.state` | `strong`, `weak`, `failing`, `unchecked` or `not-proven` |
 | `overall.reason` | One plain sentence: why the overall grade is what it is |
@@ -54,6 +55,7 @@ This page is format `1`. A reader that meets another format says so and asks for
 | `dimensions[].summary` | One plain sentence of evidence, for example "Tests catch 30% of deliberate breaks." |
 | `dimensions[].stale` | True once the code changed after this dimension was measured |
 | `dimensions[].claimed` | True when the evidence is a human claim Imagineer has not re-run |
+| `dimensions[].pending` | Optional. True while `running` when the run has not reached this area yet. Its `state` stays `unchecked`; the pane shows it as coming up |
 | `questions.waiting`, `resolved` | How many questions are waiting for the user, and how many are resolved |
 
 Readers are strict about meaning and lenient about form: a dimension state they do not recognise is shown as not checked, never as a pass, and a missing field falls back to its empty value.
