@@ -40,7 +40,10 @@ const summaryAtom = atom({ plugin: 'imagineer', key: 'summary' } as const, { kin
   shape: 'summary-4',
 })
 
-const tabAtom = atom({ plugin: 'imagineer', key: 'tab' } as const, 'overview' as Tab)
+// Shaped, so a tab an earlier version stored (overview, evidence) reads as the grade.
+const tabAtom = atom({ plugin: 'imagineer', key: 'tab' } as const, 'grade' as Tab, { shape: 'tab-2' })
+// The areas whose evidence is open, by id; all closed at first.
+const openAtom = atom({ plugin: 'imagineer', key: 'open' } as const, [] as string[])
 
 let lastMtime: number | null = null
 let lastBase: Summary = { kind: 'none' }
@@ -168,9 +171,9 @@ export const register: Register = on => {
     // The numbers line up in their own column, right-aligned, as wide as the widest.
     const valueWidth = Math.max(0, ...summary.dimensions.map(d => (d.metric && d.metric.value !== '—' ? d.metric.value.length : 0)))
     const waiting = summary.questions.waiting
+    const opened = await read($, openAtom)
     const tabs: { id: Tab; label: string }[] = [
-      { id: 'overview', label: 'Overview' },
-      { id: 'evidence', label: 'Evidence' },
+      { id: 'grade', label: 'Grade' },
       { id: 'questions', label: waiting ? `Questions (${waiting})` : 'Questions' },
     ]
 
@@ -189,70 +192,49 @@ export const register: Register = on => {
       </Box>
     )
 
-    // One row per area, laid out for the pane's width: icon, name, state and the area's number,
-    // with what the number counts when there is room; two lines when the pane is narrow.
-    const row = (dimension: Results['dimensions'][number], withMetric = true) => {
+    // One row per area, a button that opens its evidence underneath. Laid out for the pane's
+    // width: icon, name, state and the area's number, with what it counts when there is room;
+    // two lines when the pane is narrow. A row's children are text only, as a button takes.
+    const row = (dimension: Results['dimensions'][number]) => {
       const label = STATE_LABEL[dimension.state]
+      const isOpen = opened.includes(dimension.id)
+      const arrow = isOpen ? '▾ ' : '▸ '
       const stateText = `${label.word}${dimension.isStale || summary.isStale ? ' ⟳' : ''}`
-      const metric = withMetric && dimension.metric && dimension.metric.value !== '—' ? dimension.metric : null
+      const metric = dimension.metric && dimension.metric.value !== '—' ? dimension.metric : null
+      const toggle = () => update($, openAtom, ids => (ids.includes(dimension.id) ? ids.filter(id => id !== dimension.id) : [...ids, dimension.id]))
+      const plain = `${arrow}${label.icon} ${dimension.name} ${stateText}${metric ? ` ${metric.value} ${metric.label}` : ''}`
 
-      if (layout.kind === 'narrow') {
-        return (
-          <Box flexDirection="column">
-            <Text>
-              <Text color={label.color}>{label.icon}</Text> {dimension.name}
-            </Text>
-            <Box paddingLeft={2}>
+      const button =
+        layout.kind === 'narrow' ? (
+          <Button key={`row-${dimension.id}`} label={plain} plain onPress={toggle}>
+            <Text dimColor>{arrow}</Text>
+            <Text color={label.color}>{label.icon}</Text>
+            {` ${dimension.name}`}
+          </Button>
+        ) : (
+          <Button key={`row-${dimension.id}`} label={plain} plain onPress={toggle}>
+            <Text dimColor>{arrow}</Text>
+            <Text color={label.color}>{`${label.icon}  `}</Text>
+            {dimension.name.padEnd(layout.nameWidth).slice(0, layout.nameWidth)}
+            <Text color={label.color}>{stateText.padEnd(layout.stateWidth)}</Text>
+            {metric ? metric.value.padStart(valueWidth) : ''.padStart(valueWidth)}
+            {metric && layout.kind === 'wide' && metric.label ? <Text dimColor>{`  ${metric.label}`}</Text> : ''}
+          </Button>
+        )
+
+      return (
+        <Box flexDirection="column">
+          {button}
+          {layout.kind === 'narrow' && (
+            <Box paddingLeft={4}>
               <Text>
                 <Text color={label.color}>{stateText}</Text>
                 {metric ? ` · ${metric.value}` : ''}
               </Text>
             </Box>
-          </Box>
-        )
-      }
-      return (
-        <Box flexDirection="row">
-          <Box width={3}>
-            <Text color={label.color}>{label.icon}</Text>
-          </Box>
-          <Box width={layout.nameWidth}>
-            <Text>{dimension.name}</Text>
-          </Box>
-          <Box width={layout.stateWidth}>
-            <Text color={label.color}>{stateText}</Text>
-          </Box>
-          {metric && (
-            <Box width={valueWidth} justifyContent="flex-end">
-              <Text tabular>{metric.value}</Text>
-            </Box>
           )}
-          {metric && layout.kind === 'wide' && metric.label !== '' && (
-            <Box flexShrink={1} paddingLeft={2}>
-              <Text dimColor>{metric.label}</Text>
-            </Box>
-          )}
-        </Box>
-      )
-    }
-
-    const overview = (
-      <Box flexDirection="column">
-        {summary.dimensions.map(dimension => row(dimension))}
-        {summary.run.bar && (
-          <Box marginTop={1}>
-            <Text dimColor>{summary.run.bar.met ? '✓ Stop bar met.' : `Stop bar not met: ${summary.run.bar.missing.join('; ')}.`}</Text>
-          </Box>
-        )}
-      </Box>
-    )
-
-    const evidence = (
-      <Box flexDirection="column" gap={1}>
-        {summary.dimensions.map(dimension => (
-          <Box flexDirection="column">
-            {row(dimension, false)}
-            <Box flexDirection="column" paddingLeft={3}>
+          {isOpen && (
+            <Box flexDirection="column" paddingLeft={5} marginBottom={1}>
               {dimension.summary !== '' && <Text>{dimension.summary}</Text>}
               {firstItems(dimension.items).map(item => (
                 <Box flexDirection="row">
@@ -264,10 +246,25 @@ export const register: Register = on => {
                   </Box>
                 </Box>
               ))}
-              <Text dimColor>{MEASURED_LABEL[dimension.measured]}{dimension.isClaimed ? ' · claimed, not re-run' : ''}</Text>
+              <Text dimColor>
+                {MEASURED_LABEL[dimension.measured]}
+                {dimension.isClaimed ? ' · claimed, not re-run' : ''}
+              </Text>
             </Box>
-          </Box>
-        ))}
+          )}
+        </Box>
+      )
+    }
+
+    const grade = (
+      <Box flexDirection="column">
+        {summary.dimensions.map(dimension => row(dimension))}
+        <Box marginTop={1} flexDirection="column">
+          {summary.run.bar && (
+            <Text dimColor>{summary.run.bar.met ? '✓ Stop bar met.' : `Stop bar not met: ${summary.run.bar.missing.join('; ')}.`}</Text>
+          )}
+          <Text dimColor>Press a row to see its evidence.</Text>
+        </Box>
       </Box>
     )
 
@@ -317,7 +314,7 @@ export const register: Register = on => {
           ))}
         </Box>
         {header}
-        {tab === 'overview' ? overview : tab === 'evidence' ? evidence : questions}
+        {tab === 'questions' ? questions : grade}
         <Text dimColor>Imagineer {summary.imagineer}</Text>
       </Box>
     )

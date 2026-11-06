@@ -55,7 +55,7 @@ export type Results = {
 
 /** What the mod knows about the repo's results file. */
 /** The pane's tabs. */
-export type Tab = 'overview' | 'evidence' | 'questions'
+export type Tab = 'grade' | 'questions'
 
 export type Summary =
   | { kind: 'none' }
@@ -64,6 +64,6 @@ export type Summary =
 
 declare module 'claude-code' {
   interface PluginState {
-    imagineer: { summary: Shaped<Summary>; tab: Tab }
+    imagineer: { summary: Shaped<Summary>; tab: Shaped<Tab>; open: string[] }
   }
 }

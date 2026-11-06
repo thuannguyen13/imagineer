@@ -123,20 +123,19 @@ test('status opens the pane: an aligned overview first, on every surface', async
   for (const surface of ['terminal', 'desktop', 'vscode', 'mobile'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
     expect((await ui.find({ type: 'Text', text: /^✕ Failing$/ }))?.text).toBe('✕ Failing')
-    expect(await ui.find({ type: 'Text', text: /^Test strength$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^Matches your intent$/ })).toBeDefined()
-    // The area's number in its own column, then what it counts.
-    expect(await ui.find({ type: 'Text', text: /^51\/167$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^breaks caught$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Button', key: 'tab-evidence' })).toBeDefined()
+    // One row per area, each a button: name, state, the number and what it counts.
+    const row = await ui.find({ type: 'Button', key: 'row-test-strength' })
+    expect(row?.text).toMatch(/Test strength/)
+    expect(row?.text).toMatch(/51\/167/)
+    expect(await ui.find({ type: 'Button', key: 'row-intent' })).toBeDefined()
     expect(await ui.find({ type: 'Button', key: 'tab-questions' })).toBeDefined()
-    // The overview holds no evidence text: that is the Evidence tab's.
+    // All rows start closed: no evidence until a row is pressed.
     expect(await ui.find({ type: 'Text', text: /deliberate breaks/ })).toBeUndefined()
     await ui.unmount()
   }
 })
 
-test('Evidence shows each area\'s summary and its first five items, then counts the rest', async ($, on) => {
+test('pressing a row opens its evidence: the summary and the first five items, then the rest counted', async ($, on) => {
   const many = { ...SAMPLE, dimensions: [{ ...SAMPLE.dimensions[0], items: Array.from({ length: 18 }, (_, i) => `A${i + 1}: attack ${i + 1}`) }] }
   files(on, { [RESULTS]: JSON.stringify(many) })
   on('ui.open', () => ({ value: { isPlaced: true } }))
@@ -144,11 +143,13 @@ test('Evidence shows each area\'s summary and its first five items, then counts 
 
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    await ui.press({ key: 'tab-evidence' })
+    await ui.press({ key: 'row-test-strength' })
     expect(await ui.find({ type: 'Text', text: /Tests catch 30% of deliberate breaks/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^A5: attack 5$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^A6: attack 6$/ })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: /and 13 more/ })).toBeDefined()
+    await ui.press({ key: 'row-test-strength' })
+    expect(await ui.find({ type: 'Text', text: /deliberate breaks/ })).toBeUndefined()
     await ui.unmount()
   }
 })
@@ -365,17 +366,17 @@ test('the Overview row fits the pane: full row, number alone, or two lines', asy
   const at = (bodyColumns: number) => ({ ...PANE, props: { ...PANE.props, bodyColumns } })
 
   const wide = await $.ui.mount({ ...at(90), surface: 'terminal' })
-  expect(await wide.find({ type: 'Text', text: /^51\/167$/ })).toBeDefined()
-  expect(await wide.find({ type: 'Text', text: /^breaks caught$/ })).toBeDefined()
+  expect((await wide.find({ type: 'Button', key: 'row-test-strength' }))?.text).toMatch(/51\/167\s+breaks caught/)
   await wide.unmount()
 
   const medium = await $.ui.mount({ ...at(50), surface: 'terminal' })
-  expect(await medium.find({ type: 'Text', text: /^51\/167$/ })).toBeDefined()
-  expect(await medium.find({ type: 'Text', text: /breaks caught/ })).toBeUndefined()
+  const mediumRow = (await medium.find({ type: 'Button', key: 'row-test-strength' }))?.text ?? ''
+  expect(mediumRow).toMatch(/51\/167/)
+  expect(mediumRow).not.toMatch(/breaks caught/)
   await medium.unmount()
 
   const narrow = await $.ui.mount({ ...at(32), surface: 'terminal' })
-  expect(await narrow.find({ type: 'Text', text: /^✕ Test strength$/ })).toBeDefined()
+  expect((await narrow.find({ type: 'Button', key: 'row-test-strength' }))?.text).toMatch(/✕ Test strength/)
   expect(await narrow.find({ type: 'Text', text: /^Failing · 51\/167$/ })).toBeDefined()
   await narrow.unmount()
 })
