@@ -430,7 +430,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       status: arg('status', 'done'),
       round: Number(arg('round', '1')),
       commit: evidence.copy?.commit ?? '',
-      // When the code was measured: the copy's time, or for a run before 0.10.0 when its copy was made.
+      // When the code was measured: the copy's time, or, for a run that did not record it, when its copy was made.
       at: evidence.copy?.at ?? (existsSync(join(out, 'copy.json')) ? statSync(join(out, 'copy.json')).mtime.toISOString() : null),
       bar,
     },

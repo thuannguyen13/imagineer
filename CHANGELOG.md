@@ -1,148 +1,44 @@
 # Changelog
 
-Imagineer's releases, newest first. Below 1.0, a `0.y.0` release may change how Imagineer is used; such changes are listed first under **Changes you need to know**. See [docs/proposals/inspect-and-build.md](docs/proposals/inspect-and-build.md#versioning).
+Imagineer's releases, newest first. Below 1.0, the middle number goes up only when how you use Imagineer changes, or a command is added; those changes are listed first under **Changes you need to know**. Everything else is a patch (`0.2.1`). See [docs/proposals/inspect-and-build.md](docs/proposals/inspect-and-build.md#versioning).
 
-## 0.10.0 — 2026-11-06
+## 0.2.0 — 2026-11-06
 
-A grade pane you can scan.
-
-### New
-
-- The pane says in plain words whether Inspect is finished and what it still needs ("Not finished yet. Inspect still needs: tests that catch at least 80% of deliberate breaks; you to review the structure findings. Run /imagineer:inspect to continue."), instead of "Stop bar not met".
-- What Inspect still needs names the real reason, with today's number: "every break in critical code caught or explained (3 left in lib/deal-scope.ts, 50% caught)", or "tests that catch at least 80% of deliberate breaks (now 33%)".
-- The thresholds are labelled as **Imagineer's suggestion**, not a standard: "By the thresholds Imagineer suggests, Inspect still needs…", and test strength's details say "Imagineer suggests at least 80%".
-- The pane's header shows only the verdict, the commit and when it was tested ("✕ Failing", "e367d330 · tested Nov 5, 22:01"); the rows below say which areas fail.
-- The pane has two tabs. **Grade**: one aligned row per area: icon, name, state, and its one measured number in the same shape for every area, done out of total and what it counts, higher always better (48/51 breaks caught, 17/19 attacks held, 6/6 checks pass), right-aligned in its own column. Press a row to open its evidence underneath (its summary, the first five items and a count of the rest, how it was measured) and again to close it; all start closed. The rows fit the pane: the full row from 64 columns, the number alone from 44, and two lines per area below that. **Questions**: what is waiting for you, by its point, and anything Imagineer may have got wrong itself. There is still no blended overall score: the headline is the weakest-link verdict.
-- Wrapped lines keep their indent, so every line stays under its area.
-- The grade gives each area a short summary and a separate list, instead of one long sentence with every item in it. "Matches your intent" counts questions plainly: how many you answered, how many the docs settled, how many are waiting.
-
-## 0.9.0 — 2026-11-06
-
-Clearer questions, for people who do not read code.
+The baseline of the two-command design: Inspect checks an existing project, Build makes new features, and a pane shows the grade. Earlier 0.2.0 to 0.8.0 releases were folded into this one; their step-by-step history is in the merged pull requests.
 
 ### Changes you need to know
 
-- A question's text can no longer hold file names, function names, code names or line numbers: Inspect refuses them and keeps such details in a separate line for engineers. Questions written for 0.8.0 without a `point` or with plain-text suggestions are refused when added.
+- guard, forge and ground, forge's agents and its reviewer hook are removed; Inspect and Build replace them. To keep using them, install 0.1.0: `/plugin marketplace add thuannguyen13/imagineer#v0.1.0`.
+- The plugin lives in `plugin/`, and the marketplace points there. Installing Imagineer no longer downloads the bench app, docs and plans.
 
-### New
+### Inspect: `/imagineer:inspect`
 
-- Every question starts with its point in one sentence, then what you'd expect, what happens today, and an example, laid out the same way each time.
-- Each answer you can pick says what it means for your people or data, and **Not sure** is always there: Inspect then explains it again with a new example.
-- Which code is critical is asked as parts of your product (sign-in, roles, amounts), not as a list of files.
-- In the terminal and the Desktop app, Imagineer's questions get a calm line above the dialog, and engineers see each question's code details in a dim line there.
-- Build asks its Architect's questions and shows its requirements the same way.
+- Works in a throwaway copy of your last commit, so your project is never changed. JavaScript and TypeScript projects in git.
+- **Measures** test strength with Stryker (how many deliberate breaks your tests notice), structure with Fallow, the foundations (lockfile, install, typecheck, tests, CI, documented environment variables) and a security scan, including known vulnerabilities in your dependencies. Your project's own Fallow and Stryker setup is used when it has one; otherwise pinned versions run without installing anything in it. Long runs are estimated first and asked about.
+- **Asks you** what the app should do, in plain language: the point first, then what you'd expect, what happens today and an example, with suggested answers that each say what they mean, your own words, or **Not sure**. Big-picture questions come first; then the findings that matter, most consequential first. What your docs or tests already settle is recorded, not asked, and nothing is asked twice. No file names or code in the question; engineers see those details in a separate line.
+- **Proves your answers** with tests that pass on the code as it is and fail when the code behind the answer is broken, covering every case you would count as the same answer. A test that fails on the code as it is is reported as a gap; Inspect fixes nothing.
+- **Attacks**: an attacker agent tries to make the app do what it must not (a role seeing or changing what it should not, data mixed up or lost). Each break comes back to you as a question.
+- With your agreement, adds the proven tests, and docs written from your answers when the project had none, as new files for you to review. Never commits them.
+- Says whether it is finished, by the thresholds Imagineer suggests: tests catch at least 80% of deliberate breaks, every break in critical code is caught or explained, and two attack rounds in a row find nothing new.
 
-### Fixed
+### Build: `/imagineer:build <what to build>`
 
-- **Test strength could read Strong when it had measured nothing.** On the first real project, 728 of 729 breaks timed out because eight copies of a full test suite ran at once, and timeouts counted as caught: a false 100%. Now a run where most breaks time out reads as not checked, never Strong (and Build's done bar is not met); mutants run a quarter of the cores at a time with a limit based on the suite's real duration; the estimate allows for runs slowing each other; and test files are never mutated.
-- Test strength says how many test files run only with a setting the copy did not have (a database, most often), since its number may then be lower than in CI.
-- The self-check flags a mutation run where most breaks timed out.
-- Attack and proof tests no longer stay in the throwaway copy after they run: a test that broke through fails on purpose, and made every later measurement of the copy fail.
-- Foundations no longer says CI skips the tests when a workflow runs the test command directly (for example `npx vitest run --shard=1/3`), and it recognises named env examples such as `.env.local.example`. Variables the hosting platform sets itself (Vercel, Netlify, Render, Fly, GitHub) need no example. Both were found on the first real project.
+- An **Architect** turns your request, the docs and the code into requirements you approve, then a design. **QA** writes the tests from that design before any code exists, and they must fail first. **Dev** writes the code until they pass. Each round is measured like Inspect does, then reviewed by the Architect.
+- Roles are enforced, not just asked for: Dev cannot write tests, QA cannot write code, and only the Lead pushes.
+- Choose the models once: Recommended, Budget, Maximum or your own mix.
+- Works in its own branch and worktree, and ends with a pull request body that leads with each requirement and its evidence. Never pushes or opens a pull request without your yes, and never merges.
 
-## 0.8.0 — 2026-11-05
+### The grade: `/imagineer:status`
 
-Imagineer checks itself, and you can tell it when it got something wrong.
+- A pane beside the chat, opened instantly at no cost, and on its own while Inspect or Build runs. Where nothing can be drawn, the grade comes as text.
+- One row per area (test strength, structure, foundations, matches your intent, security and permissions, data safety), each **✓ Strong**, **! Weak**, **✕ Failing** or **? Not checked**, with its measured number (48/51 breaks caught). Select a row to see its evidence. The overall grade is the weakest area that matters, never an average.
+- The header shows the verdict, the commit and when it was tested; the grade is marked stale once the project moves past that commit. A **Questions** tab lists what is waiting for you.
+- The pane only reads files and draws: it writes nothing, runs no commands and calls no models. Needs Claude Code 2.1.287 or later.
 
-### New
+### Feedback: `/imagineer:feedback`
 
-- **Self-check.** At the end of each Inspect and Build run, Imagineer looks at its own records for signs it went wrong: an agent that tried to step outside its role (the role guard keeps a record of each refusal), a tool that did not run, an answer it called proven that one of its own attacks broke, questions you mostly answered in your own words or that came back twice, and a Build stuck at its round limit. The pane shows them too.
-- **`/imagineer:feedback`** records what Imagineer said or did and what actually happened, as behaviour only, never your code, on your machine. You can then open a pre-filled GitHub issue and submit it yourself, save it as a file, or keep it private.
-- Each run ends with two optional questions: was anything asked that wasn't worth your time, and did we miss anything you know about.
-- Proofs and QA's tests cover every case a person would count as the same answer: for "required", also spaces, tabs, line breaks and invisible characters. Learned from a real miss (bench scenario L1).
-- Build waits for each agent it spawns, so a run without a user does not end early with an agent still working.
-- Inspect keeps its own Stryker in a tools folder outside the project, instead of adding it to the copy's `node_modules`, where npm could drop the project's platform binaries (found on the first real project: its test runner's binary went missing).
-- Build's pull request now carries the repository's grade as it stood before the change, with a reminder to inspect again after merging.
-
-## 0.7.0 — 2026-11-05
-
-Build arrives.
-
-### New
-
-- `/imagineer:build <what to build>` builds a feature to Imagineer's bar, in its own branch and worktree:
-  - an **Architect** turns your goal, the docs and the code into requirements you approve, and a design with exact interfaces;
-  - **QA** writes the tests from that design before any code exists, and they must fail first;
-  - **Dev** implements until they pass;
-  - each round is measured like Inspect does: the typecheck, Fallow on what changed, and mutation testing of the changed code (80% of breaks caught, every break in critical code caught), then the Architect reviews the change against the design.
-- Roles are enforced, not just asked for: a hook refuses Dev any write to tests, QA any write outside tests, and the Architect and Inspect's attacker any write outside Imagineer's own files, and keeps all but Dev from committing and everyone from pushing.
-- Choose the models once: Recommended, Budget, Maximum or your own mix, saved for you across repositories.
-- The run ends with a pull request body that leads with each requirement and its evidence. Build never pushes, opens a pull request or merges without your yes, and never merges.
-
-## 0.6.0 — 2026-11-05
-
-The grade pane tells you more.
-
-### New
-
-- The grade is marked **stale** (⟳) once the repository moves past the commit it was measured at, with a reminder to inspect again. The mod reads git's own files for this; it still runs no commands.
-- The pane shows Inspect's stop bar, met or what is missing.
-- The pane lists the questions waiting for you, most consequential first, not only how many.
-
-## 0.5.0 — 2026-11-05
-
-Inspect proves your answers and tries to break the app.
-
-### New
-
-- Each answer you give is proven with a test, written in the repository's own style and run in the throwaway copy. A test counts only when it passes on the code as it is **and** fails when the code behind your answer is broken, using the same breaks Stryker found no test noticed. Breaks no one could ever observe, such as an error message's wording, are recorded with a reason instead.
-- A test that fails on the code as it is shows the code does not do what you said. Inspect reports it as a gap and changes nothing.
-- "Matches your intent" becomes Strong once every answer is proven, and Failing while the code contradicts an answer about data, money or permissions.
-- Proven tests can be added to the repository as new files, if you agree. They are never committed for you.
-- **Attack rounds**: an attacker agent writes tests that try to make the app do what it must not (a role seeing or changing what it should not, data mixed up or lost) and runs them in the throwaway copy. Each break becomes a question for you; Inspect fixes nothing.
-- A security scan: Fallow's possible weaknesses, verified in the code or asked about, and known vulnerabilities in the dependencies the app ships with (`npm audit`).
-- "Security and permissions" and "Data safety" are graded from these. They reach Weak at best until secret scanning and backup restore drills arrive.
-- Inspect's stop bar: test strength meets the bar, no open structure findings, and 2 attack rounds in a row find nothing new. The report says what is missing.
-- When the repository has no docs, every guess is marked as one, and with your agreement the answers you confirmed are saved as short docs, with a pointer in `CLAUDE.md`.
-
-## 0.4.0 — 2026-11-05
-
-Inspect asks you what the code should do.
-
-### New
-
-- After measuring, `/imagineer:inspect` asks plain-language questions: first the big picture (what the app is for, who uses it, what is sensitive, which code handles money, personal data or permissions), then the findings that matter, most consequential first. Each question shows what you seem to expect, what the code actually does, a concrete example, and suggested answers, with room for your own.
-- Answers are kept in `.claude/imagineer/questions.json`, so nothing is asked twice. What the repository's docs or tests already settle is recorded with the file it cites, not asked.
-- The grade uses the answers:
-  - "Matches your intent" is Failing while a question about data, money or permissions is open, and Weak until answers are backed by tests (next release).
-  - Code you mark as critical must meet the test-strength bar on its own, with every break no test noticed there explained.
-  - Structure findings you resolve no longer count against it.
-- Without a user to answer (`claude -p`, a scheduled run), Inspect records the questions, marks the run as waiting, and lists them.
-
-## 0.3.0 — 2026-11-05
-
-The first slice of Inspect: a real grade from measurements.
-
-### New
-
-- `/imagineer:inspect` measures a JavaScript or TypeScript repository in a throwaway copy of its last commit, so the repository is never changed:
-  - **Test strength** with Stryker mutation testing: how many deliberate breaks the tests notice, and the weakest files. Long runs are estimated first and asked about.
-  - **Structure** with Fallow: health score, unused files and exports, overly complex functions, duplication.
-  - **Foundations**: lockfile, install, typecheck, tests, CI running the tests, and environment variables documented in `.env.example`.
-- The repository's own Fallow and Stryker setup is used when it has one; otherwise pinned versions run once, without installing anything in the repository.
-- A script computes the grade from that evidence, by the rules in the design: the weakest link sets the overall grade. "Matches your intent", "Security and permissions" and "Data safety" show as not checked until later slices.
-- Results go to `.claude/imagineer/`, kept out of git.
-
-## 0.2.0 — 2026-11-05
-
-The first step of the two-command design: a grade you can see.
-
-### Changes you need to know
-
-- guard, forge and ground, and forge's eight agents and reviewer hook, are removed. `/imagineer:inspect` and `/imagineer:build` replace them in coming releases and reuse their useful parts. To keep using them meanwhile, install 0.1.0: `/plugin marketplace add thuannguyen13/imagineer#v0.1.0`.
-- The plugin now lives in `plugin/`, and the marketplace points there. Installing Imagineer no longer downloads the bench app, docs and plans. To try a local checkout, use `claude --plugin-dir <repository>/plugin`.
-
-### New
-
-- `/imagineer:status` shows the repo's grade from Imagineer's results file. It answers at once, with no Claude turn and no usage.
-- A grade pane beside the transcript and a status line above the prompt while Inspect or Build runs. They show only what the results file says, and stay hidden in repos that do not use Imagineer.
-- Where nothing can be drawn (a cloud session, `claude -p`), `/imagineer:status` answers in text. Where mods are turned off, the `status` skill reads the same file instead.
-- The results file format is documented in [docs/results-file.md](docs/results-file.md).
-
-### Notes
-
-- The mod only reads files and draws: it does not write files, run commands, call models or approve tool calls. `claude plugin validate .` lists exactly what it calls.
-- Needs Claude Code 2.1.287 or later for the pane and status line.
+- Records what Imagineer said or did and what actually happened, never your code, on your machine. Open a pre-filled GitHub issue yourself, save it as a file, or keep it private.
+- Each run ends with a self-check (an agent stepping outside its role, a tool that did not run, a measurement where most breaks timed out) and two optional questions about what was not worth your time and what was missed.
 
 ## 0.1.0
 

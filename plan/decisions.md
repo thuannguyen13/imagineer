@@ -36,7 +36,7 @@ Forge owns the loop, for features it builds and, with `--verify <branch|PR>`, fo
 
 ## 2026-10-28 — Two audiences
 
-Write for people who build by prompting and for engineers equally. The wording rules are the README's design principles.
+Write for people who build by prompting and for engineers equally. The wording rules are the design principles in CONTRIBUTING.md.
 
 ## 2026-10-28 — Validated status
 
@@ -51,7 +51,7 @@ Every phase of skill work ends with these checks before its pull request:
 - No contradictions, checked by a reviewer that has not seen the work.
 - Each section stays only if removing it changes a scenario result.
 - The same words for the same thing.
-- User-facing text follows the README's design principles.
+- User-facing text follows the design principles in CONTRIBUTING.md.
 - Code also passes typecheck, lint, tests, `/simplify` and `/code-review`; hook scripts have tests that they block a seeded command and allow a harmless one.
 
 The pull request lists what was removed and the bench results before and after.
@@ -79,3 +79,7 @@ The owner confirmed Inspect's stop bar at the proposed numbers: Stryker catches 
 ## 2026-11-06 — The thresholds are Imagineer's suggestion
 
 The owner asked whether Imagineer should list findings without judging them against its own numbers, since 80% is not a standard and Imagineer is not yet validated. Weighed against that: users without technical knowledge cannot read a raw number, and Inspect and Build need a point at which they stop. The owner chose to keep the thresholds, labelled everywhere as Imagineer's suggestion ("By the thresholds Imagineer suggests…"), not as a standard, and to call them thresholds rather than a "bar", which read as unclear. Thresholds the user sets per repository remain a candidate if the suggestion does not fit their projects.
+
+## 2026-11-06 — Slower versions, and 0.2.0 as the baseline
+
+The owner found the version moved too fast: 0.2.0 to 0.10.0 in two days, because every new check or option raised the middle number and every merged pull request was released on its own. Since only the owner uses Imagineer, the owner chose to fold everything since 0.1.0 into one baseline, 0.2.0: the GitHub releases and tags v0.2.0 to v0.8.0 were deleted (the commits stay), the changelog has one 0.2.0 entry, and v0.2.0 is tagged again on the merge that made it. v0.1.0 stays, since the bench compares against it and it is how the earlier skills are pinned. From now on the middle number goes up only for something users must know about (a change to how Imagineer is used, or a new command); everything else is a patch. Pull requests add to the next untagged version, and the owner releases a batch when it is ready.
