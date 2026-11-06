@@ -11,7 +11,7 @@ import { existsSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { arg, keepOutOfGit, readJson, readJsonIf, writeJson } from './lib.mjs'
-import { loadAttacks, rounds } from './attack.mjs'
+import { loadAttacks, rounds, untestedNow } from './attack.mjs'
 import { CRITICAL_TOPICS, emptyLedger, findings, isCritical, isGapToFix, loadLedger, openQuestions, summary } from './questions.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -226,6 +226,9 @@ function answersOn(ledger, topic) {
   }
 }
 
+/** What the latest attack round says it did not reach in a category: never safe, only not tested yet. */
+const notAttacked = (evidence, category) => (evidence.untested ?? []).filter(u => u.category === category).map(u => `Not attacked yet: ${u.what}`)
+
 function attackNotes(attacks, category) {
   const mine = attacks.filter(a => a.category === category && !a.void)
   const { cleanInARow } = rounds(mine)
@@ -245,7 +248,8 @@ export function security(evidence) {
   if (attacks.broke.length) failing.push(`${plural(attacks.broke.length, 'attack')} broke through`)
   if (scan?.audit?.critical || scan?.audit?.high) failing.push(`${scan.audit.critical} critical and ${scan.audit.high} high known vulnerabilities in dependencies`)
   if (answers.contradicted.length) failing.push(`the code contradicts ${plural(answers.contradicted.length, 'answer')} of yours`)
-  const securityItems = [...attacks.broke.map(a => `${a.id}: ${a.title}`), ...answers.contradicted.map(id => `${id}: the code does not do what you answered`)]
+  const untested = notAttacked(evidence, 'permissions')
+  const securityItems = [...attacks.broke.map(a => `${a.id}: ${a.title}`), ...answers.contradicted.map(id => `${id}: the code does not do what you answered`), ...untested]
   if (failing.length) return dimension('security', name, 'trust', 'failing', 'default', `${sentenceCase(failing.join('; '))}.`, securityItems)
 
   const openCandidates = (evidence.findings ?? []).filter(item => item.kind === 'security' && !(item.key in ledger.dismissed)).length
@@ -254,9 +258,10 @@ export function security(evidence) {
   if (attacks.cleanInARow < 2) gaps.push(attacks.tried ? 'two attack rounds in a row have not yet come back clean' : 'no attack rounds yet')
   if (openCandidates) gaps.push(`${plural(openCandidates, 'possible weakness', 'possible weaknesses')} not yet verified`)
   if (answers.total > answers.proven) gaps.push(`${plural(answers.total - answers.proven, 'permission answer')} not yet proven by a test`)
+  if (untested.length) gaps.push(`${plural(untested.length, 'part')} not attacked yet`)
   if (scan?.audit?.skipped) gaps.push('dependencies not audited')
   gaps.push('secrets not scanned yet')
-  return dimension('security', name, 'trust', 'weak', 'default', `${sentenceCase(gaps.join('; '))}.`)
+  return dimension('security', name, 'trust', 'weak', 'default', `${sentenceCase(gaps.join('; '))}.`, untested)
 }
 
 export function dataSafety(evidence) {
@@ -269,15 +274,17 @@ export function dataSafety(evidence) {
   const failing = []
   if (attacks.broke.length) failing.push(`${plural(attacks.broke.length, 'attack')} broke through`)
   if (answers.contradicted.length) failing.push(`the code contradicts ${plural(answers.contradicted.length, 'answer')} of yours`)
-  const dataItems = [...attacks.broke.map(a => `${a.id}: ${a.title}`), ...answers.contradicted.map(id => `${id}: the code does not do what you answered`)]
+  const untested = notAttacked(evidence, 'data')
+  const dataItems = [...attacks.broke.map(a => `${a.id}: ${a.title}`), ...answers.contradicted.map(id => `${id}: the code does not do what you answered`), ...untested]
   if (failing.length) return dimension('data-safety', name, 'trust', 'failing', 'default', `${sentenceCase(failing.join('; '))}.`, dataItems)
 
   const gaps = []
   if (attacks.tried) gaps.push(`${plural(attacks.tried, 'attack')} held`)
   if (attacks.cleanInARow < 2) gaps.push(attacks.tried ? 'two attack rounds in a row have not yet come back clean' : 'no attack rounds yet')
   if (answers.total > answers.proven) gaps.push(`${plural(answers.total - answers.proven, 'data answer')} not yet proven by a test`)
+  if (untested.length) gaps.push(`${plural(untested.length, 'part')} not attacked yet`)
   gaps.push('backup restore not drilled by Imagineer yet')
-  return dimension('data-safety', name, 'trust', 'weak', 'default', `${sentenceCase(gaps.join('; '))}.`)
+  return dimension('data-safety', name, 'trust', 'weak', 'default', `${sentenceCase(gaps.join('; '))}.`, untested)
 }
 
 /** Shown where an area has nothing measured. */
@@ -444,6 +451,7 @@ export function gradeRun(out, repo = null, status = 'done') {
     ledger: repo ? loadLedger(repo) : emptyLedger(),
     findings: findings(out),
     attacks: loadAttacks(out).attacks,
+    untested: untestedNow(loadAttacks(out)),
     security: readJsonIf(join(out, 'security.json')),
     detect: readJsonIf(join(out, 'detect.json')),
     copy: readJsonIf(join(out, 'copy.json')),

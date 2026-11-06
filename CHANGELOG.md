@@ -17,6 +17,7 @@ Questions asked blind.
 - The Structure area is called **Code quality**, as readability becomes a main focus. Its id in the results file stays `structure`.
 - Inspect, Build and Feedback run their own scripts without asking you each time during a run (only `node` running Imagineer's scripts, and only for that run).
 - A run on a commit Inspect has already measured, with the same versions, reuses the earlier checks, structure, security scan and test strength instead of measuring again (the test strength check alone took 18 minutes on a real project), and says so. Ask to measure again to force it.
+- Each attack round records the parts of the app it did not reach. Security and Data safety list them as "Not attacked yet" and count them as gaps, never as safe, and the next round aims at them first.
 - Questions raised by attacks are asked before the run ends, instead of waiting for the next run.
 - Inspect's instructions are a short core plus references read only when a step starts (questions, proofs, attacks, repos with no docs), so each run loads less and the steps cannot contradict each other.
 - The grade's worst state is called **At risk** instead of Failing: something that matters is known to be wrong or unprotected. The results file still says `failing`, so older results read the same.

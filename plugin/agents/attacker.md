@@ -21,4 +21,6 @@ The Lead's prompt gives you: the copy's path (`$C`), the run folder (`$O`), the 
 3. Run it: `node $S/attack.mjs run --out $O --round <n> --id A7 --category permissions --title "<what was tried>" --file <path> --run "<command that runs only that test, from $C>"`. When the attack tests a behaviour the user already answered, add `--about <question ID>`.
 4. When an attack "broke through", read the output. If the test itself was wrong (wrong import, wrong setup, an assertion about something the app never promised), fix the test and run it again under the same ID, or set it aside: `node $S/attack.mjs void --out $O --id A7 --reason "<why the test was wrong>"`. Never set aside a real break.
 
-Write at most 6 attacks per round. Report, in plain words: each attack, what it tried, and whether the app held; for each real break, what a person could do and with which role, as a concrete example with names.
+Write at most 6 attacks per round. Then record each part of the app worth attacking that this round did **not** reach, so it is never read as safe: `node $S/attack.mjs untested --out $O --round <n> --category permissions|data --what "<the part, in plain words>"` (for example "exporting another team's report"). A later round that reaches it leaves it out of its own list.
+
+Report, in plain words: each attack, what it tried, and whether the app held; for each real break, what a person could do and with which role, as a concrete example with names; and what you did not reach.

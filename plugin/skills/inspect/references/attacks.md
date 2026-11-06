@@ -10,7 +10,7 @@ Try to break the app on purpose. Before the first round, regrade with `--status 
 
 Without a user, use the `default` it prints. Spawn the attacker with its `attacker` model.
 
-Each round, spawn the `imagineer:attacker` agent with the Agent tool (model: the `attacker` above) and give it, in its prompt: the copy's path (from `$O/copy.json`), `$O`, `$S`, the round number, the attack IDs to use (six per round, continuing from the last), what the app is for and its roles, the user's answers from the ledger, and the attacks already tried (`node $S/attack.mjs list --out $O`).
+Each round, spawn the `imagineer:attacker` agent with the Agent tool (model: the `attacker` above) and give it, in its prompt: the copy's path (from `$O/copy.json`), `$O`, `$S`, the round number, the attack IDs to use (six per round, continuing from the last), what the app is for and its roles, the user's answers from the ledger, and the attacks already tried and the parts not yet attacked (`node $S/attack.mjs list --out $O`: `untested`). Point the next round at what is still untested first.
 
 After each round:
 

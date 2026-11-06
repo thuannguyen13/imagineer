@@ -509,3 +509,21 @@ test('each finish threshold says how far along it is, for the pane\'s bars', () 
   assert.deepEqual(attacks, { label: 'Clean attack rounds', done: 1, total: 2, met: false, text: '1 of 2 in a row' })
   assert.equal(finishProgress(byId, 3, {})[2].done, 2)
 })
+
+import { recordUntested, untestedNow } from './attack.mjs'
+
+test('what the latest attack round did not reach is listed, never read as safe', () => {
+  const ledger = { attacks: [], untested: {} }
+  recordUntested(ledger, { round: 1, category: 'permissions', what: "exporting another team's report" })
+  recordUntested(ledger, { round: 1, category: 'data', what: 'two people editing one deal at once' })
+  recordUntested(ledger, { round: 2, category: 'permissions', what: 'the admin settings page' })
+  // The latest round's list is what is still untested: round 2 reached the export.
+  assert.deepEqual(untestedNow(ledger), [{ category: 'permissions', what: 'the admin settings page' }])
+  assert.throws(() => recordUntested(ledger, { round: 3, category: 'money', what: 'x' }), /Category/)
+
+  const held = [{ id: 'A1', round: 1, category: 'permissions', result: 'held' }, { id: 'A2', round: 1, category: 'data', result: 'held' }]
+  const s = security({ attacks: held, untested: untestedNow(ledger) })
+  assert.match(s.summary, /1 part not attacked yet/)
+  assert.deepEqual(s.items, ['Not attacked yet: the admin settings page'])
+  assert.doesNotMatch(dataSafety({ attacks: held, untested: untestedNow(ledger) }).summary, /not attacked yet/)
+})

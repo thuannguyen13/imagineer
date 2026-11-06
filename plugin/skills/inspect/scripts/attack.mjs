@@ -7,6 +7,7 @@
 //   node attack.mjs run  --out <run folder> --round 1 --id A3 --category permissions|data
 //                        --title "<what was tried, in plain words>" --file <path> --run "<command>" [--about Q8]
 //   node attack.mjs void --out <run folder> --id A3 --reason "<why the test itself was wrong>"
+//   node attack.mjs untested --out <run folder> --round 1 --category permissions|data --what "<a part not attacked, in plain words>"
 //   node attack.mjs list --out <run folder>
 //
 // Attack tests are written first to <run folder>/attacks/<path>.
@@ -18,7 +19,25 @@ import { arg, readJson, readJsonIf, run, tail, writeJson } from './lib.mjs'
 export const CATEGORIES = ['permissions', 'data']
 
 const ledgerPath = out => join(out, 'attacks.json')
-export const loadAttacks = out => readJsonIf(ledgerPath(out)) ?? { attacks: [] }
+export const loadAttacks = out => ({ attacks: [], untested: {}, ...readJsonIf(ledgerPath(out)) })
+
+/**
+ * What the latest round says it did not attack: never safe, only not tested yet. A later round
+ * that reaches a part leaves it out of its own list.
+ */
+export function untestedNow(ledger) {
+  const rounds = Object.keys(ledger.untested ?? {}).map(Number)
+  if (!rounds.length) return []
+  return ledger.untested[String(Math.max(...rounds))] ?? []
+}
+
+export function recordUntested(ledger, { round, category, what }) {
+  if (!CATEGORIES.includes(category)) throw new Error(`Category must be one of ${CATEGORIES.join(', ')}.`)
+  if (!what?.trim()) throw new Error('--what says, in plain words, which part was not attacked.')
+  const list = (ledger.untested[String(round)] ??= [])
+  if (!list.some(u => u.category === category && u.what === what)) list.push({ category, what })
+  return ledger
+}
 
 /** What the rounds found: breaks still standing, and how many rounds in a row found nothing new. */
 export function rounds(attacks) {
@@ -83,11 +102,17 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       entry.void = arg('reason')
       writeJson(ledgerPath(out), ledger)
       console.log(`${entry.id} set aside: ${entry.void}`)
+    } else if (step === 'untested') {
+      const round = Number(arg('round'))
+      if (Number.isNaN(round)) throw new Error('untested needs --round')
+      writeJson(ledgerPath(out), recordUntested(loadAttacks(out), { round, category: arg('category'), what: arg('what') }))
+      console.log(`Round ${round}: not attacked yet (${arg('category')}): ${arg('what')}`)
     } else if (step === 'list') {
-      const summary = rounds(loadAttacks(out).attacks)
-      console.log(JSON.stringify({ ...summary, broke: summary.broke.map(a => `${a.id}: ${a.title}`), held: summary.held.length }, null, 2))
+      const ledger = loadAttacks(out)
+      const summary = rounds(ledger.attacks)
+      console.log(JSON.stringify({ ...summary, broke: summary.broke.map(a => `${a.id}: ${a.title}`), held: summary.held.length, untested: untestedNow(ledger) }, null, 2))
     } else {
-      throw new Error('Steps: run, void, list')
+      throw new Error('Steps: run, void, untested, list')
     }
   } catch (error) {
     console.error(error.message)
