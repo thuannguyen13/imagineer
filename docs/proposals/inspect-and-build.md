@@ -349,6 +349,6 @@ The mod needs Claude Code 2.1.287 or later. It checks the running version and, o
 - Confirm the stop bar numbers (80%, 2 rounds).
 - Who reviews Dev's code for design and duplication beyond Fallow. Proposed: the Architect reviews each round's diff against its own design, in a fresh spawn.
 - What decides when Dev runs on Opus. Proposed: the Architect marks each task that touches data, money or permissions.
-- How existing parts fold in. Proposed: forge's run folder, state file, finding IDs and reviewer hook into Build; ground's checklist and the Inspector idea into Inspect; guard's rules into Dev's practices. The old skills and agents are retired once their parts have moved.
-- Mods could replace the plugin's Python settings hook (`plugin/hooks/forge-reviewer-guard.py`, run on every Bash call) with an in-process `tool.call` hook, and give ground's destructive-command guard proceed and cancel buttons. A mod loads in every session once the plugin is installed, so an opt-in guard needs its own switch.
+- How existing parts fold in. Proposed: forge's run folder, state file, finding IDs and reviewer hook into Build; ground's checklist and the Inspector idea into Inspect; guard's rules into Dev's practices. The old skills and agents were removed in 0.2.0; their text stays at tag `v0.1.0` for these phases to draw on.
+- When Build brings review agents back, a mod `tool.call` hook could replace the Python settings hook forge used up to 0.1.0 (`forge-reviewer-guard.py`, run on every Bash call), and give a destructive-command guard proceed and cancel buttons. A mod loads in every session once the plugin is installed, so an opt-in guard needs its own switch.
 - Re-plan `plan/now.md` around these two commands; the bench stays the way each command is proven.

@@ -1,48 +1,37 @@
 # Imagineer
 
-Engineering judgment for AI coding agents, for people who build by prompting and for engineers alike. Imagineer helps an agent ask the questions an experienced engineer would, protect what must stay true, and prove that a change works, without slowing down routine work.
+Make AI-built software trustworthy without having to trust the AI. Imagineer is a Claude Code plugin for people who build by prompting and for engineers alike: it asks the questions an experienced engineer would, tries to break what was built, and shows a grade backed by evidence you can check, never by an agent's word.
 
-## Skills
+## Commands
 
-| Skill | Covers | What it does | How it starts | Status |
-| --- | --- | --- | --- | --- |
-| [guard](plugin/skills/guard/SKILL.md) | One change | Judges how risky a change is, keeps what must stay true working, and reuses what already exists | On its own whenever code changes | In use, not yet validated |
-| [forge](plugin/skills/forge/SKILL.md) | One feature | Plans, builds and reviews an important feature end to end, then opens a pull request | You type `/forge <what to build>` (`/imagineer:forge` as the plugin); `/forge` alone resumes an unfinished run | In use, not yet validated |
-| [ground](plugin/skills/ground/SKILL.md) | Whole product | Sets up a new product's foundations, or checks an existing one, fixes what you approve, and checks again | You type `/ground` (`/imagineer:ground` as the plugin); `/ground release` before launch | In use, not yet validated |
+| Command | What it does | Status |
+| --- | --- | --- |
+| `/imagineer:inspect` | Researches an existing repo, asks you plain-language questions about what it should do, and tries to break it until it can't, using tools like Fallow and Stryker | Coming in B2 |
+| `/imagineer:build` | Builds new work with an Architect, Dev and QA agents, to the same bar as Inspect | Coming in B4 |
+| `/imagineer:status` | Shows the repo's grade in a pane beside the chat, at once and at no cost | Available (0.2.0) |
+| `/imagineer:feedback` | Tells Imagineer it got something wrong, so it can improve | Coming in B5.5 |
 
-Where this is going (three skills: guard, forge, ground) and why: [docs/proposals/skillset.md](docs/proposals/skillset.md).
+The design, and why: [docs/proposals/inspect-and-build.md](docs/proposals/inspect-and-build.md). Work in progress: [plan/now.md](plan/now.md).
 
 ## Install
-
-### As a Claude Code plugin (recommended)
-
-This repository is a Claude Code plugin, `imagineer`: the three skills, forge's agents in `plugin/agents/`, and a hook in `plugin/hooks/` that stops forge's reviewers from committing, pushing or calling GitHub.
 
 ```
 /plugin install imagineer --marketplace thuannguyen13/imagineer
 ```
 
-On Claude Code before 2.1.275, run `/plugin marketplace add thuannguyen13/imagineer`, then `/plugin install imagineer@imagineer`.
+On Claude Code before 2.1.275, run `/plugin marketplace add thuannguyen13/imagineer`, then `/plugin install imagineer@imagineer`. The grade pane needs Claude Code 2.1.287 or later. To try a local checkout, run `claude --plugin-dir <path to this repository>/plugin`.
 
-Plugin skills carry the plugin's name: type `/imagineer:forge <what to build>` and `/imagineer:ground`. Guard still starts on its own. To try a local checkout, run `claude --plugin-dir <path to this repository>/plugin`.
+### The earlier skills
 
-### By copying folders
+Versions up to 0.1.0 shipped three skills, guard, forge and ground. They were removed in 0.2.0; their useful parts move into Inspect and Build. To keep using them, install that release: `/plugin marketplace add thuannguyen13/imagineer#v0.1.0`, then `/plugin install imagineer@imagineer`.
 
-- **guard**, for Claude Code or Codex: copy `plugin/skills/guard/` to your project's `.claude/skills/guard/` (Claude Code) or `.agents/skills/guard/` (Codex). Ask your agent to confirm where it looks for skills before you copy.
-- **ground**, Claude Code only: copy `plugin/skills/ground/` to `.claude/skills/ground/`, with guard installed too.
-- **forge**, Claude Code only: copy `plugin/skills/forge/` to `.claude/skills/forge/` and `plugin/agents/*.md` to `.claude/agents/`, with guard installed too. Copy `plugin/hooks/forge-reviewer-guard.py` to `.claude/hooks/` and add it as a `PreToolUse` hook on `Bash` in `.claude/settings.json`, as `bench/prepare.sh` does. If you installed forge under its old name, delete `.claude/skills/feature-review-loop/`.
+## Repository
 
-### Either way
-
-The skills are general-purpose. Your project's own rules (architecture, wording, design system, deployment) stay in your project's documentation. Do not replace them with this repository.
-
-Ground's own safety hooks need Python 3, and ground installs them in your project only if you agree; the plugin does not turn them on for you.
-
-Forge keeps its run files in `.claude/forge/` in your project, hidden from git. Add the values its **Project setup** table lists (how to run your checks, the test server and port, your issue board, a name prefix for test records) to your project's CLAUDE.md; forge asks for any that are missing. It is costly by design: several large-model agents per review round. Use it for features where a missed rule or permission is expensive, not for routine work.
-
-## Planning
-
-See [plan/](plan/) for current work, future candidates, and decisions.
+- `plugin/`: what users install: skills, the mod that draws the grade, and its tests.
+- `bench/`: a fixture app with planted defects, used to prove each change catches at least as much as before.
+- `docs/`: the design, the grading research and the results file format.
+- `plan/`: current work, later candidates and decisions.
+- `CHANGELOG.md`: what changed in each release.
 
 ## Design principles
 
@@ -50,7 +39,7 @@ See [plan/](plan/) for current work, future candidates, and decisions.
 - Review depth follows consequences, not file count.
 - Inspect code and established rules before inventing patterns.
 - Read the project's own docs first; update them in the same change.
-- Ask product questions; decide technical ones and record why.
+- Ask about intent in plain language; decide technical details and record why.
 - Show proof the user can check without reading code.
 - Say what happens to users first, how it works second.
 - Prefer tests and enforceable constraints over more instruction text.

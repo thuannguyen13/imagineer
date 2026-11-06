@@ -2,12 +2,13 @@
 
 Imagineer's releases, newest first. Below 1.0, a `0.y.0` release may change how Imagineer is used; such changes are listed first under **Changes you need to know**. See [docs/proposals/inspect-and-build.md](docs/proposals/inspect-and-build.md#versioning).
 
-## 0.2.0 — unreleased
+## 0.2.0 — 2026-11-05
 
 The first step of the two-command design: a grade you can see.
 
 ### Changes you need to know
 
+- guard, forge and ground, and forge's eight agents and reviewer hook, are removed. `/imagineer:inspect` and `/imagineer:build` replace them in coming releases and reuse their useful parts. To keep using them meanwhile, install 0.1.0: `/plugin marketplace add thuannguyen13/imagineer#v0.1.0`.
 - The plugin now lives in `plugin/`, and the marketplace points there. Installing Imagineer no longer downloads the bench app, docs and plans. To try a local checkout, use `claude --plugin-dir <repository>/plugin`.
 
 ### New
