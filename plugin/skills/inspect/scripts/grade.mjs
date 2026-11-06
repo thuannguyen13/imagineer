@@ -89,7 +89,10 @@ export function testStrength(evidence) {
   const skippedNote = skipped
     ? ` ${skipped} test ${skipped === 1 ? 'file' : 'files'} run only with a setting this copy did not have (a database, most often), so this may be lower than in CI.`
     : ''
-  const summary = `Tests catch ${percent(score)} of deliberate breaks (${caught} of ${total}).${criticalNote}${skippedNote}`
+  const goal = critical.length
+    ? ' Imagineer suggests at least 80% overall, and every break in critical code caught or explained.'
+    : ' Imagineer suggests at least 80%.'
+  const summary = `Tests catch ${percent(score)} of deliberate breaks (${caught} of ${total}).${goal}${criticalNote}${skippedNote}`
   return dimension('test-strength', name, 'trust', state, stryker.measured, summary, weakest)
 }
 
@@ -316,11 +319,38 @@ export function metricFor(d, evidence) {
 }
 
 /** Inspect's stop bar: test strength meets the bar, no open structure findings, and 2 attack rounds in a row found nothing new. */
-export function stopBar(dimensions, attacks) {
+/**
+ * What test strength still needs, with today's number beside the goal: the overall 80%, the
+ * 80% in each critical file, and every break in critical code caught or explained.
+ */
+export function testStrengthNeeds(evidence = {}) {
+  const ledger = evidence.ledger ?? emptyLedger()
+  const report = evidence.mutation
+  if (!evidence.stryker || !report) return ['a measurement of test strength (not measured yet)']
+  if (evidence.stryker.skipped) return ['tests: the project has no test command']
+  const { total, timeouts, score, files } = mutationScore(report)
+  if (total === 0) return ['code to measure: no breaks were made']
+  if (timeouts > 10 && timeouts / total > 0.2) return ['a test strength measurement that does not time out']
+  const needs = []
+  if (score < 0.8) needs.push(`tests that catch at least 80% of deliberate breaks (now ${percent(score)})`)
+  for (const f of files.filter(f => f.total > 0 && isCritical(ledger, f.path))) {
+    const missed = (report.files[f.path].mutants ?? [])
+      .filter(m => m.status === 'Survived' || m.status === 'NoCoverage')
+      .filter(m => !(`${f.path}#${m.id}` in (ledger.equivalent ?? {})))
+      .filter(m => !(`mutant:${f.path}:${m.location.start.line}` in ledger.dismissed)).length
+    if (missed) needs.push(`every break in critical code caught or explained (${missed} left in ${f.path}, ${percent(f.score)} caught)`)
+  }
+  return needs
+}
+
+export function stopBar(dimensions, attacks, evidence = {}) {
   const missing = []
   const byId = id => dimensions.find(d => d.id === id)
   // Each line says what Inspect still needs, in words a person reads in the grade pane.
-  if (byId('test-strength')?.state !== 'strong') missing.push('tests that catch at least 80% of deliberate breaks')
+  if (byId('test-strength')?.state !== 'strong') {
+    const needs = testStrengthNeeds(evidence)
+    missing.push(...(needs.length ? needs : ['tests that catch at least 80% of deliberate breaks']))
+  }
   if (byId('structure')?.state !== 'strong') missing.push('you to review the structure findings')
   if (rounds((attacks ?? []).filter(a => !a.void)).cleanInARow < 2) missing.push('two attack rounds in a row that find nothing new')
   return { met: missing.length === 0, missing }
@@ -363,7 +393,7 @@ export function gradeRun(out, repo = null) {
     foundations(evidence),
   ]
   for (const d of dimensions) d.metric = metricFor(d, evidence)
-  return { evidence, dimensions, overall: overall(dimensions), bar: stopBar(dimensions, evidence.attacks) }
+  return { evidence, dimensions, overall: overall(dimensions), bar: stopBar(dimensions, evidence.attacks, evidence) }
 }
 
 function imagineerVersion() {
@@ -411,6 +441,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   excludeFromGit(repo)
   writeJson(join(repo, RESULTS), results)
   console.log(`${grade.state}: ${grade.reason || 'every dimension meets the bar.'}`)
-  console.log(bar.met ? 'Finished: nothing more for Inspect to do.' : `Not finished yet. Inspect still needs: ${bar.missing.join('; ')}.`)
+  console.log(bar.met ? 'Finished, by the bar Imagineer suggests.' : `Not finished yet. By the bar Imagineer suggests, Inspect still needs: ${bar.missing.join('; ')}.`)
   for (const d of dimensions) console.log(`  ${d.state.padEnd(9)} ${d.name}: ${d.summary}`)
 }

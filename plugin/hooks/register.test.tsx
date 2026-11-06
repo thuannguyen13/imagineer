@@ -277,7 +277,7 @@ test('the pane lists open questions, most consequential first, and the stop bar'
   await $.command.run(typed('imagineer:status'))
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect(await ui.find({ type: 'Text', text: /^Not finished yet\. Inspect still needs:$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Not finished yet\. By the bar Imagineer suggests, Inspect still needs:$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^  • two attack rounds in a row that find nothing new$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^Run \/imagineer:inspect to continue\.$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /Stop bar/ })).toBeUndefined()

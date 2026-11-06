@@ -341,3 +341,22 @@ test('every area\'s number has one shape: done/total and its good outcome', () =
   assert.equal(metric({ id: 'intent', state: 'weak', summary: '' }, { ledger }), '1/2 answers proven')
   assert.equal(metric({ id: 'structure', state: 'weak', summary: '' }, { fallow: { health: { health_score: { score: 87.5 } } } }), '87.5/100 Fallow health')
 })
+
+import { testStrengthNeeds } from './grade.mjs'
+
+test('what test strength still needs names the real reason, with today\'s number', () => {
+  const mutant = (status, line = 1, id = String(line)) => ({ id, status, location: { start: { line } } })
+  const report = {
+    files: {
+      'lib/deal-scope.ts': { mutants: [mutant('Killed', 1), mutant('Killed', 2), mutant('Killed', 3), mutant('Survived', 16), mutant('Survived', 24), mutant('Survived', 28)] },
+      'lib/identity.ts': { mutants: Array.from({ length: 45 }, (_, i) => mutant('Killed', i + 1)) },
+    },
+  }
+  const ledger = { ...emptyLedger(), critical: ['lib/deal-scope.ts', 'lib/identity.ts'] }
+  assert.deepEqual(testStrengthNeeds({ stryker: { ok: true }, mutation: report, ledger }), [
+    'every break in critical code caught or explained (3 left in lib/deal-scope.ts, 50% caught)',
+  ])
+  const weak = { files: { 'a.ts': { mutants: [mutant('Killed', 1), mutant('Survived', 2), mutant('Survived', 3)] } } }
+  assert.deepEqual(testStrengthNeeds({ stryker: { ok: true }, mutation: weak }), ['tests that catch at least 80% of deliberate breaks (now 33%)'])
+  assert.deepEqual(testStrengthNeeds({}), ['a measurement of test strength (not measured yet)'])
+})
