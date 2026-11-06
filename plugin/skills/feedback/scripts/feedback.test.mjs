@@ -90,3 +90,12 @@ test('feedback is recorded locally with the Imagineer version and a fingerprint'
   assert.match(run('share', '--id', '1').stdout, /issues\/new\?/)
   assert.notEqual(run('record', '--kind', 'bug', '--area', 'inspect', '--said', 'x').status, 0)
 })
+
+test('a mutation run where most breaks timed out is flagged as tool trouble', t => {
+  const root = repo(t, {
+    '.claude/imagineer/runs/1/mutation.json': { files: { 'lib/a.ts': { mutants: [...Array.from({ length: 30 }, () => ({ status: 'Timeout' })), { status: 'Killed' }] } } },
+  })
+  const [f] = selfCheck(root)
+  assert.equal(f.rule, 'stryker-timeouts')
+  assert.match(f.said, /30 of 31 breaks timed out/)
+})

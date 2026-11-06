@@ -57,6 +57,11 @@ export function detect(repo) {
         : 'none'
       : 'present'
 
+  // Tests that skip themselves unless a setting is present (a database URL, most often): they
+  // did not run in Inspect's copy, so its measurements may miss what they cover.
+  const testFiles = files.filter(f => /\.(test|spec)\.[cm]?[jt]sx?$/.test(f))
+  const needsSetting = testFiles.filter(f => /\b(skipIf|runIf)\(\s*!?\s*process\.env\.[A-Z0-9_]+/.test(readFileSync(join(repo, f), 'utf8')))
+
   const sources = files.filter(f => /\.(m|c)?[jt]sx?$/.test(f) && !/(^|\/)(test|tests|__tests__)\/|\.(test|spec)\./.test(f))
   const envRead = new Set()
   for (const file of sources) {
@@ -101,6 +106,7 @@ export function detect(repo) {
     docs: { level: docsLevel, readme, agentDocs, files: docs },
     env: { example: envExample, read: [...envRead].sort(), missing: envMissing },
     sourceFiles: sources.length,
+    tests: { files: testFiles.length, needSetting: needsSetting.length },
   }
 }
 

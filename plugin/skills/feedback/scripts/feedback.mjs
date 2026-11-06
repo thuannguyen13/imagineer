@@ -82,6 +82,12 @@ export function selfCheck(repo) {
     const stryker = readJsonIf(join(out, 'stryker.json'))
     if (fallow && !fallow.ok) flags.push(flag('tool-trouble', 'inspect', 'fallow', `Fallow did not run in Inspect run ${latest}.`))
     if (stryker && !stryker.ok && !stryker.skipped) flags.push(flag('tool-trouble', 'inspect', 'stryker', `Stryker did not run in Inspect run ${latest}.`))
+    // Most breaks timing out means the runs were too slow to tell anything, not that tests caught them.
+    const mutants = Object.values(readJsonIf(join(out, 'mutation.json'))?.files ?? {}).flatMap(f => f.mutants ?? [])
+    const timeouts = mutants.filter(m => m.status === 'Timeout').length
+    if (timeouts > 10 && timeouts / mutants.length > 0.2) {
+      flags.push(flag('tool-trouble', 'inspect', 'stryker-timeouts', `${timeouts} of ${mutants.length} breaks timed out in Inspect run ${latest}: the runs were too slow to measure test strength.`))
+    }
   }
 
   // An answer Inspect called proven, broken by one of its own attacks.
