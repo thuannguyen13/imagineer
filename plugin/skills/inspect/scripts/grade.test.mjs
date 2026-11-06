@@ -276,3 +276,18 @@ test('Not sure keeps the question open with a new example', () => {
   assert.match(dialogFor(ledger.questions[0]).question, /For example: Sam, an intern/)
   assert.throws(() => notSure(ledger, { id: 'Q1', example: 'canReadNote returns true' }), /camelCase/)
 })
+
+test('detect: CI that runs the test command directly counts, and named env examples count', t => {
+  const repo = mkdtempSync(join(tmpdir(), 'imagineer-test-'))
+  t.after(() => rmSync(repo, { recursive: true, force: true }))
+  mkdirSync(join(repo, '.github/workflows'), { recursive: true })
+  mkdirSync(join(repo, 'lib'))
+  writeFileSync(join(repo, 'package.json'), JSON.stringify({ scripts: { test: 'vitest run' } }))
+  writeFileSync(join(repo, '.github/workflows/checks.yml'), 'jobs:\n  tests:\n    steps:\n      - run: npx vitest run --shard=${{ matrix.shard }}/3\n')
+  writeFileSync(join(repo, 'lib/db.ts'), 'const url = process.env.DATABASE_URL; const onVercel = process.env.VERCEL; const env = process.env.VERCEL_ENV')
+  writeFileSync(join(repo, '.env.local.example'), 'DATABASE_URL=postgres://localhost/app\n')
+  const facts = detect(repo)
+  assert.equal(facts.ci.runsTests, true)
+  assert.equal(facts.env.example, '.env.local.example')
+  assert.deepEqual(facts.env.missing, [])
+})

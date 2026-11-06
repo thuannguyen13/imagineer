@@ -18,6 +18,10 @@ Clearer questions, for people who do not read code.
 - In the terminal and the Desktop app, Imagineer's questions get a calm line above the dialog, and engineers see each question's code details in a dim line there.
 - Build asks its Architect's questions and shows its requirements the same way.
 
+### Fixed
+
+- Foundations no longer says CI skips the tests when a workflow runs the test command directly (for example `npx vitest run --shard=1/3`), and it recognises named env examples such as `.env.local.example`. Variables the hosting platform sets itself (Vercel, Netlify, Render, Fly, GitHub) need no example. Both were found on the first real project.
+
 ## 0.8.0 — 2026-11-05
 
 Imagineer checks itself, and you can tell it when it got something wrong.

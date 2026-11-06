@@ -38,8 +38,13 @@ export function detect(repo) {
   const workflows = files.filter(f => /^\.github\/workflows\/.+\.ya?ml$/.test(f))
   const workflowText = workflows.map(f => readFileSync(join(repo, f), 'utf8')).join('\n')
   const testScript = scripts.test && !DEFAULT_TEST.test(scripts.test) ? scripts.test : null
+  // CI runs the tests when a workflow calls the test script, or runs its command directly
+  // (for example `npx vitest run --shard=1/3` for a test script of `vitest run`).
+  const testRunner = testScript?.trim().split(/\s+/)[0] ?? null
   const ciRunsTests =
-    testScript !== null && /\b(npm|pnpm|yarn|bun)( run)? test\b|\bnpm t\b/.test(workflowText)
+    testScript !== null &&
+    (/\b(npm|pnpm|yarn|bun)( run)? test\b|\bnpm t\b/.test(workflowText) ||
+      (testRunner !== null && new RegExp(`\\b(npx |pnpm exec |yarn |bunx )?${testRunner.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(workflowText)))
 
   const docs = files.filter(f => /^docs\/.+\.md$/.test(f))
   const readme = files.find(f => /^readme(\.md)?$/i.test(f)) ?? null
@@ -59,7 +64,8 @@ export function detect(repo) {
       envRead.add(match[1] ?? match[2])
     }
   }
-  const envExample = files.find(f => /^\.env\.(example|sample|template)$/.test(f)) ?? null
+  // `.env.example`, and named variants such as `.env.local.example`.
+  const envExample = files.find(f => /^\.env(\.[\w-]+)*\.(example|sample|template)$/.test(f)) ?? null
   const envDocumented = envExample
     ? new Set(
         readFileSync(join(repo, envExample), 'utf8')
@@ -68,7 +74,9 @@ export function detect(repo) {
           .filter(Boolean),
       )
     : new Set()
-  const envMissing = [...envRead].filter(name => !envDocumented.has(name) && !['NODE_ENV', 'CI'].includes(name)).sort()
+  // Variables the platform sets itself (Node, CI, Vercel, Netlify, Render, Fly) need no example.
+  const platformSet = name => ['NODE_ENV', 'CI', 'PORT'].includes(name) || /^(VERCEL|NETLIFY|RENDER|FLY|GITHUB|NEXT_RUNTIME)(_|$)/.test(name)
+  const envMissing = [...envRead].filter(name => !envDocumented.has(name) && !platformSet(name)).sort()
 
   return {
     isNodeProject: existsSync(join(repo, 'package.json')),
