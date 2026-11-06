@@ -17,7 +17,7 @@ Questions asked blind.
 - "Matches your intent" counts what the questions found: answers that matched what the app does, gaps you want fixed, and gaps you chose to keep. A gap you want fixed counts against it at once, as Failing when it is about data, money or permissions.
 - Gaps are asked first, and the report lists each one: what you said, what the app does today, and whether you want it fixed.
 - Build's Architect writes choices for what is new, and checks, asked blind, for what the app already does.
-- The Overview is redesigned, one layout for every app, each drawing it its own way: the verdict as a headline with a tally ("3 failing · 2 weak · 1 strong"), the questions that wait as a callout with **See questions**, the areas grouped under "Can you trust it?" and "Is it well kept?" with each one's number under its name and a › that opens its evidence, and a short **To finish** list.
+- The pane is drawn by one layout in every app: each area is one row of aligned columns (icon, name, state, its number and what it counts) with a › that opens its evidence, in the terminal and in Desktop alike.
 - The pane's two tabs each have a job. **Overview** (was Grade) shows how your project is doing, and says when questions wait for you, with a line that opens them. **Questions** shows what is waiting, gaps first, then **Your answers**: each question you resolved and what came of it ("Matches what the app does", "Differs from the app: you want it fixed", "Settled from the docs or code"), and whether a test proves it.
 
 ### Fixed

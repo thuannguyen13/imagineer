@@ -12,6 +12,7 @@ import {
   dialogIds,
   FLAGS_PATH,
   findPackedRef,
+  finishLines,
   firstItems,
   isActive,
   isSameCommit,
@@ -200,80 +201,79 @@ export const register: Register = on => {
     const tested = whenTested(summary.run.at)
     const isRunning = summary.run.status === 'running'
 
-    // One layout for every surface; each draws it its own way (text sizes and spacing steps are the
-    // surface's). A headline, the questions that wait as a callout, one row per area with its number
-    // under its name and a small chevron to open its evidence, and what is left to finish. Rows are
-    // not buttons themselves: Desktop, VS Code and mobile draw a button as its plain label alone.
+    // One layout for every surface. Each area is one row of columns sized in character cells, which
+    // Desktop measures with its code font, so they line up there as in the terminal: icon, name, state,
+    // the number, what it counts, and a small chevron that opens the evidence. The row itself is not a
+    // button: Desktop, VS Code and mobile draw a button as its plain label alone.
+    const columns = e.props.bodyColumns
+    const showValue = columns >= 44
+    const showWhat = columns >= 64
+    const nameWidth = Math.max(12, Math.min(26, columns - 4 - 12 - (showValue ? 10 : 0) - (showWhat ? 18 : 0) - 3))
+    const valueWidth = Math.max(0, ...summary.dimensions.map(d => (d.metric && d.metric.value !== '—' ? d.metric.value.length : 0)))
     const toggleArea = (id: string) => () =>
       update($, openAtom, ids => (ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]))
-    const tally = (['failing', 'weak', 'strong', 'unchecked'] as const)
-      .map(state => {
-        const n = summary.dimensions.filter(d => !d.isPending && d.state === state).length
-        return n ? `${n} ${state === 'unchecked' ? 'not checked' : state}` : ''
-      })
-      .concat(summary.dimensions.some(d => d.isPending) ? [`${summary.dimensions.filter(d => d.isPending).length} coming up`] : [])
-      .filter(Boolean)
-      .join(' · ')
-    const header = (
-      <Box flexDirection="column" gap="xs">
-        {isRunning ? (
-          <Text size="heading" weight="semibold">
-            {runningTitle(summary.run)}
-          </Text>
-        ) : (
-          <Text size="heading" weight="semibold" color={overall.color}>
-            {overall.icon} {overall.word}
-          </Text>
-        )}
-        <Text size="caption" dimColor>
-          {isRunning ? summary.run.step || 'Working…' : tally}
+
+    const header = isRunning ? (
+      <Box flexDirection="column">
+        <Text weight="semibold">{runningTitle(summary.run)}</Text>
+        <Text dimColor>{summary.run.step || 'Working…'}</Text>
+      </Box>
+    ) : (
+      <Box flexDirection="column">
+        <Text color={overall.color} weight="semibold">
+          {overall.icon} {overall.word}
         </Text>
-        {!isRunning && (
-          <Text size="caption" dimColor>
-            {[summary.run.commit, tested ? `tested ${tested}` : ''].filter(Boolean).join(' · ')}
-          </Text>
-        )}
+        <Text dimColor>{[summary.run.commit, tested ? `tested ${tested}` : ''].filter(Boolean).join(' · ')}</Text>
       </Box>
     )
+
     const areaRow = (dimension: Results['dimensions'][number]) => {
       const label = labelFor(dimension)
       const isOpen = opened.includes(dimension.id)
       const metric = dimension.metric && dimension.metric.value !== '—' ? dimension.metric : null
-      const stale = !dimension.isPending && (dimension.isStale || summary.isStale) ? ' ⟳' : ''
+      const stateText = `${label.word}${!dimension.isPending && (dimension.isStale || summary.isStale) ? ' ⟳' : ''}`
       return (
         <Box flexDirection="column">
-          <Box flexDirection="row" alignItems="center" gap="sm">
-            <Box width={2}>
-              <Text color={label.color} weight="semibold">
-                {label.icon}
-              </Text>
+          <Box flexDirection="row">
+            <Box width={3} flexShrink={0}>
+              <Text color={label.color}>{label.icon}</Text>
             </Box>
-            <Box flexGrow={1} flexShrink={1} flexDirection="column">
-              <Text weight="medium">{dimension.name}</Text>
-              {metric ? (
-                <Text size="caption" dimColor tabular>
-                  {`${metric.value} ${metric.label}`}
-                </Text>
-              ) : dimension.isPending ? (
-                <Text size="caption" dimColor>
-                  Later in this run
-                </Text>
-              ) : null}
+            <Box width={nameWidth} flexShrink={0}>
+              <Text wrap="truncate-end">{dimension.name}</Text>
             </Box>
-            <Text color={label.color} weight="medium">
-              {`${label.word}${stale}`}
-            </Text>
-            <Button key={`row-${dimension.id}`} label={isOpen ? '⌄' : '›'} plain dimColor onPress={toggleArea(dimension.id)} />
+            <Box width={12} flexShrink={0}>
+              <Text color={label.color}>{stateText}</Text>
+            </Box>
+            {showValue && (
+              <Box width={valueWidth + 2} flexShrink={0} justifyContent="flex-end">
+                <Text tabular>{metric ? metric.value : ''}</Text>
+              </Box>
+            )}
+            {showWhat && (
+              <Box width={18} flexShrink={0} paddingLeft={2}>
+                <Text dimColor wrap="truncate-end">
+                  {metric?.label ?? ''}
+                </Text>
+              </Box>
+            )}
+            <Box paddingLeft={1}>
+              <Button key={`row-${dimension.id}`} label={isOpen ? '⌄' : '›'} plain dimColor onPress={toggleArea(dimension.id)} />
+            </Box>
           </Box>
           {isOpen && (
-            <Box flexDirection="column" gap="xs" paddingLeft={3} paddingTop="xs" paddingBottom="sm">
-              {dimension.summary !== '' && <Text size="footnote">{dimension.summary}</Text>}
+            <Box flexDirection="column" paddingLeft={3} marginBottom={1}>
+              {dimension.summary !== '' && <Text>{dimension.summary}</Text>}
               {firstItems(dimension.items).map(item => (
-                <Text size="footnote" dimColor>
-                  {`• ${item}`}
-                </Text>
+                <Box flexDirection="row">
+                  <Box width={2}>
+                    <Text dimColor>•</Text>
+                  </Box>
+                  <Box flexShrink={1}>
+                    <Text dimColor>{item}</Text>
+                  </Box>
+                </Box>
               ))}
-              <Text size="caption" dimColor>
+              <Text dimColor>
                 {MEASURED_LABEL[dimension.measured]}
                 {dimension.isClaimed ? ' · claimed, not re-run' : ''}
               </Text>
@@ -282,50 +282,33 @@ export const register: Register = on => {
         </Box>
       )
     }
-    const group = (title: string, ids: Results['dimensions']) =>
-      ids.length > 0 && (
-        <Box flexDirection="column" gap="sm">
-          <Text size="caption" weight="semibold" dimColor>
-            {title}
-          </Text>
-          {ids.map(d => areaRow(d))}
-        </Box>
-      )
+
     const overview = (
-      <Box flexDirection="column" gap="lg">
-        {waiting > 0 && (
-          <Box borderStyle="round" borderColor="warning" paddingX="md" paddingY="sm" flexDirection="row" alignItems="center" gap="md">
-            <Box flexGrow={1} flexShrink={1} flexDirection="column">
-              <Text weight="semibold">{`${waiting} ${waiting === 1 ? 'question waits' : 'questions wait'} for you`}</Text>
-              <Text size="caption" dimColor>
-                Only you can say what the app should do.
+      <Box flexDirection="column">
+        {summary.dimensions.map(d => areaRow(d))}
+        <Box marginTop={1} flexDirection="column">
+          {isRunning && <Text dimColor>Areas fill in as Inspect measures them.</Text>}
+          {!isRunning &&
+            summary.run.bar &&
+            finishLines(summary.run.bar).map(line => (
+              <Text dimColor={!line.startsWith('✓')} color={line.startsWith('✓') ? 'success' : undefined}>
+                {line}
               </Text>
-            </Box>
-            <Button key="go-questions" label="See questions" variant="primary" onPress={() => update($, tabAtom, () => 'questions')} />
-          </Box>
-        )}
-        {group('Can you trust it?', summary.dimensions.filter(d => d.group === 'trust'))}
-        {group('Is it well kept?', summary.dimensions.filter(d => d.group === 'care'))}
-        {isRunning ? (
-          <Text size="caption" dimColor>
-            Areas fill in as Inspect measures them.
-          </Text>
-        ) : summary.run.bar?.met ? (
-          <Text color="success">✓ Finished, by the thresholds Imagineer suggests.</Text>
-        ) : summary.run.bar ? (
-          <Box flexDirection="column" gap="xs">
-            <Text weight="semibold">To finish</Text>
-            <Text size="caption" dimColor>
-              By the thresholds Imagineer suggests, Inspect still needs:
-            </Text>
-            {summary.run.bar.missing.map(item => (
-              <Text size="footnote">{`○ ${item}`}</Text>
             ))}
-            <Text size="caption" dimColor>
-              Run /imagineer:inspect to continue.
-            </Text>
+          {waiting > 0 && (
+            <Box marginTop={1}>
+              <Button
+                key="go-questions"
+                label={`${waiting} ${waiting === 1 ? 'question waits' : 'questions wait'} for you: open Questions`}
+                plain
+                onPress={() => update($, tabAtom, () => 'questions')}
+              />
+            </Box>
+          )}
+          <Box marginTop={1}>
+            <Text dimColor>Select › on an area for its evidence.</Text>
           </Box>
-        ) : null}
+        </Box>
       </Box>
     )
 
@@ -404,9 +387,7 @@ export const register: Register = on => {
         </Box>
         {header}
         {tab === 'questions' ? questions : overview}
-        <Text dimColor size="caption">
-          Imagineer {summary.imagineer}
-        </Text>
+        <Text dimColor>Imagineer {summary.imagineer}</Text>
       </Box>
     )
   })
