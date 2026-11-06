@@ -74,40 +74,55 @@ Tool results need judgment. On the bench app, Fallow reports `public/app.js` as 
 
 Every question goes to the user in plain language, about people and features, never files or code.
 
-```
-<the point, in one sentence>
+**Asked blind.** Inspect never tells the user what they seem to want, or what the app does, before they answer. A reasonable sentence put in front of someone gets agreement, and the code it describes may be wrong. So a question about what the app already does (a **check**) describes a situation and asks what should happen. One of the outcomes offered is what the app does today, unmarked, in an order that does not give it away:
 
-You'd expect: what the user seems to want
-Today:        what happens now, as something a person sees
-For example:  a concrete case with names and values
+```
+<the point: what should happen, in one sentence>
+
+For example: a concrete situation with names and values
 
 What should happen?
-  ○ <suggestion>   what choosing it means for people or data
-  ○ <suggestion>   …
-  ○ Not sure       explain it another way, with a new example
-  ○ Other          type your own answer
+  ○ <outcome>    what it means for people or data
+  ○ <outcome>    …
+  ○ Not sure     explain it another way, with a new example
+  ○ Other        type your own answer
+```
+
+If the user's answer is what the app does, it is confirmed, and proven with a test next. If not, it is a **gap**, and only then are they shown what happens today:
+
+```
+<the point>
+
+You said: <their answer>
+Today:    what happens now, as something a person sees
+
+Fix it, or keep it as it is?
+  ○ Fix it (recommended)   what they said
+  ○ Keep it as it is       what the app does today
+  ○ Not sure               leave it undecided; it stays listed as a gap
 ```
 
 For example, from the sales portal:
 
 ```
-Someone who loses access to the pipeline can still read its deal notes.
+What should happen to deal notes when someone loses pipeline access?
 
-You'd expect: Only people who can open a deal read the notes written on it.
-Today:        A person still listed on a deal keeps reading its notes after
-              their role loses the pipeline.
-For example:  Bo is on the Acme renewal. An admin moves Bo to a Marketing role
-              with no pipeline access. Bo opens Acme and reads every note.
+For example: Bo is on the Acme renewal. An admin moves Bo to a Marketing
+role with no pipeline access. Bo opens Acme.
 
-  ○ Must not happen   Bo stops seeing the deal's notes when the role changes.
-  ○ Fine as it is     Anyone still listed on a deal keeps reading its notes.
-  ○ Not sure          Explain it another way, with a new example.
+  ○ Bo keeps reading them       Anyone still on a deal reads its notes.
+  ○ Bo can no longer read them  Notes follow pipeline access.
+  ○ Not sure                    Explain it another way, with a new example.
 ```
+
+Bo picks "can no longer read them"; the app lets Bo read them, so the next dialog says "Today: Bo still opens Acme and reads every note on the deal. Fix it, or keep it as it is?"
+
+Where there is nothing to compare with (the big picture, or a design decision for something new), a **choice** offers suggestions, the recommended one first.
 
 - **Plain language is enforced.** The question script refuses a question whose user-facing text holds a file name, a function call, a code name or a line number. Those go in the question's `detail`, which the grade pane shows engineers in a dim line above the dialog.
 - **Ask about the product, not the code.** Which code is critical is asked as parts of the product a person knows (sign-in, roles, amounts); Inspect maps the answer to files itself.
 - **The point comes first**: one sentence of at most 100 characters.
-- **Every suggestion says what it means** for the user's people or data, the recommended one first.
+- **Every option says what it means** for the user's people or data. A check's outcomes are never marked as recommended or current; a choice's suggestions put the recommended one first.
 - **Not sure is always offered.** It keeps the question open and asks again with a new example from another angle; after two, the question is deferred with that reason.
 - **The script lays out every dialog the same way** (`questions.mjs ask`), so the format does not depend on the Lead's wording.
 - Most consequential first: data, money, permissions, then behaviour, then wording; a few per round; nothing a test, doc or recorded decision already answers.
@@ -120,7 +135,7 @@ Many repos built by prompting have no README, no CLAUDE.md and no docs. Then the
 1. **Detect.** During research, classify the docs as none, thin (a README with setup only) or present. Report it under Foundations.
 2. **Ask the big picture first.** Before any line-level question, a short interview of at most 5 questions, with suggestions drawn from the code: what the app is for, who uses it and in which roles, what is sensitive (money, personal data), and what must never happen. These answers rank every later question.
 3. **Reconstruct from the code.** Agents draft what the app seems to do: features, roles and permissions, the data and its lifecycle, outside services. Every statement is marked *inferred from code* until the user confirms it.
-4. **Never treat the code as intent.** Code written by prompting can be wrong, so documenting current behaviour as intended would bake in its bugs. Without docs, the YOUR EXPECTATION line says it is a guess: "My guess (no docs found): …".
+4. **Never treat the code as intent.** Code written by prompting can be wrong, so documenting current behaviour as intended would bake in its bugs. Checks are asked blind for this reason: the user says what should happen before seeing what the code does.
 5. **Save what was confirmed.** With the user's agreement, asked once, Inspect writes the confirmed answers as short, plain docs in the repo: what the app is for, roles and permissions, the data model, and decisions. It adds a pointer in CLAUDE.md so later AI sessions read them. Anything not confirmed stays marked as inferred.
 
 The grade shows it: Matches your intent starts at ? Not checked, and Foundations is Weak until the docs exist. The docs Inspect writes are also what Build's Architect reads later.
@@ -199,7 +214,7 @@ The user needs to see at a glance how trustworthy the repo is, and how that chan
 - **A band above the prompt** with the one-line status while Inspect or Build runs, for example "Inspecting · round 2 · 3 questions waiting".
 - **`/imagineer:status`** opens the pane at once, with no Claude turn and no usage spent. Mod command names cannot contain `:`, so the name comes from a small `status` skill in the plugin, and the mod answers that command before the skill reaches Claude (tested 2026-11-05: 0 turns, no cost). Where the mod cannot draw, such as a cloud session, it answers with the grade as text. If mods are turned off, the skill runs instead and reads the same results file.
 - **Data from a file, not from the agents' words.** Inspect and Build write each tool result and answer to a results file in the run folder; the mod reads that file and redraws. The mod never computes or invents a grade itself.
-- **Questions drawn properly.** A mod can restyle the dialog Claude asks questions in, so the YOUR EXPECTATION / ACTUAL IMPLEMENTATION / EXAMPLE / SUGGESTIONS format can be laid out clearly, with the type-your-own field kept.
+- **Questions drawn properly.** A mod can restyle the dialog Claude asks questions in, so Imagineer's questions get their own calm line and the engineers' detail above the dialog, with the type-your-own field kept.
 - **Read only.** The mod reads files and draws. It does not approve tool calls, run processes or call models, so what it does can be checked with `claude plugin validate` before installing.
 
 **Where it shows.** Mods draw in the terminal, the Desktop app's Code tab and the VS Code extension (Claude Code 2.1.287 or later). They do not draw in cloud sessions or `claude -p`, so the same grade also goes into the final report and the pull request.

@@ -42,7 +42,7 @@ const POLL_MS = 3000
 // Change the tag when Summary's fields change: a value an earlier version
 // stored is then read as "no results" until the file is read again.
 const summaryAtom = atom({ plugin: 'imagineer', key: 'summary' } as const, { kind: 'none' } as Summary, {
-  shape: 'summary-5',
+  shape: 'summary-6',
 })
 
 // Shaped, so a tab an earlier version stored (overview, evidence) reads as the grade.
@@ -310,8 +310,9 @@ export const register: Register = on => {
             <Box width={5}>
               <Text dimColor>{q.id}</Text>
             </Box>
-            <Box flexShrink={1}>
+            <Box flexShrink={1} flexDirection="column">
               <Text>{q.text}</Text>
+              {q.isGap && <Text color="warning">Your answer differs from what the app does: fix it or keep it?</Text>}
             </Box>
           </Box>
         ))}

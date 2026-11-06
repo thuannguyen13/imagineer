@@ -36,7 +36,7 @@ Open Claude Code in your project and run `/imagineer:inspect`.
 Inspect works in a throwaway copy of your last commit, so your project's files and git history are never changed. Uncommitted changes are not included. It:
 
 - **Measures** how well your tests catch deliberate breaks, how the code is structured, and the basics (tests, typecheck, CI, docs). If the test check would take more than 20 minutes, it asks first.
-- **Asks you questions** about what the app should do, in plain language, each with an example and suggested answers. Pick one, write your own, or choose "Not sure".
+- **Asks you questions** about what the app should do, in plain language. It describes a situation and asks what should happen, without telling you what the app does, so your answer is your own. Pick an option, write your own, or choose "Not sure". Only if your answer differs from what the app does does it show you what happens today, and ask whether to fix it or keep it.
 - **Proves your answers** with tests, and **tries to break the app** (for example, a user seeing another team's data). Anything that breaks through comes back to you as a question. Before the first attack, it asks once which models to use (see Build below); the choice is shared.
 
 It never fixes your code. When it finds a gap, it tells you in plain words. It offers to add the tests it proved, or docs from your answers, as new files for you to review. Nothing is added without your yes, and nothing is committed.

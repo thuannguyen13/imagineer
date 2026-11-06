@@ -93,11 +93,17 @@ export function readOpenQuestions(source: string | null, limit = 5): OpenQuestio
     return []
   }
   if (!isObject(parsed) || !Array.isArray(parsed.questions)) return []
-  const rank = (topic: string) => (TOPIC_ORDER.includes(topic) ? TOPIC_ORDER.indexOf(topic) : TOPIC_ORDER.length)
+  // Gaps first (the user's answer differs from what the app does), then by topic.
+  const rank = (q: OpenQuestion) => (q.isGap ? 0 : 100) + (TOPIC_ORDER.includes(q.topic) ? TOPIC_ORDER.indexOf(q.topic) : TOPIC_ORDER.length)
   return parsed.questions
-    .filter((q): q is Json => isObject(q) && q.status === 'open' && typeof q.id === 'string')
-    .map(q => ({ id: String(q.id), topic: text(q.topic, 'behaviour'), text: text(q.point) || text(q.expectation).replace(/^My guess \(no docs found\):\s*/, '') }))
-    .sort((a, b) => rank(a.topic) - rank(b.topic) || Number(a.id.slice(1)) - Number(b.id.slice(1)))
+    .filter((q): q is Json => isObject(q) && (q.status === 'open' || q.status === 'gap') && typeof q.id === 'string')
+    .map(q => ({
+      id: String(q.id),
+      topic: text(q.topic, 'behaviour'),
+      text: text(q.point) || text(q.expectation).replace(/^My guess \(no docs found\):\s*/, ''),
+      isGap: q.status === 'gap',
+    }))
+    .sort((a, b) => rank(a) - rank(b) || Number(a.id.slice(1)) - Number(b.id.slice(1)))
     .slice(0, limit)
 }
 
@@ -194,7 +200,7 @@ export function readResults(source: string): Summary {
 
 const shortText = (value: string, max = 110) => (value.length > max ? `${value.slice(0, max - 1).trimEnd()}…` : value)
 
-export const questionLine = (q: OpenQuestion) => `${q.id} (${q.topic}): ${shortText(q.text)}`
+export const questionLine = (q: OpenQuestion) => `${q.id} (${q.isGap ? 'differs from what the app does' : q.topic}): ${shortText(q.text)}`
 
 /** How the Overview lays out a row at a pane width: the full row, the number alone, or two lines. */
 export type RowLayout = { kind: 'wide' | 'medium' | 'narrow'; nameWidth: number; stateWidth: number }

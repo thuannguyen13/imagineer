@@ -42,7 +42,13 @@ export type Run = {
 }
 
 /** An open question from the question ledger, for the pane. */
-export type OpenQuestion = { id: string; topic: string; text: string }
+export type OpenQuestion = {
+  id: string
+  topic: string
+  text: string
+  /** The user's answer differs from what the app does: asked next whether to fix it. */
+  isGap: boolean
+}
 
 export type Results = {
   kind: 'results'

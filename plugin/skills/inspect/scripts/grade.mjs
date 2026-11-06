@@ -12,7 +12,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { arg, readJson, readJsonIf, run, writeJson } from './lib.mjs'
 import { loadAttacks, rounds } from './attack.mjs'
-import { CRITICAL_TOPICS, emptyLedger, findings, isCritical, loadLedger, summary } from './questions.mjs'
+import { CRITICAL_TOPICS, emptyLedger, findings, isCritical, isGapToFix, loadLedger, openQuestions, summary } from './questions.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 export const RESULTS = '.claude/imagineer/results.json'
@@ -169,19 +169,28 @@ export function intent(evidence) {
   const settled = ledger.questions.filter(q => q.status === 'decided').length
   const answered = ledger.questions.filter(q => q.status === 'answered')
   const deferred = ledger.questions.filter(q => q.status === 'deferred').length
+  // A check is asked blind: the user's pick matched what the app does, or differed (a gap) and they chose.
+  const matched = answered.filter(q => q.matches === true).length
+  const toFix = answered.filter(isGapToFix)
+  const kept = answered.filter(q => q.decision === 'keep').length
+  const chosen = answered.length - matched - toFix.length - kept
   const tally = [
-    answered.length ? `${answered.length} answered by you` : '',
+    matched ? `${matched} matched what the app does` : '',
+    toFix.length ? `${toFix.length} ${toFix.length === 1 ? 'differs' : 'differ'} and you want ${toFix.length === 1 ? 'it' : 'them'} fixed` : '',
+    kept ? `${kept} ${kept === 1 ? 'differs' : 'differ'}, kept as ${kept === 1 ? 'it is' : 'they are'}` : '',
+    chosen ? `${chosen} answered by you` : '',
     settled ? `${settled} settled from the docs or code` : '',
     deferred ? `${deferred} deferred` : '',
     counts.waiting ? `${counts.waiting} waiting` : '',
   ].filter(Boolean)
   const opening = `${plural(counts.asked, 'question')}: ${tally.join(', ')}.`
-  const waitingItems = ledger.questions.filter(q => q.status === 'open').map(q => `${q.id}: ${q.point ?? q.expectation}`)
+  const waitingItems = openQuestions(ledger).map(q => `${q.id}: ${q.status === 'gap' ? 'differs from what the app does; fix it or keep it? ' : ''}${q.point ?? q.expectation}`)
   if (counts.openCritical) {
     return dimension('intent', name, 'trust', 'failing', 'repo', `${opening} ${counts.openCritical} about data, money or permissions still need your answer.`, waitingItems)
   }
   if (counts.waiting) return dimension('intent', name, 'trust', 'weak', 'repo', `${opening} Some still need your answer.`, waitingItems)
-  const contradicted = answered.filter(q => q.test && q.test.green === false)
+  // The code does not do what the user said: a gap they chose to fix, or a proof that fails on the code as it is.
+  const contradicted = answered.filter(q => isGapToFix(q) || (q.test && q.test.green === false))
   if (contradicted.length) {
     const isCriticalGap = contradicted.some(q => CRITICAL_TOPICS.includes(q.topic))
     return dimension(
@@ -190,8 +199,8 @@ export function intent(evidence) {
       'trust',
       isCriticalGap ? 'failing' : 'weak',
       'repo',
-      `${opening} The code does not yet do what you answered for ${plural(contradicted.length, 'question')}.`,
-      contradicted.map(q => `${q.id}: ${q.point ?? q.answer ?? q.expectation}`),
+      `${opening} The app does not yet do what you said for ${plural(contradicted.length, 'question')}.`,
+      contradicted.map(q => `${q.id}: ${q.point ?? q.expectation} (you said: ${q.answer})`),
     )
   }
   const untested = answered.filter(q => !isProven(q))
@@ -212,7 +221,7 @@ function answersOn(ledger, topic) {
   return {
     total: answered.length,
     proven: answered.filter(isProven).length,
-    contradicted: answered.filter(q => q.test && q.test.green === false).map(q => q.id),
+    contradicted: answered.filter(q => isGapToFix(q) || (q.test && q.test.green === false)).map(q => q.id),
   }
 }
 

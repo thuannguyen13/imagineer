@@ -455,3 +455,24 @@ test('while Inspect runs, the pane says what it is doing, and areas not reached 
   expect((await band.find({ type: 'Text', text: /^◌ $/ }))).toBeDefined()
   await band.unmount()
 })
+
+test('a gap waits in Questions first, saying the answer differs from what the app does', async ($, on) => {
+  const ledger = JSON.stringify({
+    questions: [
+      { id: 'Q1', topic: 'data', status: 'open', point: 'What should happen to a deleted client?' },
+      { id: 'Q2', topic: 'wording', status: 'gap', point: 'What should the error say?' },
+      { id: 'Q3', topic: 'data', status: 'answered', point: 'Answered.' },
+    ],
+  })
+  files(on, { [RESULTS]: JSON.stringify(SAMPLE), '.claude/imagineer/questions.json': ledger })
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  await $.command.run(typed('imagineer:status'))
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'tab-questions' })
+  const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text)
+  expect(texts.indexOf('What should the error say?')).toBeLessThan(texts.indexOf('What should happen to a deleted client?'))
+  expect(texts).toContain('Your answer differs from what the app does: fix it or keep it?')
+  expect(texts).not.toContain('Answered.')
+  await ui.unmount()
+})

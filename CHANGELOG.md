@@ -2,6 +2,26 @@
 
 Imagineer's releases, newest first. Below 1.0, the middle number goes up only when how you use Imagineer changes, or a command is added; those changes are listed first under **Changes you need to know**. Everything else is a patch (`0.2.1`). See [docs/proposals/inspect-and-build.md](docs/proposals/inspect-and-build.md#versioning).
 
+## 0.3.0 — unreleased
+
+Questions asked blind.
+
+### Changes you need to know
+
+- Inspect no longer tells you what you seem to want, or what the app does, before you answer. It describes a situation and asks what should happen; one of the options is what the app does today, unmarked. Only if your answer differs does it show you what happens today, and ask whether to fix it or keep it as it is.
+- The question format changes. A question about what the app does is a **check**: a point, an example, possible outcomes, which one the app does today (never shown) and what a person sees today (shown only on a difference). The big picture and design decisions are a **choice**: suggestions, the recommended one first. `questions.mjs add` refuses the old format (`expectation` and `suggestions` on a check), and outcomes that give the answer away ("recommended", "today", "keep it as it is"). Questions still open from 0.2 are asked in their old layout.
+- A check's answer is recorded with `questions.mjs pick` (and `decide` for a gap), not `answer`.
+
+### New
+
+- "Matches your intent" counts what the questions found: answers that matched what the app does, gaps you want fixed, and gaps you chose to keep. A gap you want fixed counts against it at once, as Failing when it is about data, money or permissions.
+- Gaps are asked first, and the report lists each one: what you said, what the app does today, and whether you want it fixed.
+- Build's Architect writes choices for what is new, and checks, asked blind, for what the app already does.
+
+### Fixed
+
+- The self-check said "done bar" about a Build stuck at its round limit; it now says "done thresholds".
+
 ## 0.2.1 — unreleased
 
 ### New
