@@ -31,7 +31,7 @@ Build arrives.
 - Choose the models once: Recommended, Budget, Maximum or your own mix, saved for you across repositories.
 - The run ends with a pull request body that leads with each requirement and its evidence. Build never pushes, opens a pull request or merges without your yes, and never merges.
 
-## 0.6.0 — unreleased
+## 0.6.0 — 2026-11-05
 
 The grade pane tells you more.
 
@@ -41,7 +41,7 @@ The grade pane tells you more.
 - The pane shows Inspect's stop bar, met or what is missing.
 - The pane lists the questions waiting for you, most consequential first, not only how many.
 
-## 0.5.0 — unreleased
+## 0.5.0 — 2026-11-05
 
 Inspect proves your answers and tries to break the app.
 
@@ -57,7 +57,7 @@ Inspect proves your answers and tries to break the app.
 - Inspect's stop bar: test strength meets the bar, no open structure findings, and 2 attack rounds in a row find nothing new. The report says what is missing.
 - When the repository has no docs, every guess is marked as one, and with your agreement the answers you confirmed are saved as short docs, with a pointer in `CLAUDE.md`.
 
-## 0.4.0 — unreleased
+## 0.4.0 — 2026-11-05
 
 Inspect asks you what the code should do.
 
@@ -71,7 +71,7 @@ Inspect asks you what the code should do.
   - Structure findings you resolve no longer count against it.
 - Without a user to answer (`claude -p`, a scheduled run), Inspect records the questions, marks the run as waiting, and lists them.
 
-## 0.3.0 — unreleased
+## 0.3.0 — 2026-11-05
 
 The first slice of Inspect: a real grade from measurements.
 

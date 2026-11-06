@@ -3,6 +3,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { decide, segments } from './role-guard.mjs'
@@ -55,10 +57,13 @@ test('the main session and other agents pass untouched', () => {
   assert.equal(decide({ agent_type: 'general-purpose', tool_name: 'Write', tool_input: { file_path: '/repo/test/a.test.ts' } }), null)
 })
 
-test('as a hook it prints a deny decision and exits 0', () => {
+test('as a hook it prints a deny decision and exits 0', t => {
   const script = join(dirname(fileURLToPath(import.meta.url)), 'role-guard.mjs')
-  const payload = JSON.stringify({ agent_type: 'imagineer:qa', tool_name: 'Edit', tool_input: { file_path: '/repo/src/a.ts' } })
-  const result = spawnSync('node', [script], { input: payload, encoding: 'utf8' })
+  // Run from a scratch folder: a refusal is logged under the session's folder, never this repository.
+  const cwd = mkdtempSync(join(tmpdir(), 'imagineer-guard-'))
+  t.after(() => rmSync(cwd, { recursive: true, force: true }))
+  const payload = JSON.stringify({ cwd, agent_type: 'imagineer:qa', tool_name: 'Edit', tool_input: { file_path: '/repo/src/a.ts' } })
+  const result = spawnSync('node', [script], { input: payload, encoding: 'utf8', cwd })
   assert.equal(result.status, 0)
   assert.equal(JSON.parse(result.stdout).hookSpecificOutput.permissionDecision, 'deny')
   const allowed = spawnSync('node', [script], { input: JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'ls' } }), encoding: 'utf8' })

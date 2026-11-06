@@ -1,1 +1,0 @@
-{"at":"2026-11-06T02:54:56.176Z","agent":"qa","tool":"Edit","reason":"/repo/src/a.ts is not a test file, and QA writes only tests."}
