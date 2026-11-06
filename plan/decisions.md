@@ -36,7 +36,7 @@ Forge owns the loop, for features it builds and, with `--verify <branch|PR>`, fo
 
 ## 2026-10-28 — Two audiences
 
-Write for people who build by prompting and for engineers equally. The wording rules are the README's design principles.
+Write for people who build by prompting and for engineers equally. The wording rules are the design principles in CONTRIBUTING.md.
 
 ## 2026-10-28 — Validated status
 
@@ -51,7 +51,7 @@ Every phase of skill work ends with these checks before its pull request:
 - No contradictions, checked by a reviewer that has not seen the work.
 - Each section stays only if removing it changes a scenario result.
 - The same words for the same thing.
-- User-facing text follows the README's design principles.
+- User-facing text follows the design principles in CONTRIBUTING.md.
 - Code also passes typecheck, lint, tests, `/simplify` and `/code-review`; hook scripts have tests that they block a seeded command and allow a harmless one.
 
 The pull request lists what was removed and the bench results before and after.
