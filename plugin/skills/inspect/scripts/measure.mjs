@@ -9,12 +9,16 @@
 //   node measure.mjs audit    --out <run folder> --base <ref>     Fallow on what changed since <ref>
 //   node measure.mjs security --out <run folder>
 //   node measure.mjs cleanup  --out <run folder>
+//
+// checks, fallow, security and stryker reuse an earlier run's result when it measured the same
+// commit with the same Imagineer and tool versions, and say so; --fresh measures again.
 
-import { mkdtempSync, rmSync, writeFileSync, existsSync, copyFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync, existsSync, copyFileSync, readdirSync } from 'node:fs'
 import { availableParallelism, tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { detect } from './detect.mjs'
-import { arg, PINNED, projectEnv, readJson, run, tail, writeJson } from './lib.mjs'
+import { arg, PINNED, projectEnv, readJson, readJsonIf, run, tail, writeJson } from './lib.mjs'
 
 const INSTALL = {
   npm: lock => (lock ? ['npm', 'ci', '--no-audit', '--no-fund'] : ['npm', 'install', '--no-audit', '--no-fund']),
@@ -31,6 +35,43 @@ const ADD = {
   yarn: pkg => ['yarn', 'add', '-D', pkg],
   bun: pkg => ['bun', 'add', '-d', pkg],
 }
+
+const HERE = dirname(fileURLToPath(import.meta.url))
+
+/** What a measurement depends on besides the code: the commit, Imagineer's version and the tools used. */
+export function measurementKey(commit, facts) {
+  const manifest = readJsonIf(join(HERE, '../../../.claude-plugin/plugin.json'))
+  return JSON.stringify({ commit, imagineer: manifest?.version ?? 'unknown', pinned: PINNED, tools: facts.tools })
+}
+
+// The files each step writes, which a reuse copies.
+const OUTPUTS = { checks: ['checks.json'], fallow: ['fallow.json'], security: ['security.json'], stryker: ['stryker.json', 'mutation.json'] }
+
+/**
+ * Copies a step's result from the latest earlier run that measured the same commit with the same
+ * versions, if `accepts` takes it, and returns that run's name; null to measure. Runs from before
+ * the key existed are never reused.
+ */
+export function reuse(out, step, accepts = () => true) {
+  if (process.argv.includes('--fresh')) return null
+  const key = readJsonIf(join(out, 'copy.json'))?.key
+  if (!key) return null
+  const self = resolve(out)
+  const runs = dirname(self)
+  const earlier = readdirSync(runs)
+    .map(name => join(runs, name))
+    .filter(dir => dir !== self && readJsonIf(join(dir, 'copy.json'))?.key === key)
+    .sort((a, b) => String(readJsonIf(join(b, 'copy.json'))?.at).localeCompare(String(readJsonIf(join(a, 'copy.json'))?.at)))
+  for (const dir of earlier) {
+    if (!OUTPUTS[step].every(file => existsSync(join(dir, file))) || !accepts(dir)) continue
+    for (const file of OUTPUTS[step]) copyFileSync(join(dir, file), join(out, file))
+    writeJson(join(out, 'reused.json'), { ...readJsonIf(join(out, 'reused.json')), [step]: basename(dir) })
+    return basename(dir)
+  }
+  return null
+}
+
+const reusedLine = (what, from) => `${what} reused from run ${from}: same commit, same tools. Nothing to run (--fresh measures again).`
 
 function state(out) {
   const copy = readJson(join(out, 'copy.json'))
@@ -63,6 +104,8 @@ function prepare(repo, out) {
     install: { ok: install.ok, seconds: install.seconds, output: install.ok ? '' : tail(install.stderr || install.stdout) },
     // The project's code runs without the user's environment: the names left out, never their values.
     envLeftOut: projectEnv().dropped,
+    // What a later run on the same commit, with the same versions, may reuse from this one.
+    key: measurementKey(head.stdout.trim(), facts),
   })
   console.log(`Copied ${head.stdout.trim()}${dirty ? ' (uncommitted changes not included)' : ''} to ${path}; install ${install.ok ? 'passed' : 'failed'}.`)
 }
@@ -181,6 +224,8 @@ function stryker(out, isEstimate) {
     ok: result.ok && existsSync(report),
     measured: own ? 'repo' : 'default',
     version: own ? repoFacts.tools.stryker.version : PINNED.stryker,
+    // What was mutated, so a reuse takes only a run over the same scope.
+    mutate: arg('mutate') ?? null,
     seconds: result.seconds,
     error: existsSync(report) ? null : tail(log),
   })
@@ -240,23 +285,39 @@ function cleanup(out) {
   console.log(`Removed ${copy.path}.`)
 }
 
-const [step] = process.argv.slice(2)
-const out = arg('out')
-try {
-  if (!out) throw new Error('--out <run folder> is required')
-  if (step === 'prepare') prepare(resolve(arg('repo') ?? '.'), out)
-  else if (step === 'checks') checks(out)
-  else if (step === 'fallow') fallow(out)
-  else if (step === 'stryker' && arg('decline')) {
-    // The user chose not to run it this time: recorded, so the grade says so instead of waiting for it.
-    writeJson(join(out, 'stryker.json'), { ok: false, declined: arg('decline') })
-    console.log('Test strength not measured this time.')
-  } else if (step === 'stryker') stryker(out, process.argv.includes('--estimate'))
-  else if (step === 'security') security(out)
-  else if (step === 'audit') audit(out, arg('base') ?? 'main')
-  else if (step === 'cleanup') cleanup(out)
-  else throw new Error('Steps: prepare, checks, fallow, stryker, security, audit, cleanup')
-} catch (error) {
-  console.error(error.message)
-  process.exit(1)
+// Run as a command (paths compared resolved, so spaces or a relative path do not stop it); loaded by a test, it only exports.
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  const [step] = process.argv.slice(2)
+  const out = arg('out')
+  try {
+    if (!out) throw new Error('--out <run folder> is required')
+    if (step === 'prepare') prepare(resolve(arg('repo') ?? '.'), out)
+    else if (['checks', 'fallow', 'security'].includes(step) && reuse(out, step, dir => step !== 'fallow' || readJsonIf(join(dir, 'fallow.json'))?.ok === true)) {
+      console.log(reusedLine(step === 'checks' ? 'Checks' : step === 'fallow' ? 'Structure' : 'Security scan', readJson(join(out, 'reused.json'))[step]))
+    } else if (step === 'checks') checks(out)
+    else if (step === 'fallow') fallow(out)
+    else if (step === 'stryker' && arg('decline')) {
+      // The user chose not to run it this time: recorded, so the grade says so instead of waiting for it.
+      writeJson(join(out, 'stryker.json'), { ok: false, declined: arg('decline') })
+      console.log('Test strength not measured this time.')
+    } else if (step === 'stryker') {
+      const scope = arg('mutate') ?? null
+      const from = reuse(out, 'stryker', dir => {
+        const earlier = readJsonIf(join(dir, 'stryker.json'))
+        return earlier?.ok === true && (earlier.mutate ?? null) === scope
+      })
+      if (from && process.argv.includes('--estimate')) {
+        writeJson(join(out, 'stryker-estimate.json'), { ok: true, reused: from, minutes: 0 })
+        console.log(reusedLine('Test strength', from))
+      } else if (from) console.log(reusedLine('Test strength', from))
+      else stryker(out, process.argv.includes('--estimate'))
+    }
+    else if (step === 'security') security(out)
+    else if (step === 'audit') audit(out, arg('base') ?? 'main')
+    else if (step === 'cleanup') cleanup(out)
+    else throw new Error('Steps: prepare, checks, fallow, stryker, security, audit, cleanup')
+  } catch (error) {
+    console.error(error.message)
+    process.exit(1)
+  }
 }

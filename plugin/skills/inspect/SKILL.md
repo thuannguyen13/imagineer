@@ -24,6 +24,7 @@ You are the Lead. You talk to the user, run the steps below, and explain what wa
 
 - `$S` is `${CLAUDE_SKILL_DIR}/scripts`: call each as `node $S/<name>.mjs`, one script per command (never chained with `&&`), so they run without asking the user each time. Everything deterministic (copying, measuring, recording answers, grading) is done by a script; do not do it by hand.
 - `$R` is the repository's absolute path, `$O` the run folder.
+- **Measurements are reused** when an earlier run measured the same commit with the same Imagineer and tool versions: the script says "reused from run N" and runs nothing (for test strength, the estimate says so too, so skip straight to grading). Tell the user in one line. Pass `--fresh` only when the user asks to measure again.
 - The details of some steps are in `references/`, read only when that step starts: [questions.md](references/questions.md), [no-docs.md](references/no-docs.md), [proving.md](references/proving.md), [attacks.md](references/attacks.md).
 
 ## Steps
