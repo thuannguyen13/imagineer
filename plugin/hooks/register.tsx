@@ -16,8 +16,10 @@ import {
   firstItems,
   isActive,
   isSameCommit,
+  labelFor,
   MEASURED_LABEL,
   parseHead,
+  PENDING_LABEL,
   QUESTIONS_PATH,
   readDetails,
   readFlags,
@@ -26,6 +28,7 @@ import {
   readResults,
   RESULTS_PATH,
   rowLayout,
+  runningTitle,
   whenTested,
   STATE_LABEL,
   statusLine,
@@ -39,13 +42,15 @@ const POLL_MS = 3000
 // Change the tag when Summary's fields change: a value an earlier version
 // stored is then read as "no results" until the file is read again.
 const summaryAtom = atom({ plugin: 'imagineer', key: 'summary' } as const, { kind: 'none' } as Summary, {
-  shape: 'summary-4',
+  shape: 'summary-5',
 })
 
 // Shaped, so a tab an earlier version stored (overview, evidence) reads as the grade.
 const tabAtom = atom({ plugin: 'imagineer', key: 'tab' } as const, 'grade' as Tab, { shape: 'tab-2' })
 // The areas whose evidence is open, by id; all closed at first.
 const openAtom = atom({ plugin: 'imagineer', key: 'open' } as const, [] as string[])
+// Set when /imagineer:inspect starts, so the pane has something to say before the first results arrive.
+const startingAtom = atom({ plugin: 'imagineer', key: 'starting' } as const, false)
 
 let lastMtime: number | null = null
 let lastBase: Summary = { kind: 'none' }
@@ -149,13 +154,16 @@ export const register: Register = on => {
     return opened.isPlaced ? {} : { text: summaryText(summary) }
   })
 
-  // /imagineer:inspect and /imagineer:build: watched, then passed on.
+  // /imagineer:inspect and /imagineer:build: watched, then passed on. The pane opens unasked
+  // only where it sits beside the transcript; elsewhere the band's Details button opens it.
+  // Inspect opens it from the start, so each area fills in as it is measured.
   for (const command of ['imagineer:inspect', 'imagineer:build']) {
     on('command.run', { command }, async ($, e, next) => {
       watch($)
       const summary = await refresh($)
-      // Open the pane unasked only where it sits beside the transcript.
-      if (summary.kind === 'results' && e.presentation.isFullscreen) {
+      const isInspect = command === 'imagineer:inspect'
+      if (isInspect) await update($, startingAtom, () => true)
+      if ((isInspect || summary.kind === 'results') && e.presentation.isFullscreen) {
         void $.ui.open({ id: PANE, title: TITLE })
       }
       return next(e)
@@ -165,6 +173,14 @@ export const register: Register = on => {
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Button, Text } = $.ui.resolve(e)
     const summary = await read($, summaryAtom)
+    if (summary.kind === 'none' && (await read($, startingAtom))) {
+      return (
+        <Box flexDirection="column">
+          <Text weight="semibold">◌ Inspect is starting</Text>
+          <Text dimColor>Making a throwaway copy of your project. Each area fills in here as it is measured.</Text>
+        </Box>
+      )
+    }
     if (summary.kind !== 'results') return <Text dimColor>{summaryText(summary)}</Text>
 
     const tab = await read($, tabAtom)
@@ -180,8 +196,15 @@ export const register: Register = on => {
     ]
 
     // Only what matters at a glance: the verdict, the commit and when it was tested.
+    // While a run is under way: that it is running, and what it is doing now.
     const tested = whenTested(summary.run.at)
-    const header = (
+    const isRunning = summary.run.status === 'running'
+    const header = isRunning ? (
+      <Box flexDirection="column">
+        <Text weight="semibold">{runningTitle(summary.run)}</Text>
+        <Text dimColor>{summary.run.step || 'Working…'}</Text>
+      </Box>
+    ) : (
       <Box flexDirection="column">
         <Text color={overall.color} weight="semibold">
           {overall.icon} {overall.word}
@@ -194,10 +217,10 @@ export const register: Register = on => {
     // width: icon, name, state and the area's number, with what it counts when there is room;
     // two lines when the pane is narrow. A row's children are text only, as a button takes.
     const row = (dimension: Results['dimensions'][number]) => {
-      const label = STATE_LABEL[dimension.state]
+      const label = labelFor(dimension)
       const isOpen = opened.includes(dimension.id)
       const arrow = isOpen ? '▾ ' : '▸ '
-      const stateText = `${label.word}${dimension.isStale || summary.isStale ? ' ⟳' : ''}`
+      const stateText = `${label.word}${!dimension.isPending && (dimension.isStale || summary.isStale) ? ' ⟳' : ''}`
       const metric = dimension.metric && dimension.metric.value !== '—' ? dimension.metric : null
       const toggle = () => update($, openAtom, ids => (ids.includes(dimension.id) ? ids.filter(id => id !== dimension.id) : [...ids, dimension.id]))
       const plain = `${arrow}${label.icon} ${dimension.name} ${stateText}${metric ? ` ${metric.value} ${metric.label}` : ''}`
@@ -258,7 +281,9 @@ export const register: Register = on => {
       <Box flexDirection="column">
         {summary.dimensions.map(dimension => row(dimension))}
         <Box marginTop={1} flexDirection="column">
-          {summary.run.bar &&
+          {isRunning && <Text dimColor>Areas fill in as Inspect measures them.</Text>}
+          {!isRunning &&
+            summary.run.bar &&
             finishLines(summary.run.bar).map(line => (
               <Text dimColor={!line.startsWith('✓')} color={line.startsWith('✓') ? 'success' : undefined}>
                 {line}
@@ -353,7 +378,8 @@ export const register: Register = on => {
     if (e.props.hasSurvey || !isActive(summary)) return next(e)
 
     const { Box, Button, Text } = $.ui.resolve(e)
-    const overall = STATE_LABEL[summary.overall.state]
+    // While measuring, the grade so far is partial: show that it is running, not a verdict.
+    const overall = summary.run.status === 'running' ? PENDING_LABEL : STATE_LABEL[summary.overall.state]
 
     return (
       <Box>

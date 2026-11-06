@@ -61,6 +61,7 @@ function toDimension(raw: unknown): Dimension | null {
     metric: isObject(raw.metric) && typeof raw.metric.value === 'string' ? { value: raw.metric.value, label: text(raw.metric.label) } : null,
     isStale: raw.stale === true,
     isClaimed: raw.claimed === true,
+    isPending: raw.pending === true,
   }
 }
 
@@ -72,6 +73,7 @@ function toRun(raw: unknown): Run {
     status: oneOf(run.status, RUN_STATUSES, 'done'),
     round: count(run.round),
     commit: text(run.commit),
+    step: text(run.step),
     at: text(run.at),
     bar: isObject(run.bar)
       ? { met: run.bar.met === true, missing: Array.isArray(run.bar.missing) ? run.bar.missing.filter((m): m is string => typeof m === 'string') : [] }
@@ -241,6 +243,16 @@ export const STATE_LABEL: Record<OverallState, { icon: string; word: string; col
   'not-proven': { icon: '?', word: 'Not proven yet', color: 'inactive' },
 }
 
+/** An area a running Inspect has not reached yet. */
+export const PENDING_LABEL = { icon: '◌', word: 'Coming up', color: 'inactive' } as const
+
+/** How a row shows its state: coming up while Inspect has not reached it, else its grade. */
+export const labelFor = (dimension: Dimension): { icon: string; word: string; color: string } =>
+  dimension.isPending ? PENDING_LABEL : STATE_LABEL[dimension.state]
+
+/** The pane's header while a run is under way, in place of the verdict. */
+export const runningTitle = (run: Run): string => `◌ ${run.command === 'build' ? 'Build' : 'Inspect'} is running`
+
 export const MEASURED_LABEL: Record<Measured, string> = {
   repo: "● the repo's own setup",
   default: "◐ Imagineer's defaults",
@@ -257,6 +269,7 @@ export const isActive = (summary: Summary): summary is Results =>
 export function statusLine(results: Results): string {
   const parts: string[] = [COMMAND_WORD[results.run.command]]
   if (results.run.round > 0) parts.push(`round ${results.run.round}`)
+  if (results.run.status === 'running' && results.run.step) parts.push(results.run.step)
   const waiting = results.questions.waiting
   if (waiting > 0) parts.push(`${waiting} ${waiting === 1 ? 'question' : 'questions'} waiting`)
 
@@ -271,17 +284,20 @@ export function summaryText(summary: Summary): string {
   if (summary.kind === 'unreadable') return summary.reason
 
   const overall = STATE_LABEL[summary.overall.state]
-  const lines = [`Imagineer: ${overall.icon} ${overall.word}${summary.overall.reason ? ` (${summary.overall.reason})` : ''}`]
+  const isRunning = summary.run.status === 'running'
+  const lines = isRunning
+    ? [`Imagineer: ${runningTitle(summary.run)}${summary.run.step ? `: ${summary.run.step}` : ''}`]
+    : [`Imagineer: ${overall.icon} ${overall.word}${summary.overall.reason ? ` (${summary.overall.reason})` : ''}`]
   if (summary.isStale) lines.push(`⟳ Measured at ${summary.run.commit}; the code has changed since. Run /imagineer:inspect again for a current grade.`)
   for (const dimension of summary.dimensions) {
-    const label = STATE_LABEL[dimension.state]
+    const label = labelFor(dimension)
     const notes = [dimension.isStale || summary.isStale ? 'stale' : '', dimension.isClaimed ? 'claimed' : ''].filter(Boolean)
     lines.push(
       `  ${label.icon} ${dimension.name}: ${label.word}${dimension.summary ? `. ${dimension.summary}` : ''}${notes.length ? ` [${notes.join(', ')}]` : ''}`,
     )
     for (const item of firstItems(dimension.items)) lines.push(`      • ${item}`)
   }
-  if (summary.run.bar) {
+  if (summary.run.bar && !isRunning) {
     lines.push(...finishLines(summary.run.bar))
   }
   if (summary.questions.waiting > 0) {

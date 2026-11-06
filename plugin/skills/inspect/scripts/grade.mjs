@@ -5,6 +5,7 @@
 // script sets a state.
 //
 //   node grade.mjs --repo <repo> --out <run folder> [--status running|waiting|done|stopped] [--round N]
+//                  [--step "<what Inspect is doing now, in plain words>"]
 
 import { appendFileSync, existsSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -48,6 +49,7 @@ export function testStrength(evidence) {
   const name = 'Test strength'
   if (!stryker) return dimension('test-strength', name, 'trust', 'unchecked', 'none', 'Not measured yet.')
   if (stryker.skipped) return dimension('test-strength', name, 'trust', 'failing', 'default', stryker.skipped)
+  if (stryker.declined) return dimension('test-strength', name, 'trust', 'unchecked', 'none', `Not measured this time: ${stryker.declined}`)
   if (!stryker.ok || !mutation) return dimension('test-strength', name, 'trust', 'unchecked', 'none', 'Mutation testing could not run, so test strength is unknown.')
 
   const { caught, total, timeouts, score, files } = mutationScore(mutation)
@@ -371,7 +373,26 @@ export function overall(dimensions) {
   return { state: 'strong', reason: '' }
 }
 
-export function gradeRun(out, repo = null) {
+// While a run is under way, an area whose evidence has not arrived yet is coming up, not "not checked".
+const NOT_YET = {
+  foundations: e => !e.checks,
+  structure: e => !e.fallow,
+  'test-strength': e => !e.stryker,
+  security: e => !e.security && !(e.attacks ?? []).length,
+  'data-safety': e => !(e.attacks ?? []).length && answersOn(e.ledger ?? emptyLedger(), 'data').total === 0,
+  intent: e => summary(e.ledger ?? emptyLedger()).asked === 0,
+}
+
+/** Marks the areas a running Inspect has not reached yet. Their state stays not checked. */
+export function markPending(dimensions, evidence, status) {
+  for (const d of dimensions) {
+    d.pending = status === 'running' && d.state === 'unchecked' && (NOT_YET[d.id]?.(evidence) ?? false)
+    if (d.pending) d.summary = 'Inspect gets to this later in this run.'
+  }
+  return dimensions
+}
+
+export function gradeRun(out, repo = null, status = 'done') {
   const evidence = {
     ledger: repo ? loadLedger(repo) : emptyLedger(),
     findings: findings(out),
@@ -393,6 +414,7 @@ export function gradeRun(out, repo = null) {
     foundations(evidence),
   ]
   for (const d of dimensions) d.metric = metricFor(d, evidence)
+  markPending(dimensions, evidence, status)
   return { evidence, dimensions, overall: overall(dimensions), bar: stopBar(dimensions, evidence.attacks, evidence) }
 }
 
@@ -419,7 +441,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.error('Usage: node grade.mjs --repo <repo> --out <run folder> [--status running|done] [--round N]')
     process.exit(2)
   }
-  const { evidence, dimensions, overall: grade, bar } = gradeRun(out, repo)
+  const status = arg('status', 'done')
+  const { evidence, dimensions, overall: grade, bar } = gradeRun(out, repo, status)
   const counts = summary(evidence.ledger)
   const results = {
     schema: 1,
@@ -427,7 +450,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     scale: SCALE,
     run: {
       command: 'inspect',
-      status: arg('status', 'done'),
+      status,
+      // What Inspect is doing now, while it runs; the pane and the band show it.
+      step: status === 'running' || status === 'waiting' ? arg('step', '') : '',
       round: Number(arg('round', '1')),
       commit: evidence.copy?.commit ?? '',
       // When the code was measured: the copy's time, or, for a run that did not record it, when its copy was made.

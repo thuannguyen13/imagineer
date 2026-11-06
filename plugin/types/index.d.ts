@@ -22,6 +22,8 @@ export type Dimension = {
   metric: { value: string; label: string } | null
   isStale: boolean
   isClaimed: boolean
+  /** A running Inspect has not reached this area yet: coming up, not "not checked". */
+  isPending: boolean
 }
 
 export type RunStatus = 'running' | 'waiting' | 'done' | 'stopped'
@@ -31,6 +33,8 @@ export type Run = {
   status: RunStatus
   round: number
   commit: string
+  /** What the run is doing now, in plain words, while it runs; empty otherwise. */
+  step: string
   /** When the run measured the code, as an ISO time; empty when unknown. */
   at: string
   /** Inspect's finish thresholds, when the run recorded them: met, or what is still missing. */
@@ -66,6 +70,6 @@ export type Summary =
 
 declare module 'claude-code' {
   interface PluginState {
-    imagineer: { summary: Shaped<Summary>; tab: Shaped<Tab>; open: string[] }
+    imagineer: { summary: Shaped<Summary>; tab: Shaped<Tab>; open: string[]; starting: boolean }
   }
 }

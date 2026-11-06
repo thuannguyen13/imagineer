@@ -24,9 +24,11 @@ They live in this skill's folder under `scripts/` (the folder named "Base direct
 
 ## Steps
 
+**Keep the pane current.** The grade pane fills in while Inspect runs: each regrade below with `--status running` adds what was just measured, and its `--step` says what Inspect is doing next, in plain words a non-engineer understands (no tool names), for example `--step "Measuring test strength (about 18 minutes, until 14:30)"`. Areas not reached yet show as coming up. Regrade every time this section says so; it takes a second.
+
 1. **Preflight.** `$R` is the argument, or the current directory. Check that it is a git repository with at least one commit and a `package.json`. If not, say that Inspect works on JavaScript and TypeScript projects in git for now, and stop.
 
-2. **Start the run.** `$O` is `$R/.claude/imagineer/runs/<n>`, with `<n>` one more than the highest existing run number (1 if none). Run `node $S/grade.mjs --repo $R --out $O --status running`, so the status line shows that Inspect is running.
+2. **Start the run.** `$O` is `$R/.claude/imagineer/runs/<n>`, with `<n>` one more than the highest existing run number (1 if none). Run `node $S/grade.mjs --repo $R --out $O --status running --step "Making a throwaway copy of your project"`, so the pane and the status line show that Inspect is running.
 
 3. **Copy and look.** Run `node $S/measure.mjs prepare --repo $R --out $O`. Read `$O/detect.json` and tell the user briefly what you found:
    - which package manager and whether there are tests, a typecheck and CI;
@@ -34,15 +36,20 @@ They live in this skill's folder under `scripts/` (the folder named "Base direct
    - whether it has docs (none, thin, or present);
    - that uncommitted changes are not included, if `$O/copy.json` says `dirty`.
 
-4. **Checks, structure and security scan.** Run `node $S/measure.mjs checks --out $O`, `node $S/measure.mjs fallow --out $O` and `node $S/measure.mjs security --out $O`. The security scan's possible weaknesses become findings for the questions step: verify each in the code, and settle or ask about it like any other finding.
+4. **Checks, structure and security scan.** Regrade before each, naming it, then run it:
+   - `--step "Checking the basics: install, typecheck and tests"`, then `node $S/measure.mjs checks --out $O`;
+   - `--step "Looking at how the code is structured"`, then `node $S/measure.mjs fallow --out $O`;
+   - `--step "Scanning for security weaknesses"`, then `node $S/measure.mjs security --out $O`.
 
-5. **Test strength.** Run `node $S/measure.mjs stryker --out $O --estimate` and read `$O/stryker-estimate.json`.
+   The security scan's possible weaknesses become findings for the questions step: verify each in the code, and settle or ask about it like any other finding.
+
+5. **Test strength.** Regrade with `--step "Estimating how long the test check takes"`, run `node $S/measure.mjs stryker --out $O --estimate` and read `$O/stryker-estimate.json`.
    - If the estimate is 20 minutes or less, go on.
-   - If it is longer, ask: run it now (say the estimate), or skip it this time (test strength then stays not checked).
+   - If it is longer, ask: run it now (say the estimate), or skip it this time. To skip, run `node $S/measure.mjs stryker --out $O --decline "<why, in plain words>"`: test strength then shows as not checked, with that reason.
    - If the dry run failed, report why in one sentence and skip to step 6.
-   - To run it: `node $S/measure.mjs stryker --out $O`, in the background, and tell the user roughly when it will finish.
+   - To run it: regrade with `--step "Measuring test strength (about <n> minutes, until <time>)"`, then `node $S/measure.mjs stryker --out $O`, in the background, and tell the user roughly when it will finish.
 
-6. **Grade.** Run `node $S/grade.mjs --repo $R --out $O --status done`. Keep the copy: the next steps use it.
+6. **Grade.** Run `node $S/grade.mjs --repo $R --out $O --status running --step "Reading the code to write your questions"`. Keep the copy: the next steps use it. If the user asked for measuring alone, regrade with `--status done` and go to step 11.
 
 7. **Questions.** See [Questions](#questions) below. Skip this step only if the user asked for measuring alone.
 
@@ -109,7 +116,7 @@ Each question is a JSON object for `node $S/questions.mjs add --repo $R` (an arr
    - **A suggestion:** `node $S/questions.mjs answer --repo $R --id Q3 --status answered --answer "<the option and what it means>"`. When it says a break does not matter, add `--dismiss` with its `about` keys. When it confirms the behaviour, dismiss nothing: it is proven with a test next.
    - **Their own words** (Other): record them as they wrote them, with `--own`. If they are unclear, treat it as Not sure.
    - **Not sure:** do not record an answer. Write a new example, from another angle, and if it helps say the point another way: `node $S/questions.mjs not-sure --repo $R --id Q3 --example "<new example>" [--point "<said another way>"]`. It stays open and comes back in the next ask. After two Not sures, defer it with `--status deferred` and the reason "Not sure after two examples", or settle it from the docs if they answer it.
-3. Regrade: `node $S/grade.mjs --repo $R --out $O --status waiting` while questions are open, `--status done` once none are.
+3. Regrade: `node $S/grade.mjs --repo $R --out $O --status waiting` while questions are open; once none are, `--status running --step "Proving your answers with tests"`.
 4. After a round, ask whether to go on with the next questions or stop for now. Open questions stay in the ledger for the next run.
 
 **Without a user** (AskUserQuestion is not available, as in `claude -p` or a scheduled run): add the questions, regrade with `--status waiting`, list the open questions in your report with their point and suggestions, and stop.
@@ -148,12 +155,12 @@ Without a user, prove what you can from answers already in the ledger and list t
 
 ## Attack rounds
 
-Try to break the app on purpose. Each round, spawn the `imagineer:attacker` agent with the Agent tool and give it, in its prompt: the copy's path (from `$O/copy.json`), `$O`, `$S`, the round number, the attack IDs to use (six per round, continuing from the last), what the app is for and its roles, the user's answers from the ledger, and the attacks already tried (`node $S/attack.mjs list --out $O`).
+Try to break the app on purpose. Before the first round, regrade with `--status running --step "Attack round 1: trying to break permissions and data"`. Each round, spawn the `imagineer:attacker` agent with the Agent tool and give it, in its prompt: the copy's path (from `$O/copy.json`), `$O`, `$S`, the round number, the attack IDs to use (six per round, continuing from the last), what the app is for and its roles, the user's answers from the ledger, and the attacks already tried (`node $S/attack.mjs list --out $O`).
 
 After each round:
 
 1. Run `node $S/attack.mjs list --out $O`. For each attack that broke through, read its test to confirm it is a real break, and add it as a question for the user (topic `permissions` or `data`), with the attack as the example: "Carol, an approver on team A, approved Dave's expense from team B". The user decides whether it must be fixed; Inspect does not fix it.
-2. Regrade with `--status running`.
+2. Regrade with `--status running --step "Attack round <next>: trying to break permissions and data"` before the next round, or `--step "Cleaning up"` when the rounds are over.
 3. **Stop** when 2 rounds in a row find nothing new, after 4 rounds, or when the user says so. Ask before each round after the second.
 
 Without a user, run two rounds, list what broke through, and stop.

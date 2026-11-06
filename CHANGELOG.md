@@ -2,6 +2,13 @@
 
 Imagineer's releases, newest first. Below 1.0, the middle number goes up only when how you use Imagineer changes, or a command is added; those changes are listed first under **Changes you need to know**. Everything else is a patch (`0.2.1`). See [docs/proposals/inspect-and-build.md](docs/proposals/inspect-and-build.md#versioning).
 
+## 0.2.1 — unreleased
+
+### New
+
+- The grade pane fills in while Inspect runs. It opens as soon as Inspect starts, even on a project's first run, and each area appears as soon as it is measured; areas not reached yet show as **◌ Coming up**. The header and the line above the prompt say what Inspect is doing now, for example "Measuring test strength (about 18 minutes, until 14:30)". On the main screen, where a pane would cover the conversation, the **Details** button above the prompt opens it.
+- Choosing to skip the test-strength check shows it as not checked, with your reason, instead of waiting for it.
+
 ## 0.2.0 — 2026-11-06
 
 The baseline of the two-command design: Inspect checks an existing project, Build makes new features, and a pane shows the grade. Earlier 0.2.0 to 0.8.0 releases were folded into this one; their step-by-step history is in the merged pull requests.
