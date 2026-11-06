@@ -43,7 +43,7 @@ test('test strength names the weakest files', () => {
       'src/db.ts': { mutants: [{ status: 'Killed' }] },
     },
   }
-  assert.match(testStrength({ stryker, mutation: report }).summary, /Weakest: src\/server\.ts 0%\./)
+  assert.deepEqual(testStrength({ stryker, mutation: report }).items, ['src/server.ts: 0% of breaks caught'])
 })
 
 test('no tests at all fails test strength; a run that never happened is not checked', () => {
@@ -151,13 +151,14 @@ test('intent: not checked, then failing while a critical question is open, then 
   assert.equal(intent({ ledger: emptyLedger() }).state, 'unchecked')
   const ledger = addQuestions(emptyLedger(), [ask('permissions'), ask('wording')])
   assert.equal(intent({ ledger }).state, 'failing')
-  assert.match(intent({ ledger }).summary, /^2 questions for you; 1 about data, money or permissions still open\./)
+  assert.equal(intent({ ledger }).summary, '2 questions: 2 waiting. 1 about data, money or permissions still need your answer.')
+  assert.equal(intent({ ledger }).items.length, 2)
   answerQuestion(ledger, { id: 'Q1', status: 'answered', answer: 'Only the owner.' })
   assert.equal(intent({ ledger }).state, 'weak')
   answerQuestion(ledger, { id: 'Q2', status: 'deferred', answer: null, reason: 'Later.' })
   const resolved = intent({ ledger })
   assert.equal(resolved.state, 'weak')
-  assert.match(resolved.summary, /1 answer is not yet backed by a test/)
+  assert.equal(resolved.summary, '2 questions: 1 answered by you, 1 deferred. None of your answers is proven by a test yet.')
   ledger.questions[0].test = { file: 'test/q1.test.js', green: true, red: { killed: 2, total: 3 } }
   assert.equal(intent({ ledger }).state, 'weak')
   ledger.questions[0].test = { file: 'test/q1.test.js', green: true, red: { killed: 3, total: 3 } }
@@ -165,7 +166,8 @@ test('intent: not checked, then failing while a critical question is open, then 
   ledger.questions[0].test = { file: 'test/q1.test.js', green: false, red: null }
   const gap = intent({ ledger })
   assert.equal(gap.state, 'failing')
-  assert.match(gap.summary, /does not yet do what you answered for Q1/)
+  assert.match(gap.summary, /does not yet do what you answered for 1 question\./)
+  assert.match(gap.items[0], /^Q1: /)
 })
 
 test('deferring or deciding needs a reason', () => {
@@ -210,7 +212,8 @@ test('security: unchecked until attacked or scanned; a break fails it; otherwise
   assert.doesNotMatch(clean.summary, /not yet 2 clean rounds/)
   const broke = security({ ledger: emptyLedger(), attacks: [...held, attackRow('A3', 3, 'permissions', 'broke')] })
   assert.equal(broke.state, 'failing')
-  assert.match(broke.summary, /1 attack broke through \(A3 title\)/)
+  assert.equal(broke.summary, '1 attack broke through.')
+  assert.deepEqual(broke.items, ['A3: A3 title'])
 })
 
 test('security: a high vulnerability in a shipped dependency fails it', () => {

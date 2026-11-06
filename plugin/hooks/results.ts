@@ -57,6 +57,7 @@ function toDimension(raw: unknown): Dimension | null {
     state: oneOf(raw.state, GRADE_STATES, 'unchecked'),
     measured: oneOf(raw.measured, MEASURED, 'none'),
     summary: text(raw.summary),
+    items: Array.isArray(raw.items) ? raw.items.filter((i): i is string => typeof i === 'string') : [],
     isStale: raw.stale === true,
     isClaimed: raw.claimed === true,
   }
@@ -91,7 +92,7 @@ export function readOpenQuestions(source: string | null, limit = 5): OpenQuestio
   const rank = (topic: string) => (TOPIC_ORDER.includes(topic) ? TOPIC_ORDER.indexOf(topic) : TOPIC_ORDER.length)
   return parsed.questions
     .filter((q): q is Json => isObject(q) && q.status === 'open' && typeof q.id === 'string')
-    .map(q => ({ id: String(q.id), topic: text(q.topic, 'behaviour'), text: text(q.expectation).replace(/^My guess \(no docs found\):\s*/, '') }))
+    .map(q => ({ id: String(q.id), topic: text(q.topic, 'behaviour'), text: text(q.point) || text(q.expectation).replace(/^My guess \(no docs found\):\s*/, '') }))
     .sort((a, b) => rank(a.topic) - rank(b.topic) || Number(a.id.slice(1)) - Number(b.id.slice(1)))
     .slice(0, limit)
 }
@@ -191,6 +192,15 @@ const shortText = (value: string, max = 110) => (value.length > max ? `${value.s
 
 export const questionLine = (q: OpenQuestion) => `${q.id} (${q.topic}): ${shortText(q.text)}`
 
+/** How many items Evidence shows per area before "and N more". */
+export const ITEMS_SHOWN = 5
+
+/** The first items of a list, with a last line counting the rest. */
+export function firstItems(items: string[], shown = ITEMS_SHOWN): string[] {
+  if (items.length <= shown) return items
+  return [...items.slice(0, shown), `…and ${items.length - shown} more in the run's report`]
+}
+
 export const STATE_LABEL: Record<OverallState, { icon: string; word: string; color: string }> = {
   strong: { icon: '✓', word: 'Strong', color: 'success' },
   weak: { icon: '!', word: 'Weak', color: 'warning' },
@@ -237,6 +247,7 @@ export function summaryText(summary: Summary): string {
     lines.push(
       `  ${label.icon} ${dimension.name}: ${label.word}${dimension.summary ? `. ${dimension.summary}` : ''}${notes.length ? ` [${notes.join(', ')}]` : ''}`,
     )
+    for (const item of firstItems(dimension.items)) lines.push(`      • ${item}`)
   }
   if (summary.run.bar) {
     lines.push(summary.run.bar.met ? 'Stop bar: met.' : `Stop bar not met: ${summary.run.bar.missing.join('; ')}.`)

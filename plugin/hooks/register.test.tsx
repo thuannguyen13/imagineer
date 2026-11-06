@@ -52,7 +52,15 @@ const BAND = {
   props: { hasSurvey: false, isWorking: false, maxRows: 3, bodyColumns: 100, scroll: { offset: 0, bodyRows: 3 }, view: {} },
 } as const
 
-type On = Parameters<Parameters<typeof test>[1]>[1]
+import type { CommandRunInput, On } from 'claude-code'
+
+/** A command typed at the prompt, as the engine stamps it. */
+const typed = (command: string): CommandRunInput => ({
+  command,
+  args: '',
+  origin: { kind: 'composer' },
+  presentation: { isFullscreen: true, columns: 120 },
+})
 
 /** Stands for the engine's file system, with the given files in the repo. */
 function files(on: On, contents: Record<string, string>) {
@@ -98,38 +106,68 @@ test('status with no results says how to start, and opens nothing', async ($, on
     return { value: { isPlaced: true } }
   })
 
-  const result = await $.command.run({ command: 'imagineer:status', args: '' })
+  const result = await $.command.run(typed('imagineer:status'))
 
   expect(result.text).toBe('No Imagineer results in this repo yet. Run /imagineer:inspect to start.')
   expect(opened).toBe(false)
 })
 
-test('status opens the pane, which shows the grade on every surface', async ($, on) => {
+test('status opens the pane: an aligned overview first, on every surface', async ($, on) => {
   files(on, { [RESULTS]: JSON.stringify(SAMPLE) })
   on('ui.open', () => ({ value: { isPlaced: true } }))
 
-  const result = await $.command.run({ command: 'imagineer:status', args: '' })
+  const result = await $.command.run(typed('imagineer:status'))
   expect(result.text ?? '').toBe('')
 
   for (const surface of ['terminal', 'desktop', 'vscode', 'mobile'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    expect((await ui.find({ type: 'Text', text: /Overall/ }))?.text).toBe('✕ Overall: Failing')
-    expect(await ui.find({ type: 'Text', text: /Can you trust it/ })).toBeDefined()
-    expect((await ui.find({ type: 'Text', text: /: Test strength/ }))?.text).toBe('✕ Failing: Test strength')
-    expect((await ui.find({ type: 'Text', text: /: Matches your intent/ }))?.text).toBe('? Not checked: Matches your intent')
-    expect((await ui.find({ type: 'Text', text: /: Data safety/ }))?.text).toBe('! Weak: Data safety (claimed)')
-    expect((await ui.find({ type: 'Text', text: /: Structure/ }))?.text).toBe('! Weak: Structure (⟳ stale)')
-    expect(await ui.find({ type: 'Text', text: /Imagineer's defaults/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /3 questions are waiting/ })).toBeDefined()
+    expect((await ui.find({ type: 'Text', text: /^✕ Failing$/ }))?.text).toBe('✕ Failing')
+    expect(await ui.find({ type: 'Text', text: /^Test strength$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^Matches your intent$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Button', key: 'tab-evidence' })).toBeDefined()
+    expect(await ui.find({ type: 'Button', key: 'tab-questions' })).toBeDefined()
+    // The overview holds no evidence text: that is the Evidence tab's.
+    expect(await ui.find({ type: 'Text', text: /deliberate breaks/ })).toBeUndefined()
     await ui.unmount()
   }
+})
+
+test('Evidence shows each area\'s summary and its first five items, then counts the rest', async ($, on) => {
+  const many = { ...SAMPLE, dimensions: [{ ...SAMPLE.dimensions[0], items: Array.from({ length: 18 }, (_, i) => `A${i + 1}: attack ${i + 1}`) }] }
+  files(on, { [RESULTS]: JSON.stringify(many) })
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  await $.command.run(typed('imagineer:status'))
+
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...PANE, surface })
+    await ui.press({ key: 'tab-evidence' })
+    expect(await ui.find({ type: 'Text', text: /Tests catch 30% of deliberate breaks/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^A5: attack 5$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^A6: attack 6$/ })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /and 13 more/ })).toBeDefined()
+    await ui.unmount()
+  }
+})
+
+test('Questions lists what is waiting, by its point', async ($, on) => {
+  files(on, {
+    [RESULTS]: JSON.stringify(SAMPLE),
+    '.claude/imagineer/questions.json': JSON.stringify({ questions: [{ id: 'Q6', topic: 'permissions', status: 'open', point: 'A Microsoft sign-in can take over the test admin.', expectation: 'x' }] }),
+  })
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  await $.command.run(typed('imagineer:status'))
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'tab-questions' })
+  expect(await ui.find({ type: 'Text', text: /^A Microsoft sign-in can take over the test admin\.$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /questions are waiting/ })).toBeDefined()
+  await ui.unmount()
 })
 
 test('status answers in text where no pane can be drawn', async ($, on) => {
   files(on, { [RESULTS]: JSON.stringify(SAMPLE) })
   on('ui.open', () => ({ value: { isPlaced: false, reason: 'no-surface' } }))
 
-  const result = await $.command.run({ command: 'imagineer:status', args: '' })
+  const result = await $.command.run(typed('imagineer:status'))
 
   expect(result.text).toContain('Imagineer: ✕ Failing')
   expect(result.text).toContain('? Matches your intent: Not checked')
@@ -141,7 +179,7 @@ test('a results file in another format is not shown as a grade', async ($, on) =
   files(on, { [RESULTS]: JSON.stringify({ ...SAMPLE, schema: 2 }) })
   on('ui.open', () => ({ value: { isPlaced: true } }))
 
-  const result = await $.command.run({ command: 'imagineer:status', args: '' })
+  const result = await $.command.run(typed('imagineer:status'))
 
   expect(result.text).toContain('uses format 2')
   expect(result.text).toContain('Run /imagineer:inspect again')
@@ -150,7 +188,7 @@ test('a results file in another format is not shown as a grade', async ($, on) =
 test('a broken results file is reported, not shown as a grade', async ($, on) => {
   files(on, { [RESULTS]: '{ not json' })
 
-  const result = await $.command.run({ command: 'imagineer:status', args: '' })
+  const result = await $.command.run(typed('imagineer:status'))
 
   expect(result.text).toBe('The results file is not valid JSON.')
 })
@@ -164,7 +202,7 @@ test('inspect is passed on to the skill, and the band shows the run', async ($, 
     return { text: 'skill ran' }
   })
 
-  const result = await $.command.run({ command: 'imagineer:inspect', args: '' })
+  const result = await $.command.run(typed('imagineer:inspect'))
   expect(reachedSkill).toBe(true)
   expect(result.text).toBe('skill ran')
 
@@ -207,13 +245,13 @@ test('the band stays quiet once a run is done', async ($, on) => {
 test('the pane follows the file when it changes', async ($, on) => {
   const disk = files(on, { [RESULTS]: JSON.stringify(SAMPLE) })
   on('ui.open', () => ({ value: { isPlaced: true } }))
-  await $.command.run({ command: 'imagineer:status', args: '' })
+  await $.command.run(typed('imagineer:status'))
 
   disk.change(RESULTS, JSON.stringify({ ...SAMPLE, overall: { state: 'weak', reason: '' } }))
-  await $.command.run({ command: 'imagineer:status', args: '' })
+  await $.command.run(typed('imagineer:status'))
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  expect((await ui.find({ type: 'Text', text: /Overall/ }))?.text).toBe('! Overall: Weak')
+  expect((await ui.find({ type: 'Text', text: /^! Weak$/ }))?.text).toBe('! Weak')
   await ui.unmount()
 })
 
@@ -228,12 +266,14 @@ const LEDGER = JSON.stringify({
 test('the pane lists open questions, most consequential first, and the stop bar', async ($, on) => {
   files(on, { [RESULTS]: JSON.stringify(SAMPLE), '.claude/imagineer/questions.json': LEDGER })
   on('ui.open', () => ({ value: { isPlaced: true } }))
-  await $.command.run({ command: 'imagineer:status', args: '' })
+  await $.command.run(typed('imagineer:status'))
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  const lines = (await ui.findAll({ type: 'Text', text: /^ {3}Q\d/ })).map(found => found.text)
-  expect(lines).toEqual(['   Q6 (permissions): test sign-in never works on the live app.', '   Q9 (wording): Error messages are plain.'])
   expect(await ui.find({ type: 'Text', text: /Stop bar not met: not yet 2 clean attack rounds\./ })).toBeDefined()
+  await ui.press({ key: 'tab-questions' })
+  const ids = (await ui.findAll({ type: 'Text', text: /^Q\d+$/ })).map(found => found.text)
+  expect(ids).toEqual(['Q6', 'Q9'])
+  expect(await ui.find({ type: 'Text', text: /^test sign-in never works on the live app\.$/ })).toBeDefined()
   await ui.unmount()
 })
 
@@ -244,7 +284,7 @@ test('the grade is marked stale once HEAD moves past the measured commit', async
     '.git/refs/heads/main': 'def5678000000000000000000000000000000000\n',
   })
   on('ui.open', () => ({ value: { isPlaced: false, reason: 'no-surface' } }))
-  const result = await $.command.run({ command: 'imagineer:status', args: '' })
+  const result = await $.command.run(typed('imagineer:status'))
   expect(result.text).toContain('⟳ Measured at abc1234; the code has changed since.')
   expect(result.text).toContain('[stale]')
 })
@@ -256,7 +296,7 @@ test('the grade is current when HEAD is the measured commit, found in packed-ref
     '.git/packed-refs': '# pack-refs with: peeled\nabc1234aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa refs/heads/main\n',
   })
   on('ui.open', () => ({ value: { isPlaced: false, reason: 'no-surface' } }))
-  const result = await $.command.run({ command: 'imagineer:status', args: '' })
+  const result = await $.command.run(typed('imagineer:status'))
   expect(result.text).not.toContain('changed since')
 })
 
@@ -267,7 +307,7 @@ test('a worktree is followed to its own HEAD', async ($, on) => {
     '/repo/.git/worktrees/feature/HEAD': 'def5678000000000000000000000000000000000\n',
   })
   on('ui.open', () => ({ value: { isPlaced: false, reason: 'no-surface' } }))
-  const result = await $.command.run({ command: 'imagineer:status', args: '' })
+  const result = await $.command.run(typed('imagineer:status'))
   expect(result.text).toContain('the code has changed since')
 })
 
@@ -277,7 +317,7 @@ test('the self-check’s flags about Imagineer itself are shown, with the way to
     '.claude/imagineer/flags.json': JSON.stringify({ flags: [{ kind: 'grade-contradiction', said: 'Q8 was proven by a test, yet attack A7 broke the same behaviour.' }] }),
   })
   on('ui.open', () => ({ value: { isPlaced: false, reason: 'no-surface' } }))
-  const result = await $.command.run({ command: 'imagineer:status', args: '' })
+  const result = await $.command.run(typed('imagineer:status'))
   expect(result.text).toContain('Imagineer may have gone wrong on its side:')
   expect(result.text).toContain('Q8 was proven by a test, yet attack A7 broke the same behaviour.')
   expect(result.text).toContain('/imagineer:feedback')
@@ -285,7 +325,7 @@ test('the self-check’s flags about Imagineer itself are shown, with the way to
 
 const DIALOG = (metadataSource?: string) => ({
   plugin: 'imagineer',
-  component: 'AskUserQuestion',
+  component: 'AskUserQuestion' as const,
   props: {
     tool: 'AskUserQuestion',
     questions: [{ question: 'Bo can still read deal notes after losing Pipeline access.', header: 'Q4 Access', multiSelect: false, options: [{ label: 'Must not happen', description: 'Bo stops seeing them.' }, { label: 'Not sure', description: 'Explain it another way.' }] }],

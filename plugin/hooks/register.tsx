@@ -7,11 +7,12 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Summary } from '../types'
+import type { Results, Summary, Tab } from '../types'
 import {
   dialogIds,
   FLAGS_PATH,
   findPackedRef,
+  firstItems,
   isActive,
   isSameCommit,
   MEASURED_LABEL,
@@ -35,8 +36,10 @@ const POLL_MS = 3000
 // Change the tag when Summary's fields change: a value an earlier version
 // stored is then read as "no results" until the file is read again.
 const summaryAtom = atom({ plugin: 'imagineer', key: 'summary' } as const, { kind: 'none' } as Summary, {
-  shape: 'summary-3',
+  shape: 'summary-4',
 })
+
+const tabAtom = atom({ plugin: 'imagineer', key: 'tab' } as const, 'overview' as Tab)
 
 let lastMtime: number | null = null
 let lastBase: Summary = { kind: 'none' }
@@ -154,79 +157,136 @@ export const register: Register = on => {
   }
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text } = $.ui.resolve(e)
+    const { Box, Button, Text } = $.ui.resolve(e)
     const summary = await read($, summaryAtom)
+    if (summary.kind !== 'results') return <Text dimColor>{summaryText(summary)}</Text>
 
-    if (summary.kind !== 'results') {
-      return <Text dimColor>{summaryText(summary)}</Text>
-    }
-
+    const tab = await read($, tabAtom)
     const overall = STATE_LABEL[summary.overall.state]
-    const groups = [
-      { title: 'Can you trust it?', dimensions: summary.dimensions.filter(one => one.group === 'trust') },
-      { title: 'Is it kept well?', dimensions: summary.dimensions.filter(one => one.group === 'care') },
+    const nameWidth = Math.min(28, Math.max(16, Math.floor(e.props.bodyColumns * 0.45)))
+    const waiting = summary.questions.waiting
+    const tabs: { id: Tab; label: string }[] = [
+      { id: 'overview', label: 'Overview' },
+      { id: 'evidence', label: 'Evidence' },
+      { id: 'questions', label: waiting ? `Questions (${waiting})` : 'Questions' },
     ]
 
-    return (
-      <Box flexDirection="column" gap={1}>
-        <Box flexDirection="column">
+    const header = (
+      <Box flexDirection="column">
+        <Box flexDirection="row" gap={1}>
           <Text color={overall.color} weight="semibold">
-            {overall.icon} Overall: {overall.word}
+            {overall.icon} {overall.word}
           </Text>
-          {summary.overall.reason !== '' && <Text dimColor>{summary.overall.reason}</Text>}
-          {summary.isStale && (
-            <Text color="warning">{`⟳ Measured at ${summary.run.commit}; the code has changed since. Run /imagineer:inspect again.`}</Text>
-          )}
+          <Text dimColor>
+            {summary.run.commit ? `at ${summary.run.commit}` : ''}
+            {summary.isStale ? ' · ⟳ code changed since' : ''}
+          </Text>
         </Box>
-        {groups.map(group => (
+        {summary.overall.reason !== '' && <Text dimColor>{summary.overall.reason}</Text>}
+      </Box>
+    )
+
+    const row = (dimension: Results['dimensions'][number]) => {
+      const label = STATE_LABEL[dimension.state]
+      return (
+        <Box flexDirection="row">
+          <Box width={3}>
+            <Text color={label.color}>{label.icon}</Text>
+          </Box>
+          <Box width={nameWidth}>
+            <Text>{dimension.name}</Text>
+          </Box>
+          <Text color={label.color}>
+            {label.word}
+            {dimension.isStale || summary.isStale ? ' ⟳' : ''}
+          </Text>
+        </Box>
+      )
+    }
+
+    const overview = (
+      <Box flexDirection="column">
+        {summary.dimensions.map(row)}
+        {summary.run.bar && (
+          <Box marginTop={1}>
+            <Text dimColor>{summary.run.bar.met ? '✓ Stop bar met.' : `Stop bar not met: ${summary.run.bar.missing.join('; ')}.`}</Text>
+          </Box>
+        )}
+      </Box>
+    )
+
+    const evidence = (
+      <Box flexDirection="column" gap={1}>
+        {summary.dimensions.map(dimension => (
           <Box flexDirection="column">
-            <Text weight="semibold">{group.title}</Text>
-            {group.dimensions.map(dimension => {
-              const label = STATE_LABEL[dimension.state]
-              const notes = [dimension.isStale || summary.isStale ? '⟳ stale' : '', dimension.isClaimed ? 'claimed' : '']
-                .filter(Boolean)
-                .join(' · ')
-              return (
-                <Box flexDirection="column">
-                  <Text color={label.color}>
-                    {label.icon} {label.word}: {dimension.name}
-                    {notes ? ` (${notes})` : ''}
-                  </Text>
-                  {dimension.summary !== '' && <Text dimColor>{`   ${dimension.summary}`}</Text>}
-                  <Text dimColor>{`   ${MEASURED_LABEL[dimension.measured]}`}</Text>
+            {row(dimension)}
+            <Box flexDirection="column" paddingLeft={3}>
+              {dimension.summary !== '' && <Text>{dimension.summary}</Text>}
+              {firstItems(dimension.items).map(item => (
+                <Box flexDirection="row">
+                  <Box width={2}>
+                    <Text dimColor>•</Text>
+                  </Box>
+                  <Box flexShrink={1}>
+                    <Text dimColor>{item}</Text>
+                  </Box>
                 </Box>
-              )
-            })}
+              ))}
+              <Text dimColor>{MEASURED_LABEL[dimension.measured]}{dimension.isClaimed ? ' · claimed, not re-run' : ''}</Text>
+            </Box>
           </Box>
         ))}
-        {summary.run.bar && (
-          <Text color={summary.run.bar.met ? 'success' : 'inactive'}>
-            {summary.run.bar.met ? '✓ Stop bar met.' : `Stop bar not met: ${summary.run.bar.missing.join('; ')}.`}
+      </Box>
+    )
+
+    const questions = (
+      <Box flexDirection="column" gap={1}>
+        {waiting === 0 ? (
+          <Text dimColor>Nothing is waiting for you.</Text>
+        ) : (
+          <Text color="warning">
+            {waiting} {waiting === 1 ? 'question is' : 'questions are'} waiting. Run /imagineer:inspect to answer.
           </Text>
         )}
-        {summary.questions.waiting > 0 && (
-          <Box flexDirection="column">
-            <Text color="warning">
-              {summary.questions.waiting} {summary.questions.waiting === 1 ? 'question is' : 'questions are'} waiting
-              for you. Run /imagineer:inspect to answer.
-            </Text>
-            {summary.openQuestions.map(q => (
-              <Text dimColor>{`   ${questionLine(q)}`}</Text>
-            ))}
+        {summary.openQuestions.map(q => (
+          <Box flexDirection="row">
+            <Box width={5}>
+              <Text dimColor>{q.id}</Text>
+            </Box>
+            <Box flexShrink={1}>
+              <Text>{q.text}</Text>
+            </Box>
           </Box>
-        )}
+        ))}
         {summary.flags.length > 0 && (
           <Box flexDirection="column">
             <Text color="warning">Imagineer may have gone wrong on its side:</Text>
             {summary.flags.map(flag => (
-              <Text dimColor>{`   ${flag}`}</Text>
+              <Box paddingLeft={2}>
+                <Text dimColor>{flag}</Text>
+              </Box>
             ))}
-            <Text dimColor>   Run /imagineer:feedback to record or share it.</Text>
+            <Text dimColor>Run /imagineer:feedback to record or share it.</Text>
           </Box>
         )}
-        <Text dimColor>
-          {summary.run.commit ? `Measured at ${summary.run.commit} · ` : ''}Imagineer {summary.imagineer}
-        </Text>
+      </Box>
+    )
+
+    return (
+      <Box flexDirection="column" gap={1}>
+        <Box flexDirection="row" gap={1}>
+          {tabs.map(t => (
+            <Button
+              key={`tab-${t.id}`}
+              label={t.label}
+              variant={t.id === tab ? 'primary' : 'secondary'}
+              onPress={() => update($, tabAtom, () => t.id)}
+            />
+          ))}
+        </Box>
+        {header}
+        {tab === 'overview' ? overview : tab === 'evidence' ? evidence : questions}
+        <Text dimColor>Imagineer {summary.imagineer}</Text>
       </Box>
     )
   })

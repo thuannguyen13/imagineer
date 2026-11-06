@@ -16,6 +16,8 @@ export type Dimension = {
   state: GradeState
   measured: Measured
   summary: string
+  /** The list behind the summary (files, attacks, answers), shown under Evidence. */
+  items: string[]
   isStale: boolean
   isClaimed: boolean
 }
@@ -50,6 +52,9 @@ export type Results = {
 }
 
 /** What the mod knows about the repo's results file. */
+/** The pane's tabs. */
+export type Tab = 'overview' | 'evidence' | 'questions'
+
 export type Summary =
   | { kind: 'none' }
   | { kind: 'unreadable'; reason: string }
@@ -57,6 +62,6 @@ export type Summary =
 
 declare module 'claude-code' {
   interface PluginState {
-    imagineer: { summary: Shaped<Summary> }
+    imagineer: { summary: Shaped<Summary>; tab: Tab }
   }
 }

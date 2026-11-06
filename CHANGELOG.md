@@ -2,6 +2,16 @@
 
 Imagineer's releases, newest first. Below 1.0, a `0.y.0` release may change how Imagineer is used; such changes are listed first under **Changes you need to know**. See [docs/proposals/inspect-and-build.md](docs/proposals/inspect-and-build.md#versioning).
 
+## 0.10.0 — unreleased
+
+A grade pane you can scan.
+
+### New
+
+- The pane has three tabs. **Overview**: one aligned line per area, icon, name and state, then the stop bar. **Evidence**: each area's summary in a sentence or two and its list underneath (files, attacks, answers), the first five and a count of the rest. **Questions**: what is waiting for you, by its point, and anything Imagineer may have got wrong itself.
+- Wrapped lines keep their indent, so every line stays under its area.
+- The grade gives each area a short summary and a separate list, instead of one long sentence with every item in it. "Matches your intent" counts questions plainly: how many you answered, how many the docs settled, how many are waiting.
+
 ## 0.9.0 — 2026-11-06
 
 Clearer questions, for people who do not read code.
