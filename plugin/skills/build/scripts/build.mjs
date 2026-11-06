@@ -3,7 +3,7 @@
 // request body. The run folder is <repo>/.claude/imagineer/build/<slug>/,
 // kept out of git with the worktrees.
 //
-//   node build.mjs models    [--set recommended|budget|maximum|<json>]      the user's model preset
+//   node build.mjs models    [--set recommended|budget|maximum|<json>]      the user's model preset, for Build and Inspect's attacker
 //   node build.mjs start     --repo <repo> --slug <slug> --request "<what to build>"
 //   node build.mjs state     --repo <repo> --slug <slug> [--phase <p>] [--status <s>] [--round <n>]
 //   node build.mjs list      --repo <repo>                                   unfinished runs
@@ -25,11 +25,13 @@ import { isCritical, loadLedger } from '../../inspect/scripts/questions.mjs'
 const HERE = dirname(fileURLToPath(import.meta.url))
 const INSPECT = join(HERE, '../../inspect/scripts')
 
+// The attacker is Inspect's: it uses the same choice, so a Budget user's Inspect is budget too.
 export const PRESETS = {
-  recommended: { architect: 'opus', dev: 'sonnet', devCritical: 'opus', qa: 'opus' },
-  budget: { architect: 'sonnet', dev: 'sonnet', devCritical: 'sonnet', qa: 'sonnet' },
-  maximum: { architect: 'opus', dev: 'opus', devCritical: 'opus', qa: 'opus' },
+  recommended: { architect: 'opus', dev: 'sonnet', devCritical: 'opus', qa: 'opus', attacker: 'opus' },
+  budget: { architect: 'sonnet', dev: 'sonnet', devCritical: 'sonnet', qa: 'sonnet', attacker: 'sonnet' },
+  maximum: { architect: 'opus', dev: 'opus', devCritical: 'opus', qa: 'opus', attacker: 'opus' },
 }
+const ROLES = ['architect', 'dev', 'devCritical', 'qa', 'attacker']
 const MODELS = new Set(['opus', 'sonnet', 'haiku', 'fable', 'inherit'])
 const prefsPath = () => join(process.env.IMAGINEER_HOME ?? join(homedir(), '.claude', 'imagineer'), 'preferences.json')
 
@@ -37,13 +39,22 @@ const prefsPath = () => join(process.env.IMAGINEER_HOME ?? join(homedir(), '.cla
 export function modelsFrom(choice) {
   if (typeof choice === 'string' && choice in PRESETS) return { preset: choice, ...PRESETS[choice] }
   if (choice && typeof choice === 'object') {
-    const models = { ...PRESETS.recommended, ...choice }
-    for (const role of ['architect', 'dev', 'devCritical', 'qa']) {
+    // A map without an attacker gives it QA's model: both write tests meant to break the code.
+    const models = { ...PRESETS.recommended, ...choice, attacker: choice.attacker ?? choice.qa ?? PRESETS.recommended.attacker }
+    for (const role of ROLES) {
       if (!MODELS.has(models[role])) throw new Error(`Unknown model "${models[role]}" for ${role}. Models: ${[...MODELS].join(', ')}`)
     }
     return { preset: 'custom', ...models }
   }
   return null
+}
+
+/** The saved choice, with an attacker filled in for a choice saved before it had one. */
+export function savedModels(path = prefsPath()) {
+  const saved = readJsonIf(path)?.buildModels ?? null
+  if (!saved) return null
+  if (saved.attacker) return saved
+  return saved.preset in PRESETS ? modelsFrom(saved.preset) : { ...saved, attacker: saved.qa ?? PRESETS.recommended.attacker }
 }
 
 const runDir = (repo, slug) => join(repo, '.claude/imagineer/build', slug)
@@ -256,8 +267,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         writeJson(prefsPath(), { ...readJsonIf(prefsPath()), buildModels: models })
         console.log(JSON.stringify(models))
       } else {
-        const saved = readJsonIf(prefsPath())?.buildModels ?? null
-        console.log(JSON.stringify(saved ?? { unset: true, default: modelsFrom('recommended') }))
+        console.log(JSON.stringify(savedModels() ?? { unset: true, default: modelsFrom('recommended') }))
       }
     } else if (step === 'start') {
       need(repo, slug)
