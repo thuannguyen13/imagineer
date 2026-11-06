@@ -5,13 +5,14 @@
 //   node measure.mjs prepare  --repo <repo> --out <run folder>
 //   node measure.mjs checks   --out <run folder>
 //   node measure.mjs fallow   --out <run folder>
-//   node measure.mjs stryker  --out <run folder> [--estimate]
+//   node measure.mjs stryker  --out <run folder> [--estimate] [--mutate <glob>,<glob>]
+//   node measure.mjs audit    --out <run folder> --base <ref>     Fallow on what changed since <ref>
 //   node measure.mjs security --out <run folder>
 //   node measure.mjs cleanup  --out <run folder>
 
 import { mkdtempSync, rmSync, writeFileSync, existsSync, copyFileSync } from 'node:fs'
 import { availableParallelism, tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { detect } from './detect.mjs'
 import { arg, PINNED, readJson, run, tail, writeJson } from './lib.mjs'
 
@@ -54,6 +55,7 @@ function prepare(repo, out) {
     : { ok: false, seconds: 0, stderr: 'No package.json.' }
   writeJson(join(out, 'copy.json'), {
     path,
+    source: repo,
     commit: head.stdout.trim(),
     dirty,
     install: { ok: install.ok, seconds: install.seconds, output: install.ok ? '' : tail(install.stderr || install.stdout) },
@@ -143,6 +145,8 @@ function stryker(out, isEstimate) {
   }
 
   const argv = [...command, config, '--concurrency', String(concurrency), '--reporters', 'json,clear-text']
+  const mutate = arg('mutate')
+  if (mutate) argv.push('--mutate', mutate)
   if (isEstimate) argv.push('--dryRunOnly')
   const result = run(argv, { cwd: copy.path, timeoutMs: isEstimate ? 15 * 60_000 : 6 * 60 * 60_000 })
   const log = result.stdout + '\n' + result.stderr
@@ -201,6 +205,20 @@ function security(out) {
   )
 }
 
+function audit(out, base) {
+  const { copy, repoFacts } = state(out)
+  const own = repoFacts.tools.fallow.inRepo && repoFacts.tools.fallow.version !== null
+  const command = own ? ['npx', 'fallow'] : ['npx', '-y', `fallow@${PINNED.fallow}`]
+  // The copy has no git history; Fallow needs it to compare with the base, so audit the source checkout.
+  const result = run([...command, 'audit', '--base', base, '--format', 'json', '--quiet'], { cwd: copy.source ?? copy.path })
+  let report = null
+  try {
+    report = JSON.parse(result.stdout)
+  } catch {}
+  writeJson(join(out, 'audit.json'), report ? { ok: true, verdict: report.verdict, changedFiles: report.changed_files_count, summary: report.summary } : { ok: false, error: tail(result.stderr || result.stdout) })
+  console.log(report ? `Fallow audit against ${base}: ${report.verdict} (${report.changed_files_count} files changed).` : 'Fallow audit did not run.')
+}
+
 function cleanup(out) {
   const { copy } = state(out)
   if (copy.path.includes('imagineer-')) rmSync(copy.path, { recursive: true, force: true })
@@ -211,13 +229,14 @@ const [step] = process.argv.slice(2)
 const out = arg('out')
 try {
   if (!out) throw new Error('--out <run folder> is required')
-  if (step === 'prepare') prepare(arg('repo') ?? '.', out)
+  if (step === 'prepare') prepare(resolve(arg('repo') ?? '.'), out)
   else if (step === 'checks') checks(out)
   else if (step === 'fallow') fallow(out)
   else if (step === 'stryker') stryker(out, process.argv.includes('--estimate'))
   else if (step === 'security') security(out)
+  else if (step === 'audit') audit(out, arg('base') ?? 'main')
   else if (step === 'cleanup') cleanup(out)
-  else throw new Error('Steps: prepare, checks, fallow, stryker, security, cleanup')
+  else throw new Error('Steps: prepare, checks, fallow, stryker, security, audit, cleanup')
 } catch (error) {
   console.error(error.message)
   process.exit(1)

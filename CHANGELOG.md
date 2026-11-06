@@ -2,6 +2,21 @@
 
 Imagineer's releases, newest first. Below 1.0, a `0.y.0` release may change how Imagineer is used; such changes are listed first under **Changes you need to know**. See [docs/proposals/inspect-and-build.md](docs/proposals/inspect-and-build.md#versioning).
 
+## 0.7.0 — unreleased
+
+Build arrives.
+
+### New
+
+- `/imagineer:build <what to build>` builds a feature to Imagineer's bar, in its own branch and worktree:
+  - an **Architect** turns your goal, the docs and the code into requirements you approve, and a design with exact interfaces;
+  - **QA** writes the tests from that design before any code exists, and they must fail first;
+  - **Dev** implements until they pass;
+  - each round is measured like Inspect does: the typecheck, Fallow on what changed, and mutation testing of the changed code (80% of breaks caught, every break in critical code caught), then the Architect reviews the change against the design.
+- Roles are enforced, not just asked for: a hook refuses Dev any write to tests, QA any write outside tests, and the Architect and Inspect's attacker any write outside Imagineer's own files, and keeps all but Dev from committing and everyone from pushing.
+- Choose the models once: Recommended, Budget, Maximum or your own mix, saved for you across repositories.
+- The run ends with a pull request body that leads with each requirement and its evidence. Build never pushes, opens a pull request or merges without your yes, and never merges.
+
 ## 0.6.0 — unreleased
 
 The grade pane tells you more.

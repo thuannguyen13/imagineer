@@ -51,11 +51,11 @@ Built in slices, each released on its own.
 
 ## B4 — Build
 
-- [ ] Agents: architect, dev, qa, each with its default model; the user's preset (Recommended, Budget, Maximum, or their own) saved per user and passed at spawn.
-- [ ] QA writes tests from the Architect's spec before or apart from Dev's code; Dev runs them and never edits tests.
-- [ ] Done when QA's tests pass and the change meets Inspect's bar.
-- [ ] Reuse from forge: run folder, state file and resume, finding IDs, reviewer hook.
-- [ ] Evidence: Build catches at least what forge's baseline catches on the forge bench scenarios.
+- [x] Agents: architect, dev, qa, each with its default model; the user's preset (Recommended, Budget, Maximum, or their own) saved per user in `~/.claude/imagineer/preferences.json` and passed at spawn.
+- [x] QA writes tests from the Architect's spec before Dev starts, and they must fail first; Dev runs them and never edits tests. Enforced by `hooks/role-guard.mjs` (8 tests).
+- [x] Done when QA's tests pass and the change meets the bar: typecheck, Fallow audit against the base, mutation testing of changed code at 80% with critical code fully covered (`build.mjs bar`).
+- [x] Reuse from forge: run folder, state file and resume, finding IDs (`F<k>` from the Architect's review), role guard in place of the reviewer hook.
+- [ ] Evidence: a headless Build of the bench's approvals feature passes the forge oracles (F1, F2, F4, F5) it was never shown.
 
 ## B5 — Retire the old entry points
 
