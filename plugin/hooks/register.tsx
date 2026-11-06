@@ -163,7 +163,8 @@ export const register: Register = on => {
 
     const tab = await read($, tabAtom)
     const overall = STATE_LABEL[summary.overall.state]
-    const nameWidth = Math.min(28, Math.max(16, Math.floor(e.props.bodyColumns * 0.45)))
+    const nameWidth = Math.min(26, Math.max(16, Math.floor(e.props.bodyColumns * 0.35)))
+    const stateWidth = 13
     const waiting = summary.questions.waiting
     const tabs: { id: Tab; label: string }[] = [
       { id: 'overview', label: 'Overview' },
@@ -196,10 +197,20 @@ export const register: Register = on => {
           <Box width={nameWidth}>
             <Text>{dimension.name}</Text>
           </Box>
-          <Text color={label.color}>
-            {label.word}
-            {dimension.isStale || summary.isStale ? ' ⟳' : ''}
-          </Text>
+          <Box width={stateWidth}>
+            <Text color={label.color}>
+              {label.word}
+              {dimension.isStale || summary.isStale ? ' ⟳' : ''}
+            </Text>
+          </Box>
+          {dimension.metric && dimension.metric.value !== '—' && (
+            <Box flexShrink={1}>
+              <Text>
+                {dimension.metric.value}
+                <Text dimColor>{dimension.metric.label ? `  ${dimension.metric.label}` : ''}</Text>
+              </Text>
+            </Box>
+          )}
         </Box>
       )
     }
