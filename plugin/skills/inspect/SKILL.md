@@ -9,7 +9,7 @@ disable-model-invocation: true
 
 You are the Lead. You talk to the user, run the steps below, and explain what was found in plain language. The user may have little or no technical knowledge: say what a result means for them and their users first, how it was measured second.
 
-**This version measures and asks.** It grades test strength, structure and foundations, then asks the user about what the code should do and records the answers. It does not yet turn answers into tests or try to break the app on purpose: those come in the next version, so "Matches your intent" can reach Weak at best, and "Security and permissions" and "Data safety" show as not checked. Say so when you report.
+**This version measures, asks and proves.** It grades test strength, structure and foundations, asks the user what the code should do, and proves each answer with a test in the throwaway copy. It does not yet try to break the app on purpose, so "Security and permissions" and "Data safety" show as not checked. Say so when you report.
 
 ## Rules
 
@@ -42,9 +42,11 @@ They live in this skill's folder under `scripts/` (the folder named "Base direct
    - If the dry run failed, report why in one sentence and skip to step 6.
    - To run it: `node $S/measure.mjs stryker --out $O`, in the background, and tell the user roughly when it will finish.
 
-6. **Grade.** Run `node $S/grade.mjs --repo $R --out $O --status done`, then `node $S/measure.mjs cleanup --out $O`.
+6. **Grade.** Run `node $S/grade.mjs --repo $R --out $O --status done`. Keep the copy: the next steps use it.
 
 7. **Questions.** See [Questions](#questions) below. Skip this step only if the user asked for measuring alone.
+
+8. **Prove the answers.** See [Proving answers](#proving-answers) below. Then run `node $S/measure.mjs cleanup --out $O` and regrade.
 
 8. **Report.** The grade pane shows the result; `/imagineer:status` opens it at any time. In your reply:
    - The overall grade first, with its reason, in one or two sentences.
@@ -52,7 +54,7 @@ They live in this skill's folder under `scripts/` (the folder named "Base direct
    - What was not checked, and why.
    - Where the evidence is: `$O`.
 
-Keep the report short. Do not change code in this version.
+Keep the report short. Never change the repository's code: a test that shows the code does not do what the user answered is reported as a gap to fix, not fixed.
 
 ## Questions
 
@@ -96,3 +98,20 @@ Each question is a JSON object for `node $S/questions.mjs add --repo $R` (an arr
 5. After a round, ask whether to go on with the next questions or stop for now. Open questions stay in the ledger for the next run.
 
 **Without a user** (AskUserQuestion is not available, as in `claude -p` or a scheduled run): add the questions, regrade with `--status waiting`, list the open questions in your report with their suggestions, and stop.
+
+
+## Proving answers
+
+An answer counts only when a test enforces it: the test passes on the code as it is, and fails when the code behind the answer is broken. The breaks are the ones Stryker found no test noticed, on the lines the question is `about`.
+
+For each question with `status: answered` whose `about` lists `mutant:` keys and that has no proven test yet:
+
+1. **Write one test** for the answer, in the repository's own test style and folder (look at its existing tests), under `$O/tests/<path>`, where `<path>` is where it would live in the repository, for example `test/q8-description-required.test.ts`. Name the test after the question: `Q8: an expense needs a description`. Test behaviour a person sees (what is refused, what is saved), not implementation details.
+2. **Prove it:** `node $S/prove.mjs --repo $R --out $O --id Q8 --file <path> --run "<command that runs only that test, from the repository root>"`.
+3. **Read the result:**
+   - **Fails on every break:** proven. Nothing more to do.
+   - **Some breaks not caught:** for each `not caught` line, look at the change. If no person could ever observe it (only an error message's text, a log line), record it: `node $S/questions.mjs equivalent --repo $R --mutant <file>#<id> --reason "<why no one could tell>"`. Otherwise strengthen the test so it notices, and prove again. Never record a break as unobservable to make a test pass.
+   - **The test fails on the code as it is:** the code does not do what the user answered. That is a finding, not a test to fix: keep the test as written, and report it as a gap in plain words ("You said X; today the app does Y").
+4. After all proofs, if any test is proven, ask once whether to add the proven tests to the repository as new files the user can review and commit. If yes, copy them from `$O/tests/` to the same paths in `$R`. Never commit them.
+
+Without a user, prove what you can from answers already in the ledger and list the rest.

@@ -1,6 +1,6 @@
 {
   "name": "imagineer",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Make AI-built software trustworthy without trusting the AI: inspect a repo until it is hard to break, and build new work to the same bar. Shows the grade in a pane.",
   "author": {
     "name": "thuannguyen13",

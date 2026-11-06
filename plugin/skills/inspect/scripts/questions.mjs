@@ -8,6 +8,7 @@
 //   node questions.mjs answer   --repo <repo> --id Q3 --status answered|decided|deferred
 //                               --answer "<the user's words>" [--reason "<why>"]
 //                               [--dismiss <key>,<key>] [--critical <glob>,<glob>]
+//   node questions.mjs equivalent --repo <repo> --mutant <file>#<id> --reason "<why no one could tell>"
 //   node questions.mjs summary  --repo <repo>
 
 import { readFileSync } from 'node:fs'
@@ -21,9 +22,9 @@ export const TOPICS = ['data', 'money', 'permissions', 'behaviour', 'wording']
 export const CRITICAL_TOPICS = ['data', 'money', 'permissions']
 const RESOLVED = ['answered', 'decided', 'deferred']
 
-export const emptyLedger = () => ({ schema: 1, critical: [], dismissed: {}, questions: [] })
+export const emptyLedger = () => ({ schema: 1, critical: [], dismissed: {}, equivalent: {}, questions: [] })
 
-export const loadLedger = repo => readJsonIf(join(repo, LEDGER)) ?? emptyLedger()
+export const loadLedger = repo => ({ ...emptyLedger(), ...readJsonIf(join(repo, LEDGER)) })
 
 const save = (repo, ledger) => writeJson(join(repo, LEDGER), ledger)
 
@@ -173,10 +174,18 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       })
       save(repo, ledger)
       console.log(JSON.stringify(summary(ledger)))
+    } else if (step === 'equivalent') {
+      const mutant = arg('mutant')
+      const reason = arg('reason')
+      if (!mutant || !/#/.test(mutant) || !reason) throw new Error('--mutant <file>#<id> and --reason are required')
+      const ledger = loadLedger(repo)
+      ledger.equivalent[mutant] = reason
+      save(repo, ledger)
+      console.log(`Recorded ${mutant} as a break no one could observe: ${reason}`)
     } else if (step === 'summary') {
       console.log(JSON.stringify(summary(loadLedger(repo)), null, 2))
     } else {
-      throw new Error('Steps: findings, add, next, answer, summary')
+      throw new Error('Steps: findings, add, next, answer, equivalent, summary')
     }
   } catch (error) {
     console.error(error.message)

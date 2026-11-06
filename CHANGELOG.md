@@ -2,6 +2,17 @@
 
 Imagineer's releases, newest first. Below 1.0, a `0.y.0` release may change how Imagineer is used; such changes are listed first under **Changes you need to know**. See [docs/proposals/inspect-and-build.md](docs/proposals/inspect-and-build.md#versioning).
 
+## 0.5.0 — unreleased
+
+Inspect proves your answers and tries to break the app.
+
+### New
+
+- Each answer you give is proven with a test, written in the repository's own style and run in the throwaway copy. A test counts only when it passes on the code as it is **and** fails when the code behind your answer is broken, using the same breaks Stryker found no test noticed. Breaks no one could ever observe, such as an error message's wording, are recorded with a reason instead.
+- A test that fails on the code as it is shows the code does not do what you said. Inspect reports it as a gap and changes nothing.
+- "Matches your intent" becomes Strong once every answer is proven, and Failing while the code contradicts an answer about data, money or permissions.
+- Proven tests can be added to the repository as new files, if you agree. They are never committed for you.
+
 ## 0.4.0 — unreleased
 
 Inspect asks you what the code should do.

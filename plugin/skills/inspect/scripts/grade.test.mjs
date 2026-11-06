@@ -147,8 +147,14 @@ test('intent: not checked, then failing while a critical question is open, then 
   const resolved = intent({ ledger })
   assert.equal(resolved.state, 'weak')
   assert.match(resolved.summary, /1 answer is not yet backed by a test/)
-  ledger.questions[0].test = { name: 'Q1 only the owner submits', red: 'abc', green: 'def' }
+  ledger.questions[0].test = { file: 'test/q1.test.js', green: true, red: { killed: 2, total: 3 } }
+  assert.equal(intent({ ledger }).state, 'weak')
+  ledger.questions[0].test = { file: 'test/q1.test.js', green: true, red: { killed: 3, total: 3 } }
   assert.equal(intent({ ledger }).state, 'strong')
+  ledger.questions[0].test = { file: 'test/q1.test.js', green: false, red: null }
+  const gap = intent({ ledger })
+  assert.equal(gap.state, 'failing')
+  assert.match(gap.summary, /does not yet do what you answered for Q1/)
 })
 
 test('deferring or deciding needs a reason', () => {

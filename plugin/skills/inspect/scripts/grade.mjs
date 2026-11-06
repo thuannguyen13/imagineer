@@ -10,7 +10,7 @@ import { appendFileSync, existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { arg, readJson, readJsonIf, run, writeJson } from './lib.mjs'
-import { emptyLedger, findings, isCritical, loadLedger, summary } from './questions.mjs'
+import { CRITICAL_TOPICS, emptyLedger, findings, isCritical, loadLedger, summary } from './questions.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 export const RESULTS = '.claude/imagineer/results.json'
@@ -129,6 +129,9 @@ export function foundations(evidence) {
   return dimension('foundations', name, 'care', state, 'repo', summary)
 }
 
+/** An answer is proven by a test that passes now and fails on every break behind it. */
+export const isProven = q => q.test?.green === true && q.test.red?.total > 0 && q.test.red.killed === q.test.red.total
+
 export function intent(evidence) {
   const ledger = evidence.ledger ?? emptyLedger()
   const counts = summary(ledger)
@@ -146,7 +149,13 @@ export function intent(evidence) {
   }
   if (counts.waiting) return dimension('intent', name, 'trust', 'weak', 'repo', `${asked}; ${counts.waiting} still open.`)
   const answered = ledger.questions.filter(q => q.status === 'answered')
-  const untested = answered.filter(q => !q.test?.green).length
+  const contradicted = answered.filter(q => q.test && q.test.green === false)
+  if (contradicted.length) {
+    const isCriticalGap = contradicted.some(q => CRITICAL_TOPICS.includes(q.topic))
+    const ids = contradicted.map(q => q.id).join(', ')
+    return dimension('intent', name, 'trust', isCriticalGap ? 'failing' : 'weak', 'repo', `${asked}; the code does not yet do what you answered for ${ids}.`)
+  }
+  const untested = answered.filter(q => !isProven(q)).length
   if (untested) {
     return dimension('intent', name, 'trust', 'weak', 'repo', `${asked}, all resolved; ${untested} ${untested === 1 ? 'answer is' : 'answers are'} not yet backed by a test.`)
   }
