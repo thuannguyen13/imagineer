@@ -8,6 +8,7 @@ A grade pane you can scan.
 
 ### New
 
+- The pane's header shows only the verdict, the commit and when it was tested ("✕ Failing", "e367d330 · tested Nov 5, 22:01"); the rows below say which areas fail.
 - The pane has two tabs. **Grade**: one aligned row per area: icon, name, state, and its one measured number in the same shape for every area, done out of total and what it counts, higher always better (48/51 breaks caught, 17/19 attacks held, 6/6 checks pass), right-aligned in its own column. Press a row to open its evidence underneath (its summary, the first five items and a count of the rest, how it was measured) and again to close it; all start closed. The rows fit the pane: the full row from 64 columns, the number alone from 44, and two lines per area below that. **Questions**: what is waiting for you, by its point, and anything Imagineer may have got wrong itself. There is still no blended overall score: the headline is the weakest-link verdict.
 - Wrapped lines keep their indent, so every line stays under its area.
 - The grade gives each area a short summary and a separate list, instead of one long sentence with every item in it. "Matches your intent" counts questions plainly: how many you answered, how many the docs settled, how many are waiting.

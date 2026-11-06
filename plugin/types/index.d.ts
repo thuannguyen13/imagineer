@@ -31,6 +31,8 @@ export type Run = {
   status: RunStatus
   round: number
   commit: string
+  /** When the run measured the code, as an ISO time; empty when unknown. */
+  at: string
   /** Inspect's stop bar, when the run recorded one. */
   bar: { met: boolean; missing: string[] } | null
 }

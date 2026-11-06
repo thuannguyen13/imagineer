@@ -72,6 +72,7 @@ function toRun(raw: unknown): Run {
     status: oneOf(run.status, RUN_STATUSES, 'done'),
     round: count(run.round),
     commit: text(run.commit),
+    at: text(run.at),
     bar: isObject(run.bar)
       ? { met: run.bar.met === true, missing: Array.isArray(run.bar.missing) ? run.bar.missing.filter((m): m is string => typeof m === 'string') : [] }
       : null,
@@ -200,6 +201,17 @@ export function rowLayout(columns: number): RowLayout {
   if (columns >= 64) return { kind: 'wide', nameWidth: Math.min(26, Math.floor(columns * 0.32)), stateWidth: 13 }
   if (columns >= 44) return { kind: 'medium', nameWidth: Math.min(24, columns - 3 - 12 - 10), stateWidth: 12 }
   return { kind: 'narrow', nameWidth: columns - 3, stateWidth: 0 }
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/** "Nov 6, 14:02" in local time, with the year when it is not this year's. Empty when unknown. */
+export function whenTested(iso: string, now = new Date()): string {
+  const at = new Date(iso)
+  if (!iso || Number.isNaN(at.getTime())) return ''
+  const time = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`
+  const year = at.getFullYear() === now.getFullYear() ? '' : ` ${at.getFullYear()}`
+  return `${MONTHS[at.getMonth()]} ${at.getDate()}${year}, ${time}`
 }
 
 /** How many items Evidence shows per area before "and N more". */

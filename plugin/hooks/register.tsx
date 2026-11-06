@@ -25,6 +25,7 @@ import {
   readResults,
   RESULTS_PATH,
   rowLayout,
+  whenTested,
   STATE_LABEL,
   statusLine,
   summaryText,
@@ -177,18 +178,14 @@ export const register: Register = on => {
       { id: 'questions', label: waiting ? `Questions (${waiting})` : 'Questions' },
     ]
 
+    // Only what matters at a glance: the verdict, the commit and when it was tested.
+    const tested = whenTested(summary.run.at)
     const header = (
       <Box flexDirection="column">
-        <Box flexDirection="row" gap={1}>
-          <Text color={overall.color} weight="semibold">
-            {overall.icon} {overall.word}
-          </Text>
-          <Text dimColor>
-            {summary.run.commit ? `at ${summary.run.commit}` : ''}
-            {summary.isStale ? ' · ⟳ code changed since' : ''}
-          </Text>
-        </Box>
-        {summary.overall.reason !== '' && <Text dimColor>{summary.overall.reason}</Text>}
+        <Text color={overall.color} weight="semibold">
+          {overall.icon} {overall.word}
+        </Text>
+        <Text dimColor>{[summary.run.commit, tested ? `tested ${tested}` : ''].filter(Boolean).join(' · ')}</Text>
       </Box>
     )
 

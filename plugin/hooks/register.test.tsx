@@ -6,7 +6,7 @@ const SAMPLE = {
   schema: 1,
   imagineer: '0.2.0',
   scale: 1,
-  run: { command: 'inspect', status: 'waiting', round: 2, commit: 'abc1234', bar: { met: false, missing: ['not yet 2 clean attack rounds'] } },
+  run: { command: 'inspect', status: 'waiting', round: 2, commit: 'abc1234', at: '2026-11-06T14:02:00', bar: { met: false, missing: ['not yet 2 clean attack rounds'] } },
   overall: { state: 'failing', reason: 'Test strength and data safety are failing.' },
   dimensions: [
     {
@@ -123,6 +123,9 @@ test('status opens the pane: an aligned overview first, on every surface', async
   for (const surface of ['terminal', 'desktop', 'vscode', 'mobile'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
     expect((await ui.find({ type: 'Text', text: /^✕ Failing$/ }))?.text).toBe('✕ Failing')
+    // The header: the verdict, the commit and when it was tested, nothing else.
+    expect(await ui.find({ type: 'Text', text: /^abc1234 · tested Nov 6, 14:02$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Test strength and data safety are failing/ })).toBeUndefined()
     // One row per area, each a button: name, state, the number and what it counts.
     const row = await ui.find({ type: 'Button', key: 'row-test-strength' })
     expect(row?.text).toMatch(/Test strength/)

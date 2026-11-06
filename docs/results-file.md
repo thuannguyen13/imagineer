@@ -43,6 +43,7 @@ This page is format `1`. A reader that meets another format says so and asks for
 | `run.status` | `running`, `waiting` (on the user's answers), `done` or `stopped`. The band above the prompt shows only while `running` or `waiting` |
 | `run.round` | The current round, from 1 |
 | `run.commit` | The commit the grade was measured at |
+| `run.at` | When the code was measured, as an ISO time (from 0.10.0) |
 | `run.bar` | Optional. Inspect's stop bar: `{ "met": false, "missing": ["not yet 2 clean attack rounds"] }` |
 | `overall.state` | `strong`, `weak`, `failing`, `unchecked` or `not-proven` |
 | `overall.reason` | One plain sentence: why the overall grade is what it is |
