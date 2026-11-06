@@ -14,7 +14,7 @@ import { mkdtempSync, rmSync, writeFileSync, existsSync, copyFileSync } from 'no
 import { availableParallelism, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { detect } from './detect.mjs'
-import { arg, PINNED, readJson, run, tail, writeJson } from './lib.mjs'
+import { arg, PINNED, projectEnv, readJson, run, tail, writeJson } from './lib.mjs'
 
 const INSTALL = {
   npm: lock => (lock ? ['npm', 'ci', '--no-audit', '--no-fund'] : ['npm', 'install', '--no-audit', '--no-fund']),
@@ -51,7 +51,7 @@ function prepare(repo, out) {
   if (!archive.ok) throw new Error(`Could not copy the repository: ${tail(archive.stderr)}`)
 
   const install = facts.isNodeProject
-    ? run(INSTALL[facts.manager](facts.lockfile), { cwd: path, timeoutMs: 15 * 60_000 })
+    ? run(INSTALL[facts.manager](facts.lockfile), { cwd: path, timeoutMs: 15 * 60_000, project: true })
     : { ok: false, seconds: 0, stderr: 'No package.json.' }
   writeJson(join(out, 'copy.json'), {
     path,
@@ -61,6 +61,8 @@ function prepare(repo, out) {
     commit: head.stdout.trim(),
     dirty,
     install: { ok: install.ok, seconds: install.seconds, output: install.ok ? '' : tail(install.stderr || install.stdout) },
+    // The project's code runs without the user's environment: the names left out, never their values.
+    envLeftOut: projectEnv().dropped,
   })
   console.log(`Copied ${head.stdout.trim()}${dirty ? ' (uncommitted changes not included)' : ''} to ${path}; install ${install.ok ? 'passed' : 'failed'}.`)
 }
@@ -70,7 +72,7 @@ function checks(out) {
   const runner = RUNNER[repoFacts.manager]
   const step = (script, name) => {
     if (!repoFacts.scripts[name]) return { present: false }
-    const result = run([...runner, script], { cwd: copy.path, timeoutMs: 20 * 60_000 })
+    const result = run([...runner, script], { cwd: copy.path, project: true, timeoutMs: 20 * 60_000 })
     return { present: true, ok: result.ok, seconds: result.seconds, output: tail(result.stdout + '\n' + result.stderr) }
   }
   const result = { typecheck: step('typecheck', 'typecheck'), test: step('test', 'test') }
@@ -84,8 +86,8 @@ function fallow(out) {
   const { copy, repoFacts } = state(out)
   const own = repoFacts.tools.fallow.inRepo && repoFacts.tools.fallow.version !== null
   const command = own ? ['npx', 'fallow'] : ['npx', '-y', `fallow@${PINNED.fallow}`]
-  const health = run([...command, 'health', '--format', 'json', '--quiet'], { cwd: copy.path })
-  const check = run([...command, 'check', '--format', 'json', '--quiet'], { cwd: copy.path })
+  const health = run([...command, 'health', '--format', 'json', '--quiet'], { cwd: copy.path, project: true })
+  const check = run([...command, 'check', '--format', 'json', '--quiet'], { cwd: copy.path, project: true })
   const parse = result => {
     try {
       return JSON.parse(result.stdout)
@@ -160,7 +162,7 @@ function stryker(out, isEstimate) {
   // Tests are never mutated, whatever the scope names.
   if (mutate) argv.push('--mutate', [mutate, '!**/*.test.*', '!**/*.spec.*', '!**/__tests__/**', '!**/test/**', '!**/tests/**'].join(','))
   if (isEstimate) argv.push('--dryRunOnly')
-  const result = run(argv, { cwd: copy.path, timeoutMs: isEstimate ? 15 * 60_000 : 6 * 60 * 60_000 })
+  const result = run(argv, { cwd: copy.path, project: true, timeoutMs: isEstimate ? 15 * 60_000 : 6 * 60 * 60_000 })
   const log = result.stdout + '\n' + result.stderr
 
   if (isEstimate) {
@@ -189,7 +191,7 @@ function security(out) {
   const { copy, repoFacts } = state(out)
   const own = repoFacts.tools.fallow.inRepo && repoFacts.tools.fallow.version !== null
   const command = own ? ['npx', 'fallow'] : ['npx', '-y', `fallow@${PINNED.fallow}`]
-  const scan = run([...command, 'security', '--format', 'json', '--quiet'], { cwd: copy.path })
+  const scan = run([...command, 'security', '--format', 'json', '--quiet'], { cwd: copy.path, project: true })
   let candidates = null
   try {
     candidates = JSON.parse(scan.stdout).security_findings ?? []
@@ -198,7 +200,7 @@ function security(out) {
   // Known vulnerabilities in the dependencies the app ships with (not dev tools).
   let audit = { skipped: `No audit for ${repoFacts.manager} yet.` }
   if (repoFacts.manager === 'npm' && repoFacts.lockfile) {
-    const result = run(['npm', 'audit', '--json', '--omit=dev'], { cwd: copy.path, timeoutMs: 3 * 60_000 })
+    const result = run(['npm', 'audit', '--json', '--omit=dev'], { cwd: copy.path, project: true, timeoutMs: 3 * 60_000 })
     try {
       const counts = JSON.parse(result.stdout).metadata?.vulnerabilities ?? {}
       audit = { tool: 'npm audit --omit=dev', high: counts.high ?? 0, critical: counts.critical ?? 0, moderate: counts.moderate ?? 0 }

@@ -13,11 +13,11 @@
 //   node build.mjs bar       --repo <repo> --slug <slug> --run "<command for QA's tests>" [--skip-mutation]
 //   node build.mjs pr-body   --repo <repo> --slug <slug>
 
-import { appendFileSync, existsSync, readFileSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { arg, readJson, readJsonIf, run, tail, writeJson } from '../../inspect/scripts/lib.mjs'
+import { arg, keepOutOfGit, readJson, readJsonIf, run, tail, writeJson } from '../../inspect/scripts/lib.mjs'
 import { detect } from '../../inspect/scripts/detect.mjs'
 import { mutationScore } from '../../inspect/scripts/grade.mjs'
 import { isCritical, loadLedger } from '../../inspect/scripts/questions.mjs'
@@ -66,13 +66,6 @@ const loadState = (repo, slug) => {
 }
 const saveState = (repo, state) => writeJson(statePath(repo, state.slug), { ...state, updatedAt: new Date().toISOString() })
 
-function excludeFromGit(repo, lines) {
-  const path = run(['git', '-C', repo, 'rev-parse', '--git-path', 'info/exclude']).stdout.trim()
-  const target = path.startsWith('/') ? path : join(repo, path)
-  const text = existsSync(target) ? readFileSync(target, 'utf8') : ''
-  const missing = lines.filter(line => !text.split('\n').includes(line))
-  if (missing.length) appendFileSync(target, `${text === '' || text.endsWith('\n') ? '' : '\n'}${missing.join('\n')}\n`)
-}
 
 /** Keeps the status line above the prompt current, without touching the repo's grade. */
 function banner(repo, state) {
@@ -99,7 +92,9 @@ function start(repo, slug, request) {
   const branch = git(repo, 'rev-parse', '--abbrev-ref', 'HEAD').stdout.trim()
   const sha = git(repo, 'rev-parse', 'HEAD').stdout.trim()
   if (!sha) throw new Error('Not a git repository with a commit.')
-  excludeFromGit(repo, ['.claude/imagineer/', '.claude/worktrees/'])
+  // Kept out of git by a .gitignore inside each folder; nothing in .git is written.
+  keepOutOfGit(join(repo, '.claude/imagineer'))
+  keepOutOfGit(join(repo, '.claude/worktrees'))
   const state = {
     slug,
     request,
@@ -127,14 +122,14 @@ function worktree(repo, slug) {
   }
   const facts = detect(state.worktree)
   const install = { npm: ['npm', 'ci', '--no-audit', '--no-fund'], pnpm: ['pnpm', 'install', '--frozen-lockfile'], yarn: ['yarn', 'install', '--frozen-lockfile'], bun: ['bun', 'install'] }[facts.manager]
-  const installed = facts.lockfile ? run(install, { cwd: state.worktree, timeoutMs: 15 * 60_000 }) : { ok: true }
+  const installed = facts.lockfile ? run(install, { cwd: state.worktree, timeoutMs: 15 * 60_000, project: true }) : { ok: true }
   console.log(`Worktree ${state.worktree} on ${state.branch}; dependencies ${installed.ok ? 'installed' : `failed: ${tail(installed.stderr, 5)}`}.`)
 }
 
 /** QA's tests must fail before any feature code exists: proof that they can fail. */
 function red(repo, slug, command) {
   const state = loadState(repo, slug)
-  const result = run(['sh', '-c', command], { cwd: state.worktree, timeoutMs: 10 * 60_000 })
+  const result = run(['sh', '-c', command], { cwd: state.worktree, timeoutMs: 10 * 60_000, project: true })
   state.red = { command, failedFirst: !result.ok, commit: git(state.worktree, 'rev-parse', '--short', 'HEAD').stdout.trim(), output: tail(result.stdout + '\n' + result.stderr, 20) }
   saveState(repo, state)
   console.log(result.ok ? "QA's tests already pass with no feature code: they do not test the new behaviour. Send them back to QA." : "QA's tests fail before the feature exists, as they should.")
@@ -169,7 +164,7 @@ function bar(repo, slug, command, skipMutation) {
   const state = loadState(repo, slug)
   state.round += 1
   const out = join(runDir(repo, slug), `round-${state.round}`)
-  const tests = run(['sh', '-c', command], { cwd: state.worktree, timeoutMs: 20 * 60_000 })
+  const tests = run(['sh', '-c', command], { cwd: state.worktree, timeoutMs: 20 * 60_000, project: true })
   const changed = git(state.worktree, 'diff', '--name-only', `${state.base.sha}...HEAD`).stdout.split('\n').filter(Boolean)
   const sources = changedSources(changed)
 

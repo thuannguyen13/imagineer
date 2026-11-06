@@ -43,7 +43,7 @@ function attack({ out, round, id, category, title, file, command, about = null }
   const target = join(copy.path, file)
   mkdirSync(dirname(target), { recursive: true })
   copyFileSync(join(out, 'attacks', file), target)
-  const result = run(['sh', '-c', command], { cwd: copy.path, timeoutMs: 5 * 60_000 })
+  const result = run(['sh', '-c', command], { cwd: copy.path, timeoutMs: 5 * 60_000, project: true })
   // The attack test leaves the copy as it came: a test that broke through fails on purpose,
   // and would fail every later measurement of the copy.
   rmSync(target, { force: true })

@@ -55,7 +55,7 @@ function prove({ repo, out, id, file, command }) {
   const target = join(copy.path, file)
   mkdirSync(dirname(target), { recursive: true })
   copyFileSync(source, target)
-  const sh = cmd => run(['sh', '-c', cmd], { cwd: copy.path, timeoutMs: 5 * 60_000 })
+  const sh = cmd => run(['sh', '-c', cmd], { cwd: copy.path, timeoutMs: 5 * 60_000, project: true })
 
   const green = sh(command)
   const test = { file, run: command, commit: copy.commit, green: green.ok, red: null, output: green.ok ? '' : tail(green.stdout + '\n' + green.stderr, 15) }

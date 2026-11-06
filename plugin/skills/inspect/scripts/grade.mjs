@@ -7,10 +7,10 @@
 //   node grade.mjs --repo <repo> --out <run folder> [--status running|waiting|done|stopped] [--round N]
 //                  [--step "<what Inspect is doing now, in plain words>"]
 
-import { appendFileSync, existsSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { arg, readJson, readJsonIf, run, writeJson } from './lib.mjs'
+import { arg, keepOutOfGit, readJson, readJsonIf, writeJson } from './lib.mjs'
 import { loadAttacks, rounds } from './attack.mjs'
 import { CRITICAL_TOPICS, emptyLedger, findings, isCritical, isGapToFix, loadLedger, openQuestions, summary } from './questions.mjs'
 
@@ -470,16 +470,6 @@ function imagineerVersion() {
   return existsSync(manifest) ? readJson(manifest).version : 'unknown'
 }
 
-/** Keeps the results out of git unless the user chooses to commit them. */
-function excludeFromGit(repo) {
-  const path = run(['git', '-C', repo, 'rev-parse', '--git-path', 'info/exclude'])
-  if (!path.ok) return
-  const relativeOrAbsolute = path.stdout.trim()
-  const target = relativeOrAbsolute.startsWith('/') ? relativeOrAbsolute : join(repo, relativeOrAbsolute)
-  const text = existsSync(target) ? readFileSync(target, 'utf8') : ''
-  if (text.split('\n').includes('.claude/imagineer/')) return
-  appendFileSync(target, `${text === '' || text.endsWith('\n') ? '' : '\n'}.claude/imagineer/\n`)
-}
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const repo = arg('repo')
@@ -510,7 +500,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     dimensions,
     questions: { waiting: counts.waiting, resolved: counts.resolved },
   }
-  excludeFromGit(repo)
+  // Kept out of git by a .gitignore inside Imagineer's folder; nothing in .git is written.
+  keepOutOfGit(join(repo, '.claude/imagineer'))
   writeJson(join(repo, RESULTS), results)
   console.log(`${grade.state}: ${grade.reason || 'every area meets the thresholds Imagineer suggests.'}`)
   console.log(bar.met ? 'Finished, by the thresholds Imagineer suggests.' : `Not finished yet. By the thresholds Imagineer suggests, Inspect still needs: ${bar.missing.join('; ')}.`)

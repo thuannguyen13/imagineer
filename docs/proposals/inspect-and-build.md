@@ -36,7 +36,8 @@ When a command runs, Claude Code fires a `command.run` event before the skill do
 - **Evidence over claims.** A report written by an agent is not proof. Tests that are seen failing and then passing, tool results, and the user's answers are.
 - **Separation of duties.** Whoever writes code does not write its tests, and whoever writes tests does not write code.
 - **The user decides intent.** Agents never guess what the user meant when they can ask.
-- **Leave no trace unless asked.** Inspect does not add files, dependencies or config to the user's repo.
+- **Leave no trace unless asked.** Inspect does not add files, dependencies or config to the user's repo, and never writes in its `.git`. Its own files live under `.claude/imagineer/`, kept out of git by a `.gitignore` inside that folder.
+- **The project's code runs without the user's credentials.** Inspect and Build run the project's install, tests and attacks with only what tools need from the environment, so a test cannot reach a real database or service with the user's keys. Network access is not blocked: that would need a container, a heavier dependency than the risk calls for today.
 
 ## `/inspect`
 
