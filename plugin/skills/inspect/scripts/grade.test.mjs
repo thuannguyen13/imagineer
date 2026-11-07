@@ -526,4 +526,7 @@ test('what the latest attack round did not reach is listed, never read as safe',
   assert.match(s.summary, /1 part not attacked yet/)
   assert.deepEqual(s.items, ['Not attacked yet: the admin settings page'])
   assert.doesNotMatch(dataSafety({ attacks: held, untested: untestedNow(ledger) }).summary, /not attacked yet/)
+  // An area no attack has reached yet still lists what is known to be untested.
+  const round1 = { 1: ledger.untested['1'] }
+  assert.deepEqual(dataSafety({ attacks: [], untested: untestedNow({ untested: round1 }) }).items, ['Not attacked yet: two people editing one deal at once'])
 })

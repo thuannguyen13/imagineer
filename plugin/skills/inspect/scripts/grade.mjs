@@ -241,7 +241,7 @@ export function security(evidence) {
   const ledger = evidence.ledger ?? emptyLedger()
   const attacks = attackNotes(evidence.attacks ?? [], 'permissions')
   const scan = evidence.security
-  if (!attacks.tried && !scan) return dimension('security', name, 'trust', 'unchecked', 'none', 'Not tested by Imagineer yet.')
+  if (!attacks.tried && !scan) return dimension('security', name, 'trust', 'unchecked', 'none', 'Not tested by Imagineer yet.', notAttacked(evidence, 'permissions'))
 
   const answers = answersOn(ledger, 'permissions')
   const failing = []
@@ -269,7 +269,7 @@ export function dataSafety(evidence) {
   const ledger = evidence.ledger ?? emptyLedger()
   const attacks = attackNotes(evidence.attacks ?? [], 'data')
   const answers = answersOn(ledger, 'data')
-  if (!attacks.tried && !answers.total) return dimension('data-safety', name, 'trust', 'unchecked', 'none', 'Not tested by Imagineer yet.')
+  if (!attacks.tried && !answers.total) return dimension('data-safety', name, 'trust', 'unchecked', 'none', 'Not tested by Imagineer yet.', notAttacked(evidence, 'data'))
 
   const failing = []
   if (attacks.broke.length) failing.push(`${plural(attacks.broke.length, 'attack')} broke through`)

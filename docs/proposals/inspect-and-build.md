@@ -200,10 +200,11 @@ Inspect is finished when all of these hold. They are Imagineer's suggestion, not
 
 Each step is its own release, measured on the bench app before and after, and kept only if it finds at least as much at no more cost.
 
-1. **Secret scanning.** The biggest risk with no cover today, and the tools exist.
-2. **Intent from more than one angle, and the no-docs scaffold.** What sets Imagineer apart from a scanner: it finds out what the user wants, not only what the code does.
-3. **The readability review agent, and property-based tests in proofs.**
-4. **The data safety and foundations additions.**
+1. **Findings: one list, one shape, a status each** ([Findings](#findings-planned)). Every later step adds findings, so they share one place from the start.
+2. **Secret scanning.** The biggest risk with no cover today, and the tools exist.
+3. **Intent from more than one angle, and the no-docs scaffold.** What sets Imagineer apart from a scanner: it finds out what the user wants, not only what the code does.
+4. **The readability review agent, and property-based tests in proofs.**
+5. **The data safety and foundations additions.**
 
 ## `/build`
 
@@ -321,6 +322,63 @@ No headline number or letter. Numbers are one click down, for the owner.
 
 **Bench app today: ✕ At risk.** Test strength ✕ (30.5%), Data safety ✕ (prod/dev split untested, restore only claimed), Security ! , Intent ?, Structure ! (Fallow 81).
 
+### Findings (planned)
+
+Today each area carries a summary sentence and a few loose lines of evidence, written differently by each part of Inspect. Findings replace those lines with **one list of everything Inspect found**, each finding in one shape with a status, so the pane, the report, Build and the self-check all read the same thing, and nothing found is lost between them.
+
+**What a finding is.** One problem, in plain words, grouped by behaviour rather than by line: twenty planted bugs that slip through the deal-scoping code are one finding, not twenty.
+
+```json
+{
+  "id": "F7",
+  "key": "untested:lib/deal-scope.ts",
+  "area": "test-strength",
+  "title": "Deal scoping can break without any test noticing",
+  "impact": "A sales rep could start seeing another team's deals, and nothing would warn you.",
+  "severity": "high",
+  "status": "measured",
+  "evidence": { "source": "Stryker 9.6.1", "detail": "20 of 40 breaks not caught, lines 12-48", "files": ["lib/deal-scope.ts"] },
+  "question": "Q7",
+  "test": null,
+  "firstSeen": "3",
+  "lastSeen": "5"
+}
+```
+
+- `title` is what the pane shows: plain words, no code (the same rule questions follow). `impact` says what it means for the user's people, data or money. File names and tool output go in `evidence`, for engineers.
+- `key` is the finding's identity across runs, the same keys Inspect already uses to dismiss findings, so a finding keeps its `id` from run to run.
+- `area` is one of the six areas; a finding belongs to exactly one.
+
+**Status: how sure Imagineer is, and whether it still matters.** One of these, and only `grade.mjs` sets it, from the evidence:
+
+| Status | Means | Example |
+|---|---|---|
+| **Suspected** | A tool or agent flagged it; not verified yet | Fallow says a file is unused, but a web page may load it |
+| **Measured** | A tool measured it directly | 20 planted bugs not caught; the typecheck fails; a package with a known vulnerability |
+| **Confirmed** | Verified as a real problem: an attack broke through with a test that shows it, or the user said the app should behave differently and wants it fixed | "A sales rep opened another team's deal by its link" |
+| **Proven safe** | A test now enforces the behaviour the user wants, seen failing and then passing | Q8 is proven: an expense needs a description |
+| **Decided** | Settled as not a problem, by the user or the docs, with the reason kept | "The old import page is kept on purpose" |
+| **Not checked** | Inspect did not reach it, and says why | "Not attacked yet: the admin settings page"; test strength skipped this time |
+
+Suspected, measured and confirmed are **open**; proven safe and decided are **closed**. A finding that a later run on newer code no longer finds is **gone**, with the run it disappeared in. Missing evidence is never a pass: what was not measured is "not checked", never closed.
+
+**Severity**, set by the same script, so the most consequential come first:
+
+- **High:** in a trust area and touching data, money, permissions or code the user marked critical; any attack that broke through; any secret; a known vulnerability rated high or critical.
+- **Medium:** any other trust-area finding.
+- **Low:** code quality and foundations.
+
+**Where they live.** `grade.mjs` writes them on every regrade into `results.json` as a new optional `findings` list (results format 1 stays readable), and keeps their history in `.claude/imagineer/findings.json` beside the question ledger, so ids, first and last seen, and gone findings last across runs. Each area keeps its state and number; its summary is written from its findings.
+
+**Who reads them.**
+
+- **The pane:** each area's row says how many open findings it has ("3 findings"); opening it lists them, most severe first, each with its status word (✕ Confirmed, ! Measured, ? Suspected) and title, and a count of the closed ones.
+- **The report:** confirmed problems first, then measured, then suspected, then what needs a decision, each with its impact and evidence; then what was not checked.
+- **Build:** "report, then offer Build" offers to fix the open high and medium findings the user picks.
+- **The self-check:** a finding closed as proven that an attack later breaks is the grade contradiction it already looks for.
+
+**Secrets** follow the earlier decision: a secret is a finding like any other, but its title in the pane is only "A secret was found: see Inspect's report", and only the report names the file and the kind of key, never the secret.
+
 ## Improving Imagineer
 
 Imagineer learns from its own runs, but never changes itself without review. Everything here is about Imagineer's own behaviour, never about the user's code.
@@ -430,3 +488,5 @@ The mod needs Claude Code 2.1.287 or later. It checks the running version and, o
 - How existing parts fold in. Proposed: forge's run folder, state file, finding IDs and reviewer hook into Build; ground's checklist and the Inspector idea into Inspect; guard's rules into Dev's practices. The old skills and agents were removed in 0.2.0; their text stays at tag `v0.1.0` for these phases to draw on.
 - When Build brings review agents back, a mod `tool.call` hook could replace the Python settings hook forge used up to 0.1.0 (`forge-reviewer-guard.py`, run on every Bash call), and give a destructive-command guard proceed and cancel buttons. A mod loads in every session once the plugin is installed, so an opt-in guard needs its own switch.
 - Re-plan `plan/now.md` around these two commands; the bench stays the way each command is proven.
+- **Findings in the pane: closed ones too?** Proposed: open findings listed, closed ones counted ("and 4 closed"), so the pane shows what is left without hiding the progress.
+- **Findings: how fine to group.** Proposed: by behaviour once a question is about it, and by file until then, so planted bugs never arrive as one line each.
