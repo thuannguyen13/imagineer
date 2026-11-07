@@ -49,7 +49,7 @@ Each area gets one state: **✓ Strong**, **! Weak**, **✕ At risk** (something
 
 The pane has two tabs. **Overview** is how your project is doing: the areas above, and a line telling you when questions wait. **Questions** is what Imagineer still needs from you, and **Your answers**: everything you've told it and what came of each, such as "Matches what the app does" or "Differs from the app: you want it fixed".
 
-The pane also says whether Inspect is finished, by the thresholds Imagineer suggests: tests that catch at least 80% of deliberate breaks, every break in critical code caught or explained, and two attack rounds in a row that find nothing new. If not, it says what is still needed. Run `/imagineer:inspect` again to continue; questions you already answered are not asked again.
+The pane also says whether Inspect is finished, by the thresholds Imagineer suggests: tests that catch at least 80% of deliberate breaks, every break in critical code caught or explained, and two attack rounds in a row that find nothing new. 80% is a starting point, not a standard. To use your own numbers for a project, say so ("use 65% for tests") or run `/imagineer:inspect --tests 65 --critical 85`; Inspect and Build keep them for that project, and the pane then says "the thresholds you set". If not, it says what is still needed. Run `/imagineer:inspect` again to continue; questions you already answered are not asked again.
 
 ### 3. Build something new
 

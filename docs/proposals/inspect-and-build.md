@@ -192,7 +192,7 @@ The grade shows it: Matches your intent starts at ? Not checked, and Foundations
 Inspect is finished when all of these hold. They are Imagineer's suggestion, not a standard, and the pane says so:
 
 - Fallow reports no unresolved findings.
-- Stryker catches at least **80%** of breaks in the inspected code (the bench app is at 30%).
+- Stryker catches at least **80%** of breaks in the inspected code (the bench app is at 33%). 80% is a starting point, not a standard ([what it rests on](../research/grading.md#21b-what-the-80-rests-on-2026-11-07)): the user can set their own per repository, in words or with `--tests` and `--critical`, kept in `.claude/imagineer/settings.json` for Inspect and Build. The pane then says "the thresholds you set".
 - **2** attack rounds in a row find nothing new.
 - In code the user confirms as critical (money, data, permissions), every surviving mutant is killed by a test or explained in a recorded answer.
 

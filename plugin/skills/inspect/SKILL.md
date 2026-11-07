@@ -1,7 +1,7 @@
 ---
 name: inspect
 description: Inspect this repository and grade how trustworthy it is, from evidence you can check. Measures test strength with mutation testing (Stryker), structure with Fallow, and the project's foundations, in a throwaway copy that leaves the repository unchanged, then asks you plain-language questions about what the code should do. JavaScript and TypeScript only for now.
-argument-hint: "[path to the repository, default: here]"
+argument-hint: "[path to the repository, default: here] [--tests <percent>] [--critical <percent>]"
 disable-model-invocation: true
 allowed-tools: Bash(node ${CLAUDE_PLUGIN_ROOT}/skills/*)
 ---
@@ -33,41 +33,43 @@ You are the Lead. You talk to the user, run the steps below, and explain what wa
 
 1. **Preflight.** `$R` is the argument, or the current directory. Check that it is a git repository with at least one commit and a `package.json`. If not, say that Inspect works on JavaScript and TypeScript projects in git for now, and stop.
 
-2. **Start the run.** `$O` is `$R/.claude/imagineer/runs/<n>`, with `<n>` one more than the highest existing run number (1 if none). Run `node $S/grade.mjs --repo $R --out $O --status running --step "Making a throwaway copy of your project"`, so the pane and the status line show that Inspect is running.
+2. **Thresholds.** If the input or the user's words set how many planted bugs the tests must catch (`--tests 70`, `--critical 85`, "use 65% for this project", "back to Imagineer's numbers"), record it before anything is graded: `node $S/settings.mjs thresholds --repo $R --tests <n> --critical <n>`, or `--reset`. It is kept for this repository, for Inspect and Build. Without one, the grade uses what is saved, else Imagineer's suggestion of 80 and 80. Never change the thresholds on your own to make a grade pass.
 
-3. **Copy and look.** Run `node $S/measure.mjs prepare --repo $R --out $O`. Read `$O/detect.json` and tell the user briefly what you found:
+3. **Start the run.** `$O` is `$R/.claude/imagineer/runs/<n>`, with `<n>` one more than the highest existing run number (1 if none). Run `node $S/grade.mjs --repo $R --out $O --status running --step "Making a throwaway copy of your project"`, so the pane and the status line show that Inspect is running.
+
+4. **Copy and look.** Run `node $S/measure.mjs prepare --repo $R --out $O`. Read `$O/detect.json` and tell the user briefly what you found:
    - which package manager and whether there are tests, a typecheck and CI;
    - whether the repository already uses Fallow or Stryker (then their own setup is used) or not (then Imagineer's defaults are, run once without installing anything in the repository);
    - whether it has docs (none, thin, or present);
    - that uncommitted changes are not included, if `$O/copy.json` says `dirty`.
 
-4. **Checks, structure and security scan.** Regrade before each, naming it, then run it:
+5. **Checks, structure and security scan.** Regrade before each, naming it, then run it:
    - `--step "Checking the basics: install, typecheck and tests"`, then `node $S/measure.mjs checks --out $O`;
    - `--step "Looking at how the code is structured"`, then `node $S/measure.mjs fallow --out $O`;
    - `--step "Scanning for security weaknesses"`, then `node $S/measure.mjs security --out $O`.
 
    The security scan's possible weaknesses become findings for the questions step: verify each in the code, and settle or ask about it like any other finding.
 
-5. **Test strength.** Regrade with `--step "Estimating how long the test check takes"`, run `node $S/measure.mjs stryker --out $O --estimate` and read `$O/stryker-estimate.json`.
+6. **Test strength.** Regrade with `--step "Estimating how long the test check takes"`, run `node $S/measure.mjs stryker --out $O --estimate` and read `$O/stryker-estimate.json`.
    - If the estimate is 20 minutes or less, go on.
    - If it is longer, ask: run it now (say the estimate), or skip it this time. To skip, run `node $S/measure.mjs stryker --out $O --decline "<why, in plain words>"`: test strength then shows as not checked, with that reason.
-   - If the dry run failed, report why in one sentence and skip to step 6.
+   - If the dry run failed, report why in one sentence and skip to step 7.
    - To run it: regrade with `--step "Measuring test strength (about <n> minutes, until <time>)"`, then `node $S/measure.mjs stryker --out $O`, in the background, and tell the user roughly when it will finish.
 
-6. **Grade.** Run `node $S/grade.mjs --repo $R --out $O --status running --step "Reading the code to write your questions"`. Keep the copy: the next steps use it. If the user asked for measuring alone, regrade with `--status done` and go to step 11.
+7. **Grade.** Run `node $S/grade.mjs --repo $R --out $O --status running --step "Reading the code to write your questions"`. Keep the copy: the next steps use it. If the user asked for measuring alone, regrade with `--status done` and go to step 12.
 
-7. **Questions.** Read [references/questions.md](references/questions.md) and follow it. When `detect.json` says `docs.level` is `none` or `thin`, read [references/no-docs.md](references/no-docs.md) first. Skip this step only if the user asked for measuring alone.
+8. **Questions.** Read [references/questions.md](references/questions.md) and follow it. When `detect.json` says `docs.level` is `none` or `thin`, read [references/no-docs.md](references/no-docs.md) first. Skip this step only if the user asked for measuring alone.
 
-8. **Prove the answers.** Read [references/proving.md](references/proving.md) and follow it.
+9. **Prove the answers.** Read [references/proving.md](references/proving.md) and follow it.
 
-9. **Attack.** Read [references/attacks.md](references/attacks.md) and follow it, including asking the questions the attacks raised. Then run `node $S/measure.mjs cleanup --out $O` and regrade with `--status done`.
+10. **Attack.** Read [references/attacks.md](references/attacks.md) and follow it, including asking the questions the attacks raised. Then run `node $S/measure.mjs cleanup --out $O` and regrade with `--status done`.
 
-10. **Docs.** If the repository had no docs, offer to save the confirmed answers as docs, as [references/no-docs.md](references/no-docs.md) says.
+11. **Docs.** If the repository had no docs, offer to save the confirmed answers as docs, as [references/no-docs.md](references/no-docs.md) says.
 
-11. **Report.** The grade pane shows the result; `/imagineer:status` opens it at any time. In your reply:
+12. **Report.** The grade pane shows the result; `/imagineer:status` opens it at any time. In your reply:
    - The overall grade first, with its reason, in one or two sentences. Say the states as the pane does: Strong, Weak, **At risk** (the `failing` state: something that matters is known to be wrong or unprotected), Not checked.
    - Then each dimension: its state, what it means in plain words, and the evidence. For test strength, name the weakest files and say what a low score means ("if this code broke, no test would notice"). For code quality, list the findings and say they are not yet reviewed with the user. For foundations, list what failed.
-   - Whether Inspect is finished (`run.bar` in the results file): tests catch at least 80% of deliberate breaks, nothing is left to review, and two attack rounds in a row found nothing new. If not, say what it still needs, in those words; call these "the thresholds Imagineer suggests", never a "bar".
+   - Whether Inspect is finished (`run.bar` in the results file): the tests catch enough planted bugs, nothing is left to review, and two attack rounds in a row found nothing new. If not, say what it still needs, in those words. Call them "the thresholds Imagineer suggests", or "the thresholds you set" when `run.bar.by` is `you`; never a "bar". Say once that 80% is Imagineer's starting point, not a standard, and how to change it.
    - What was not checked, and why.
    - Where the evidence is: `$O`.
 

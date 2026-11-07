@@ -17,7 +17,7 @@ import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { arg, keepOutOfGit, readJson, readJsonIf, run, tail, writeJson } from '../../inspect/scripts/lib.mjs'
+import { arg, DEFAULT_THRESHOLDS, keepOutOfGit, loadThresholds, readJson, readJsonIf, run, tail, writeJson } from '../../inspect/scripts/lib.mjs'
 import { detect } from '../../inspect/scripts/detect.mjs'
 import { mutationScore } from '../../inspect/scripts/grade.mjs'
 import { isCritical, loadLedger } from '../../inspect/scripts/questions.mjs'
@@ -140,7 +140,7 @@ export function changedSources(files) {
   return files.filter(f => /\.(m|c)?[jt]sx?$/.test(f) && !/(^|\/)(test|tests|__tests__|spec|e2e)\/|\.(test|spec)\./.test(f) && !f.startsWith('.claude/'))
 }
 
-export function barFrom({ tests, typecheck, audit, mutation, critical }) {
+export function barFrom({ tests, typecheck, audit, mutation, critical, thresholds = DEFAULT_THRESHOLDS }) {
   const missing = []
   if (!tests.ok) missing.push("QA's tests do not pass")
   if (typecheck && typecheck.present && !typecheck.ok) missing.push('the typecheck fails')
@@ -152,8 +152,8 @@ export function barFrom({ tests, typecheck, audit, mutation, critical }) {
     else if ((mutation.timeouts ?? 0) > 10 && mutation.timeouts / mutation.total > 0.2) {
       missing.push(`${mutation.timeouts} of ${mutation.total} breaks timed out, so the run cannot say whether the tests would notice`)
     }
-    else if (mutation.caught / mutation.total < 0.8) {
-      missing.push(`tests catch ${Math.round((mutation.caught / mutation.total) * 100)}% of breaks in the changed code, below 80%`)
+    else if (mutation.caught / mutation.total < thresholds.tests / 100) {
+      missing.push(`tests catch ${Math.round((mutation.caught / mutation.total) * 100)}% of breaks in the changed code, below ${thresholds.tests}%`)
     }
     for (const file of critical) missing.push(`breaks no test notices in critical code: ${file.path} (${file.missed})`)
   }
@@ -189,7 +189,7 @@ function bar(repo, slug, command, skipMutation) {
 
   const checks = readJsonIf(join(out, 'checks.json'))
   const audit = readJsonIf(join(out, 'audit.json'))
-  const result = barFrom({ tests: { ok: tests.ok }, typecheck: checks?.typecheck, audit, mutation, critical: mutation === 'skipped' ? [] : mutation.critical })
+  const result = barFrom({ tests: { ok: tests.ok }, typecheck: checks?.typecheck, audit, mutation, critical: mutation === 'skipped' ? [] : mutation.critical, thresholds: loadThresholds(repo) })
   const commit = git(state.worktree, 'rev-parse', '--short', 'HEAD').stdout.trim()
   state.rounds.push({
     round: state.round,

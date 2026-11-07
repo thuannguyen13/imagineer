@@ -17,7 +17,7 @@ Input: $ARGUMENTS
 - **Roles are enforced.** `imagineer:architect` designs and reviews, `imagineer:qa` writes only tests, `imagineer:dev` writes only code. The plugin refuses writes outside each role.
 - **QA works from the design, not from the code.** QA's tests are written before Dev starts, and must fail before the feature exists.
 - **Work happens in a worktree** on its own branch. The main checkout is never changed, apart from Imagineer's own files under `.claude/`.
-- **Done means measured**: QA's tests pass, the typecheck passes, Fallow finds nothing new in the change, and the tests catch at least 80% of deliberate breaks in the changed code, with every break in code the user marked critical caught.
+- **Done means measured**: QA's tests pass, the typecheck passes, Fallow finds nothing new in the change, and the tests catch enough deliberate breaks in the changed code (the repository's thresholds: 80% unless the user set their own with Inspect's `settings.mjs thresholds`), with every break in code the user marked critical caught.
 - **Give every agent a name** when you spawn it (`<slug>-architect`, `<slug>-qa-r1`, `<slug>-dev-r1`), so the user can follow and message it. If the user's own instructions say how agents working in a worktree must be shown, follow them, and say so before spawning if that is not possible.
 - **Wait for every agent you spawn** before going on: never run one in the background. A run without a user ends when your turn does, and an agent left running is lost with it.
 - Never push, open a pull request or merge without the user's yes. Never merge.

@@ -21,6 +21,7 @@ import {
   MEASURED_LABEL,
   parseHead,
   progressBar,
+  whose,
   PENDING_LABEL,
   QUESTIONS_PATH,
   readDetails,
@@ -274,7 +275,7 @@ export const register: Register = on => {
         <Box flexDirection="row" flexWrap="wrap">
           <Text color="claude">{`${SPINNER[frame % SPINNER.length]} `}</Text>
           <Text weight="semibold">{progressTitle || runningTitle(summary.run).replace(/^◌ /, '')}</Text>
-          {progress && <Text dimColor>{'   by the thresholds Imagineer suggests'}</Text>}
+          {progress && <Text dimColor>{`   by the thresholds ${whose(progress)}`}</Text>}
         </Box>
         <Text dimColor>{summary.run.step || 'Working…'}</Text>
         {bars}
@@ -290,10 +291,10 @@ export const register: Register = on => {
           <Text color="warning">⟳ Your code has changed since. Run /imagineer:inspect for a current grade.</Text>
         )}
         {progress?.met ? (
-          <Text color="success">✓ Inspect finished: every threshold Imagineer suggests is met.</Text>
+          <Text color="success">{`✓ Inspect finished: every threshold ${whose(progress)} is met.`}</Text>
         ) : progress ? (
           <Box flexDirection="column" marginTop={1}>
-            <Text dimColor>{`${progressTitle} · by the thresholds Imagineer suggests`}</Text>
+            <Text dimColor>{`${progressTitle} · by the thresholds ${whose(progress)}`}</Text>
             {bars}
             <Text dimColor>Run /imagineer:inspect to continue.</Text>
           </Box>

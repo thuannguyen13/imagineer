@@ -97,3 +97,9 @@ test('the example question in the Architect\'s instructions passes Inspect\'s pl
   const example = JSON.parse(text.match(/```json\n([\s\S]+?)\n```/)[1])
   assert.equal(addQuestions(emptyLedger(), [example]).questions[0].point, example.point)
 })
+
+test("Build's done check uses the repository's thresholds", () => {
+  const base = { tests: { ok: true }, typecheck: { present: true, ok: true }, audit: { ok: true, verdict: 'pass' }, critical: [], mutation: { caught: 7, total: 10 } }
+  assert.match(barFrom(base).missing[0], /70% of breaks in the changed code, below 80%/)
+  assert.equal(barFrom({ ...base, thresholds: { tests: 65, critical: 80 } }).met, true)
+})

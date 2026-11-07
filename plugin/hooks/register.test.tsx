@@ -586,3 +586,15 @@ test('each area says its number as one plain phrase, with no tool names', async 
   expect(await ui.find({ type: 'Text', text: /breaks caught/ })).toBeUndefined()
   await ui.unmount()
 })
+
+test('thresholds the user set are called theirs, not Imagineer\'s', async ($, on) => {
+  const progress = [{ label: 'Tests catch breaks', done: 65, total: 65, met: true, text: '70% of 65%' }]
+  const results = { ...SAMPLE, run: { ...SAMPLE.run, status: 'waiting', bar: { met: false, missing: ['x'], progress, by: 'you' } } }
+  files(on, { [RESULTS]: JSON.stringify(results) })
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  await $.command.run(typed('imagineer:status'))
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /by the thresholds you set$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Imagineer suggests/ })).toBeUndefined()
+  await ui.unmount()
+})

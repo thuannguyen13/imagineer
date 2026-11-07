@@ -530,3 +530,18 @@ test('what the latest attack round did not reach is listed, never read as safe',
   const round1 = { 1: ledger.untested['1'] }
   assert.deepEqual(dataSafety({ attacks: [], untested: untestedNow({ untested: round1 }) }).items, ['Not attacked yet: two people editing one deal at once'])
 })
+
+test('test strength is graded against the thresholds in force, and says whose they are', () => {
+  const caught = n => ({ files: { 'a.ts': { mutants: [...Array.from({ length: n }, () => ({ status: 'Killed' })), ...Array.from({ length: 100 - n }, (_, i) => ({ id: String(i), status: 'Survived', location: { start: { line: i + 1 } } }))] } } })
+  const stryker = { ok: true, measured: 'default' }
+  // 70%: Weak by Imagineer's 80 (within 20 below), Strong by a user's 65, At risk by a user's 95.
+  const imagineer = testStrength({ stryker, mutation: caught(70) })
+  assert.equal(imagineer.state, 'weak')
+  assert.match(imagineer.summary, /Imagineer suggests at least 80%\./)
+  const lenient = testStrength({ stryker, mutation: caught(70), thresholds: { tests: 65, critical: 80, bySetting: true } })
+  assert.equal(lenient.state, 'strong')
+  assert.match(lenient.summary, /You set at least 65%\./)
+  assert.equal(testStrength({ stryker, mutation: caught(70), thresholds: { tests: 95, critical: 95, bySetting: true } }).state, 'failing')
+  const steps = finishProgress(() => ({ state: 'weak' }), 0, { stryker, mutation: caught(70), thresholds: { tests: 65, critical: 80, bySetting: true } })
+  assert.deepEqual([steps[0].done, steps[0].total, steps[0].text], [65, 65, '70% of 65%'])
+})

@@ -10,7 +10,7 @@
 import { existsSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { arg, keepOutOfGit, readJson, readJsonIf, writeJson } from './lib.mjs'
+import { arg, DEFAULT_THRESHOLDS, keepOutOfGit, loadThresholds, readJson, readJsonIf, writeJson } from './lib.mjs'
 import { loadAttacks, rounds, untestedNow } from './attack.mjs'
 import { CRITICAL_TOPICS, emptyLedger, findings, isCritical, isGapToFix, loadLedger, openQuestions, summary } from './questions.mjs'
 
@@ -23,6 +23,13 @@ const SCALE = 1
 const dimension = (id, name, group, state, measured, summary, items = []) => ({ id, name, group, state, measured, summary, items, stale: false, claimed: false })
 
 const percent = n => `${Math.round(n * 100)}%`
+
+/** The thresholds this grade uses: the user's for this repository, or Imagineer's suggestion. */
+const thresholdsOf = evidence => evidence.thresholds ?? { ...DEFAULT_THRESHOLDS, bySetting: false }
+/** Whose numbers they are, in the words the pane and report use. */
+export const whoseThresholds = t => (t.bySetting ? 'you set' : 'Imagineer suggests')
+/** Strong at or above the target, Weak within 20 points below it (Stryker's band width), At risk below. */
+const bandFor = target => n => (n >= target / 100 ? 'strong' : n >= (target - 20) / 100 ? 'weak' : 'failing')
 
 const lines = n => `${n} ${n === 1 ? 'line' : 'lines'}`
 
@@ -66,7 +73,9 @@ export function testStrength(evidence) {
       `${timeouts} of ${total} breaks timed out instead of being caught or missed, so this run cannot say whether the tests would notice. Measure again with fewer runs at once.`,
     )
   }
-  const band = n => (n >= 0.8 ? 'strong' : n >= 0.6 ? 'weak' : 'failing')
+  const t = thresholdsOf(evidence)
+  const band = bandFor(t.tests)
+  const criticalBand = bandFor(t.critical)
   // Code the user confirmed as critical (money, data, permissions) must meet the threshold
   // on its own, and every break no test noticed there must be explained.
   const critical = files.filter(f => f.total > 0 && isCritical(ledger, f.path))
@@ -78,22 +87,23 @@ export function testStrength(evidence) {
   )
   const order = ['strong', 'weak', 'failing']
   let state = band(score)
-  for (const f of critical) if (order.indexOf(band(f.score)) > order.indexOf(state)) state = band(f.score)
+  for (const f of critical) if (order.indexOf(criticalBand(f.score)) > order.indexOf(state)) state = criticalBand(f.score)
   if (state === 'strong' && unexplained.length) state = 'weak'
   const criticalNote = critical.length
     ? ` Critical code: ${critical.map(f => `${f.path} ${percent(f.score)}`).join(', ')}${unexplained.length ? `; ${lines(new Set(unexplained).size)} with breaks not yet explained` : ''}.`
     : ''
   const weakest = files
-    .filter(f => f.total > 0 && f.score < 0.6)
+    .filter(f => f.total > 0 && f.score < (t.tests - 20) / 100)
     .sort((a, b) => a.score - b.score || b.total - a.total)
     .map(f => `${f.path}: ${percent(f.score)} of breaks caught`)
   const skipped = evidence.detect?.tests?.needSetting ?? 0
   const skippedNote = skipped
     ? ` ${skipped} test ${skipped === 1 ? 'file' : 'files'} run only with a setting this copy did not have (a database, most often), so this may be lower than in CI.`
     : ''
+  const who = t.bySetting ? 'You set' : 'Imagineer suggests'
   const goal = critical.length
-    ? ' Imagineer suggests at least 80% overall, and every break in critical code caught or explained.'
-    : ' Imagineer suggests at least 80%.'
+    ? ` ${who} at least ${t.tests}% overall and ${t.critical}% in critical code, with every break there caught or explained.`
+    : ` ${who} at least ${t.tests}%.`
   const summary = `Tests catch ${percent(score)} of deliberate breaks (${caught} of ${total}).${goal}${criticalNote}${skippedNote}`
   return dimension('test-strength', name, 'trust', state, stryker.measured, summary, weakest)
 }
@@ -344,8 +354,8 @@ export function metricFor(d, evidence) {
 
 /** Inspect's finish thresholds: test strength meets its threshold, no open structure findings, and 2 attack rounds in a row found nothing new. */
 /**
- * What test strength still needs, with today's number beside the goal: the overall 80%, the
- * 80% in each critical file, and every break in critical code caught or explained.
+ * What test strength still needs, with today's number beside the goal: the overall threshold,
+ * the critical-code threshold in each critical file, and every break in critical code caught or explained.
  */
 export function testStrengthNeeds(evidence = {}) {
   const ledger = evidence.ledger ?? emptyLedger()
@@ -356,7 +366,8 @@ export function testStrengthNeeds(evidence = {}) {
   if (total === 0) return ['code to measure: no breaks were made']
   if (timeouts > 10 && timeouts / total > 0.2) return ['a test strength measurement that does not time out']
   const needs = []
-  if (score < 0.8) needs.push(`tests that catch at least 80% of deliberate breaks (now ${percent(score)})`)
+  const t = thresholdsOf(evidence)
+  if (score < t.tests / 100) needs.push(`tests that catch at least ${t.tests}% of deliberate breaks (now ${percent(score)})`)
   for (const f of files.filter(f => f.total > 0 && isCritical(ledger, f.path))) {
     const missed = (report.files[f.path].mutants ?? [])
       .filter(m => m.status === 'Survived' || m.status === 'NoCoverage')
@@ -373,12 +384,13 @@ export function stopBar(dimensions, attacks, evidence = {}) {
   // Each line says what Inspect still needs, in words a person reads in the grade pane.
   if (byId('test-strength')?.state !== 'strong') {
     const needs = testStrengthNeeds(evidence)
-    missing.push(...(needs.length ? needs : ['tests that catch at least 80% of deliberate breaks']))
+    missing.push(...(needs.length ? needs : [`tests that catch at least ${thresholdsOf(evidence).tests}% of deliberate breaks`]))
   }
   if (byId('structure')?.state !== 'strong') missing.push('you to review the code quality findings')
   const clean = rounds((attacks ?? []).filter(a => !a.void)).cleanInARow
   if (clean < 2) missing.push('two attack rounds in a row that find nothing new')
-  return { met: missing.length === 0, missing, progress: finishProgress(byId, clean, evidence) }
+  // Whose thresholds they are: the pane and report say "you set" or "Imagineer suggests".
+  return { met: missing.length === 0, missing, progress: finishProgress(byId, clean, evidence), by: thresholdsOf(evidence).bySetting ? 'you' : 'imagineer' }
 }
 
 const STRUCTURE_KINDS = ['unused-file', 'unused-export', 'complex']
@@ -392,12 +404,13 @@ export function finishProgress(byId, cleanInARow, evidence = {}) {
   const tests = (() => {
     const met = byId('test-strength')?.state === 'strong'
     const report = evidence.mutation
-    if (!evidence.stryker?.ok || !report) return { label: 'Tests catch breaks', done: 0, total: 80, met, text: 'not measured yet' }
+    const target = thresholdsOf(evidence).tests
+    if (!evidence.stryker?.ok || !report) return { label: 'Tests catch breaks', done: 0, total: target, met, text: 'not measured yet' }
     const { total, score } = mutationScore(report)
-    if (total === 0) return { label: 'Tests catch breaks', done: 0, total: 80, met, text: 'nothing measured' }
+    if (total === 0) return { label: 'Tests catch breaks', done: 0, total: target, met, text: 'nothing measured' }
     const caught = Math.round(score * 100)
     const critical = testStrengthNeeds(evidence).find(n => n.startsWith('every break in critical code'))
-    return { label: 'Tests catch breaks', done: Math.min(caught, 80), total: 80, met, text: `${caught}% of 80%${critical && caught >= 80 ? ', critical code not yet' : ''}` }
+    return { label: 'Tests catch breaks', done: Math.min(caught, target), total: target, met, text: `${caught}% of ${target}%${critical && caught >= target ? ', critical code not yet' : ''}` }
   })()
   const structureItems = (evidence.findings ?? []).filter(item => STRUCTURE_KINDS.includes(item.kind))
   const reviewed = structureItems.filter(item => item.key in ledger.dismissed).length
@@ -448,6 +461,7 @@ export function markPending(dimensions, evidence, status) {
 
 export function gradeRun(out, repo = null, status = 'done') {
   const evidence = {
+    thresholds: loadThresholds(repo),
     ledger: repo ? loadLedger(repo) : emptyLedger(),
     findings: findings(out),
     attacks: loadAttacks(out).attacks,
@@ -511,7 +525,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   // Kept out of git by a .gitignore inside Imagineer's folder; nothing in .git is written.
   keepOutOfGit(join(repo, '.claude/imagineer'))
   writeJson(join(repo, RESULTS), results)
-  console.log(`${grade.state}: ${grade.reason || 'every area meets the thresholds Imagineer suggests.'}`)
-  console.log(bar.met ? 'Finished, by the thresholds Imagineer suggests.' : `Not finished yet. By the thresholds Imagineer suggests, Inspect still needs: ${bar.missing.join('; ')}.`)
+  const who = whoseThresholds(evidence.thresholds)
+  console.log(`${grade.state}: ${grade.reason || `every area meets the thresholds ${who}.`}`)
+  console.log(bar.met ? `Finished, by the thresholds ${who}.` : `Not finished yet. By the thresholds ${who}, Inspect still needs: ${bar.missing.join('; ')}.`)
   for (const d of dimensions) console.log(`  ${d.state.padEnd(9)} ${d.name}: ${d.summary}`)
 }

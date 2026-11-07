@@ -149,3 +149,38 @@ export function keepOutOfGit(dir) {
   mkdirSync(dir, { recursive: true })
   writeFileSync(path, "# Imagineer's own files: kept out of git.\n*\n")
 }
+
+/**
+ * The test-strength thresholds: the share of planted bugs the tests must catch, overall and in
+ * critical code (money, data, permissions). Imagineer suggests 80 and 80 (Stryker's own "high"
+ * band; see docs/research/grading.md for what that number rests on, and what it does not). A user
+ * can set their own per repository; `bySetting` says whose numbers they are, for the wording.
+ */
+export const DEFAULT_THRESHOLDS = { tests: 80, critical: 80 }
+
+const settingsPath = repo => join(repo, '.claude/imagineer/settings.json')
+
+export function loadThresholds(repo) {
+  const saved = repo ? readJsonIf(settingsPath(repo))?.thresholds : null
+  if (!saved) return { ...DEFAULT_THRESHOLDS, bySetting: false }
+  return { tests: saved.tests ?? DEFAULT_THRESHOLDS.tests, critical: saved.critical ?? DEFAULT_THRESHOLDS.critical, bySetting: true }
+}
+
+/** Saves the user's own thresholds for this repository; `reset` goes back to Imagineer's suggestion. */
+export function saveThresholds(repo, { tests, critical, reset = false }) {
+  const path = settingsPath(repo)
+  const settings = readJsonIf(path) ?? {}
+  if (reset) {
+    delete settings.thresholds
+  } else {
+    const current = loadThresholds(repo)
+    const next = { tests: tests ?? current.tests, critical: critical ?? current.critical }
+    for (const [name, value] of Object.entries(next)) {
+      if (!Number.isInteger(value) || value < 1 || value > 100) throw new Error(`${name} is a whole percentage from 1 to 100, not ${value}.`)
+    }
+    settings.thresholds = next
+  }
+  keepOutOfGit(join(repo, '.claude/imagineer'))
+  writeJson(path, settings)
+  return loadThresholds(repo)
+}

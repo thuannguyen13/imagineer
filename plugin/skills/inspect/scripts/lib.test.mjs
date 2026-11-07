@@ -84,3 +84,19 @@ async function waitFor(check, ms = 5000) {
   }
   return check()
 }
+
+import { DEFAULT_THRESHOLDS, loadThresholds, saveThresholds } from './lib.mjs'
+
+test("thresholds are Imagineer's 80 and 80 until the user sets their own for a repository", t => {
+  const repo = mkdtempSync(join(tmpdir(), 'imagineer-thresholds-'))
+  t.after(() => rmSync(repo, { recursive: true, force: true }))
+  assert.deepEqual(DEFAULT_THRESHOLDS, { tests: 80, critical: 80 })
+  assert.deepEqual(loadThresholds(repo), { tests: 80, critical: 80, bySetting: false })
+  assert.deepEqual(saveThresholds(repo, { tests: 65 }), { tests: 65, critical: 80, bySetting: true })
+  assert.deepEqual(saveThresholds(repo, { critical: 90 }), { tests: 65, critical: 90, bySetting: true })
+  assert.throws(() => saveThresholds(repo, { tests: 0 }), /whole percentage from 1 to 100/)
+  assert.throws(() => saveThresholds(repo, { tests: 70.5 }), /whole percentage/)
+  // Kept out of git like everything else of Imagineer's.
+  assert.ok(existsSync(join(repo, '.claude/imagineer/.gitignore')))
+  assert.deepEqual(saveThresholds(repo, { reset: true }), { tests: 80, critical: 80, bySetting: false })
+})

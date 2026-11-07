@@ -41,7 +41,8 @@ export type Run = {
   /** When the run measured the code, as an ISO time; empty when unknown. */
   at: string
   /** Inspect's finish thresholds, when the run recorded them: met, or what is still missing. */
-  bar: { met: boolean; missing: string[]; progress: FinishStep[] } | null
+  /** `by`: whose thresholds they are, the user's own (`you`) or Imagineer's suggestion. */
+  bar: { met: boolean; missing: string[]; progress: FinishStep[]; by: 'you' | 'imagineer' } | null
 }
 
 /** An open question from the question ledger, for the pane. */

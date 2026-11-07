@@ -87,6 +87,7 @@ function toRun(raw: unknown): Run {
     bar: isObject(run.bar)
       ? {
           met: run.bar.met === true,
+          by: run.bar.by === 'you' ? 'you' : 'imagineer',
           missing: Array.isArray(run.bar.missing) ? run.bar.missing.filter((m): m is string => typeof m === 'string') : [],
           progress: Array.isArray(run.bar.progress)
             ? run.bar.progress.filter(isObject).map(p => ({
@@ -279,10 +280,13 @@ export function progressBar(done: number, total: number, width = 12): { filled: 
 }
 
 /** Whether Inspect is finished, and if not, what it still needs, in plain words. */
-export function finishLines(bar: { met: boolean; missing: string[] }): string[] {
-  if (bar.met) return ['✓ Finished, by the thresholds Imagineer suggests: tests catch enough breaks, nothing is left to review, and two attack rounds in a row found nothing new.']
+/** Whose thresholds they are, as the pane says it. */
+export const whose = (bar: { by?: 'you' | 'imagineer' }) => (bar.by === 'you' ? 'you set' : 'Imagineer suggests')
+
+export function finishLines(bar: { met: boolean; missing: string[]; by?: 'you' | 'imagineer' }): string[] {
+  if (bar.met) return [`✓ Finished, by the thresholds ${whose(bar)}: tests catch enough breaks, nothing is left to review, and two attack rounds in a row found nothing new.`]
   return [
-    'Not finished yet. By the thresholds Imagineer suggests, Inspect still needs:',
+    `Not finished yet. By the thresholds ${whose(bar)}, Inspect still needs:`,
     ...bar.missing.map(m => `  • ${m}`),
     'Run /imagineer:inspect to continue.',
   ]

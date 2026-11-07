@@ -104,3 +104,7 @@ Inspect's own method was run on the owner: blind questions about what Imagineer 
 - **Finish line:** 80% of planted bugs caught holds for every app, asked twice (once for a small personal tool). Thresholds set per repository are not wanted for now.
 - **Secrets:** nothing about a found secret in the pane, which may be on a shared screen. Security shows At risk, its evidence points to Inspect's report, and only the report says where and what kind, never the secret.
 - **File names:** visible but secondary, in a dim line for whoever helps the user. Matches the design.
+
+## 2026-11-07 — 80% stays, but it is the user's to change
+
+The owner found the 80% test-strength threshold lacked a good backing reason. Research found no standard: real projects range from about 12% to 95%, studies avoid fixed cutoffs, and practitioner convention is 60–70% as a general gate and about 80% for critical code (docs/research/grading.md, 2.1b). The owner kept 80% for all code and for critical code, to see how real projects measure against it before adjusting, and asked for it to be adjustable: per repository, in words or with `--tests` and `--critical`, kept in `.claude/imagineer/settings.json`, used by Inspect and Build, and named "the thresholds you set" wherever they show. This replaces the intention check's "80% for every app": asked again with the research in hand, the owner wanted it adjustable.

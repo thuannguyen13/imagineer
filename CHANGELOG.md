@@ -20,6 +20,7 @@ Questions asked blind.
 - Each attack round records the parts of the app it did not reach. Security and Data safety list them as "Not attacked yet" and count them as gaps, never as safe, and the next round aims at them first.
 - Questions raised by attacks are asked before the run ends, instead of waiting for the next run.
 - Inspect's instructions are a short core plus references read only when a step starts (questions, proofs, attacks, repos with no docs), so each run loads less and the steps cannot contradict each other.
+- **Set your own test-strength thresholds per project:** say "use 65% for tests", or run `/imagineer:inspect --tests 65 --critical 85`. Inspect and Build keep them for that project, the grade bands follow them, and the pane says "the thresholds you set". Without them, Imagineer suggests 80% and 80%, now with what that number rests on written down.
 - The grade's worst state is called **At risk** instead of Failing: something that matters is known to be wrong or unprotected. The results file still says `failing`, so older results read the same.
 - "Matches your intent" counts what the questions found: answers that matched what the app does, gaps you want fixed, and gaps you chose to keep. A gap you want fixed counts against it at once, as Failing when it is about data, money or permissions.
 - Gaps are asked first, and the report lists each one: what you said, what the app does today, and whether you want it fixed.
