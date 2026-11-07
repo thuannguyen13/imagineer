@@ -30,6 +30,8 @@ Questions asked blind.
 ### Fixed
 
 - **Your project's tests could run with your credentials.** Inspect and Build ran the project's install, tests, mutation testing, proofs and attacks with your whole environment, so a test could reach a real database or service with your keys. They now get only what tools need (paths, locale, proxies); the run records the names left out, never their values. Network access is not blocked.
+- **A stopped test-strength check could leave its workers running.** Stopping Inspect while mutation testing ran left Stryker's processes working in the background. They now run as one group that stops with Inspect.
+- An Inspect run that was stopped before it finished left its throwaway copy, installed packages and all, in the temp folder. The next run removes copies earlier runs left behind.
 - Imagineer no longer writes to your repository's `.git/info/exclude`. Its folders keep themselves out of git with a `.gitignore` inside them. An entry an earlier version added stays until you remove it.
 - In the Desktop app, VS Code and on mobile, the pane's area rows were one flat line each, without colours or columns, because those apps draw a button as its plain label.
 - The self-check said "done bar" about a Build stuck at its round limit; it now says "done thresholds".

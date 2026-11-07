@@ -57,3 +57,20 @@ test('nothing is reused across commits, across mutation scopes, from failed runs
   assert.doesNotMatch(measure('checks', '--fresh', '--out', now).stdout, /reused/)
   assert.match(measure('checks', '--out', now).stdout, /reused from run 4/)
 })
+
+import { removeLeftCopies } from './measure.mjs'
+
+test('a new run removes the throwaway copies earlier runs left behind, and nothing else', t => {
+  const make = runs(t)
+  const left = mkdtempSync(join(tmpdir(), 'imagineer-'))
+  const notOurs = mkdtempSync(join(tmpdir(), 'someone-else-'))
+  t.after(() => rmSync(notOurs, { recursive: true, force: true }))
+  const one = make('1', { key: 'K', at: 'a' })
+  writeFileSync(join(one, 'copy.json'), JSON.stringify({ path: left }))
+  const two = make('2', { key: 'K', at: 'b' })
+  writeFileSync(join(two, 'copy.json'), JSON.stringify({ path: notOurs }))
+  const now = make('3', { key: 'K', at: 'c' })
+  assert.deepEqual(removeLeftCopies(now), ['1'])
+  assert.equal(existsSync(left), false)
+  assert.equal(existsSync(notOurs), true)
+})

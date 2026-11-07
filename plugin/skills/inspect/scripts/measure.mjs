@@ -18,7 +18,7 @@ import { availableParallelism, tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { detect } from './detect.mjs'
-import { arg, PINNED, projectEnv, readJson, readJsonIf, run, tail, writeJson } from './lib.mjs'
+import { arg, PINNED, projectEnv, readJson, readJsonIf, run, runGroup, tail, writeJson } from './lib.mjs'
 
 const INSTALL = {
   npm: lock => (lock ? ['npm', 'ci', '--no-audit', '--no-fund'] : ['npm', 'install', '--no-audit', '--no-fund']),
@@ -78,7 +78,30 @@ function state(out) {
   return { copy, repoFacts: readJson(join(out, 'detect.json')) }
 }
 
+/**
+ * A run stopped before its cleanup leaves its throwaway copy behind, installed packages and all.
+ * A new run removes those its earlier runs left, and returns their names.
+ */
+export function removeLeftCopies(out) {
+  const self = resolve(out)
+  const runs = dirname(self)
+  if (!existsSync(runs)) return []
+  const removed = []
+  for (const name of readdirSync(runs)) {
+    const dir = join(runs, name)
+    if (dir === self) continue
+    const copy = readJsonIf(join(dir, 'copy.json'))
+    if (copy?.path && basename(copy.path).startsWith('imagineer-') && existsSync(copy.path)) {
+      rmSync(copy.path, { recursive: true, force: true })
+      removed.push(name)
+    }
+  }
+  return removed
+}
+
 function prepare(repo, out) {
+  const left = removeLeftCopies(out)
+  if (left.length) console.log(`Removed the throwaway ${left.length === 1 ? 'copy' : 'copies'} that run ${left.join(', ')} left behind.`)
   const facts = detect(repo)
   writeJson(join(out, 'detect.json'), facts)
 
@@ -151,7 +174,7 @@ function fallow(out) {
   console.log(healthJson ? `Fallow ${healthJson.version}: health ${healthJson.health_score?.score} ${healthJson.health_score?.grade}.` : 'Fallow did not run.')
 }
 
-function stryker(out, isEstimate) {
+async function stryker(out, isEstimate) {
   const { copy, repoFacts } = state(out)
   // Each mutant runs the whole test suite, which usually uses every core itself: running
   // many at once slows each past its time limit, and breaks then time out instead of being
@@ -205,7 +228,8 @@ function stryker(out, isEstimate) {
   // Tests are never mutated, whatever the scope names.
   if (mutate) argv.push('--mutate', [mutate, '!**/*.test.*', '!**/*.spec.*', '!**/__tests__/**', '!**/test/**', '!**/tests/**'].join(','))
   if (isEstimate) argv.push('--dryRunOnly')
-  const result = run(argv, { cwd: copy.path, project: true, timeoutMs: isEstimate ? 15 * 60_000 : 6 * 60 * 60_000 })
+  // Its own process group: stopping this script stops every Stryker worker with it.
+  const result = await runGroup(argv, { cwd: copy.path, project: true, timeoutMs: isEstimate ? 15 * 60_000 : 6 * 60 * 60_000 })
   const log = result.stdout + '\n' + result.stderr
 
   if (isEstimate) {
@@ -310,7 +334,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
         writeJson(join(out, 'stryker-estimate.json'), { ok: true, reused: from, minutes: 0 })
         console.log(reusedLine('Test strength', from))
       } else if (from) console.log(reusedLine('Test strength', from))
-      else stryker(out, process.argv.includes('--estimate'))
+      else await stryker(out, process.argv.includes('--estimate'))
     }
     else if (step === 'security') security(out)
     else if (step === 'audit') audit(out, arg('base') ?? 'main')

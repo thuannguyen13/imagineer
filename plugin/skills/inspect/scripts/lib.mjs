@@ -1,7 +1,7 @@
 // Shared helpers for Inspect's scripts. Node built-ins only, so the scripts
 // run in any repository without installing anything.
 
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from 'node:fs'
 import { join, dirname, relative } from 'node:path'
 
@@ -90,6 +90,53 @@ export function listFiles(root, { skip = ['node_modules', '.git', 'dist', 'build
 export const arg = (name, fallback = null) => {
   const index = process.argv.indexOf(`--${name}`)
   return index === -1 ? fallback : process.argv[index + 1]
+}
+
+const KEEP_OUTPUT = 4 * 1024 * 1024
+
+/**
+ * Like run, for a long command that starts many processes of its own (mutation testing). It runs
+ * in a process group of its own, and when this script is stopped (Ctrl-C, a kill, a closed
+ * terminal) or times out, the whole group is stopped with it, so no worker is left running.
+ * Resolves the same shape as run; keeps the last few megabytes of output.
+ */
+export function runGroup(argv, { cwd, timeoutMs = 10 * 60_000, env, project = false } = {}) {
+  const started = Date.now()
+  const { NODE_TEST_CONTEXT, ...inherited } = process.env
+  const base = project ? projectEnv().env : { ...inherited, CI: '1' }
+  return new Promise(resolve => {
+    const child = spawn(argv[0], argv.slice(1), { cwd, env: { ...base, ...env }, detached: true })
+    let stdout = ''
+    let stderr = ''
+    let timedOut = false
+    let error = null
+    const keep = (text, chunk) => (text + chunk).slice(-KEEP_OUTPUT)
+    child.stdout.setEncoding('utf8').on('data', chunk => (stdout = keep(stdout, chunk)))
+    child.stderr.setEncoding('utf8').on('data', chunk => (stderr = keep(stderr, chunk)))
+    const stop = () => {
+      try {
+        process.kill(-child.pid, 'SIGTERM')
+      } catch {}
+    }
+    const onSignal = signal => {
+      stop()
+      process.exit(signal === 'SIGINT' ? 130 : 143)
+    }
+    const signals = ['SIGINT', 'SIGTERM', 'SIGHUP']
+    for (const signal of signals) process.on(signal, onSignal)
+    process.on('exit', stop)
+    const timer = setTimeout(() => {
+      timedOut = true
+      stop()
+    }, timeoutMs)
+    child.on('error', e => (error = e.message))
+    child.on('close', code => {
+      clearTimeout(timer)
+      for (const signal of signals) process.off(signal, onSignal)
+      process.off('exit', stop)
+      resolve({ ok: code === 0 && !timedOut && !error, code, timedOut, error, stdout, stderr, seconds: Math.round((Date.now() - started) / 100) / 10 })
+    })
+  })
 }
 
 /**

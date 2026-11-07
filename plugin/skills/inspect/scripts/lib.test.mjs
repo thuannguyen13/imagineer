@@ -55,3 +55,32 @@ test("Imagineer's folders are kept out of git from inside, never through .git", 
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+import { spawn as spawnChild, spawnSync as spawnSyncChild } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
+import { dirname as dirOf } from 'node:path'
+
+test('stopping a script stops the long command it started, workers and all', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'imagineer-group-'))
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  // A sleep no other process runs, so the count is this test's workers only.
+  const seconds = `60.${process.pid % 1000}${Date.now() % 1000}`
+  const lib = join(dirOf(fileURLToPath(import.meta.url)), 'lib.mjs')
+  // A stand-in for Stryker: a parent that starts two workers, all sleeping.
+  writeFileSync(join(dir, 'script.mjs'), `import { runGroup } from ${JSON.stringify(lib)}\nawait runGroup(['sh', '-c', 'sleep ${seconds} & sleep ${seconds} & wait'])\n`)
+  const script = spawnChild('node', [join(dir, 'script.mjs')], { stdio: 'ignore' })
+  const count = () => Number(spawnSyncChild('sh', ['-c', `ps -eo command | grep -c '[s]leep ${seconds}' || true`], { encoding: 'utf8' }).stdout.trim())
+  const before = await waitFor(() => count() >= 2)
+  assert.ok(before, 'the workers started')
+  script.kill('SIGTERM') // only the script, as a kill of one process does
+  assert.ok(await waitFor(() => count() === 0), 'no worker is left running')
+})
+
+async function waitFor(check, ms = 5000) {
+  const end = Date.now() + ms
+  while (Date.now() < end) {
+    if (check()) return true
+    await new Promise(r => setTimeout(r, 100))
+  }
+  return check()
+}
