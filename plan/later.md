@@ -38,3 +38,21 @@ Inspect would start a disposable database (Postgres in Docker, or PGlite where i
 **Trigger:** the owner, or a user, finds the thresholds Imagineer suggests (80% of breaks caught, every break in critical code explained, two clean attack rounds) wrong for a project: too strict for a prototype, too loose for payments.
 
 Inspect would ask once how strict the project should be (prototype, standard, critical, or their own numbers), keep it with the repository, and judge against it, saying "your thresholds" instead of "the thresholds Imagineer suggests".
+
+## Going public
+
+**Trigger:** the owner decides Imagineer is ready for people outside the repository, such as a team without GitHub accounts. Decided 2026-11-07: stay private until then.
+
+Installing from a marketplace with git auto-update, without a GitHub account, needs a public repository. The plan:
+
+- **A separate public repository, `imagineer-plugin`,** holding only what gets installed: the plugin and its marketplace file. Plans, research, design docs and the bench app stay private in `imagineer`.
+- **Publishing as part of each release:** a script copies the released plugin there. Users turn on auto-update once (`/plugin` → Marketplaces → Enable auto-update) and get each release by its `version`.
+- **Install in one line:** `/plugin install imagineer --marketplace thuannguyen13/imagineer-plugin` (Claude Code 2.1.275 or later).
+- **Feedback** goes to that public repository's issues, from anyone with a GitHub account; Save as file for the rest. The triage loop watches it.
+
+**Before it goes public:**
+
+- Imagineer has been run end to end on a few real projects by people other than the owner, and the grade, the questions and the pane hold up.
+- A license is chosen (the plugin has none; see the 2026-11-05 decision).
+- Everything in `plugin/` is read for what should not be public: keys, internal URLs, names or data from the owner's projects, the sales portal included. A secret scan of the plugin's files and of what will be published.
+- The README and an install guide describe the public install, and the feedback link points at the public repository.
