@@ -200,7 +200,7 @@ Inspect is finished when all of these hold. They are Imagineer's suggestion, not
 
 Each step is its own release, measured on the bench app before and after, and kept only if it finds at least as much at no more cost.
 
-1. **Findings: one list, one shape, a status each** ([Findings](#findings-planned)). Every later step adds findings, so they share one place from the start.
+1. **Findings: one list, one shape, a status each** ([Findings](#findings-planned-approved-2026-11-07)). Every later step adds findings, so they share one place from the start.
 2. **Secret scanning.** The biggest risk with no cover today, and the tools exist.
 3. **Intent from more than one angle, and the no-docs scaffold.** What sets Imagineer apart from a scanner: it finds out what the user wants, not only what the code does.
 4. **The readability review agent, and property-based tests in proofs.**
@@ -308,7 +308,7 @@ No headline number or letter. Numbers are one click down, for the owner.
 
 - Any trust dimension At risk makes the overall At risk.
 - Any trust dimension Not checked makes the overall "Not proven yet"; it cannot be Strong.
-- Structure and Foundations can pull the overall down to Weak, never to At risk.
+- Code quality and Foundations can pull the overall down to Weak, never to At risk.
 
 **Evidence rules.**
 
@@ -320,9 +320,9 @@ No headline number or letter. Numbers are one click down, for the owner.
 
 **Critical code.** For code the user confirms as critical (money, data, permissions), every surviving mutant must be killed by a test or explained in a recorded answer. Elsewhere the threshold is the Stryker percentage in the finish thresholds.
 
-**Bench app today: ✕ At risk.** Test strength ✕ (30.5%), Data safety ✕ (prod/dev split untested, restore only claimed), Security ! , Intent ?, Structure ! (Fallow 81).
+**Bench app today: ✕ At risk.** Test strength ✕ (30.5%), Data safety ✕ (prod/dev split untested, restore only claimed), Security ! , Intent ?, Code quality ! (Fallow 81).
 
-### Findings (planned)
+### Findings (planned; approved 2026-11-07)
 
 Today each area carries a summary sentence and a few loose lines of evidence, written differently by each part of Inspect. Findings replace those lines with **one list of everything Inspect found**, each finding in one shape with a status, so the pane, the report, Build and the self-check all read the same thing, and nothing found is lost between them.
 
@@ -370,9 +370,11 @@ Suspected, measured and confirmed are **open**; proven safe and decided are **cl
 
 **Where they live.** `grade.mjs` writes them on every regrade into `results.json` as a new optional `findings` list (results format 1 stays readable), and keeps their history in `.claude/imagineer/findings.json` beside the question ledger, so ids, first and last seen, and gone findings last across runs. Each area keeps its state and number; its summary is written from its findings.
 
+**Grouping.** By behaviour once a question is about a finding (its `about` keys), and by file until then, so planted bugs never arrive as one line each.
+
 **Who reads them.**
 
-- **The pane:** each area's row says how many open findings it has ("3 findings"); opening it lists them, most severe first, each with its status word (✕ Confirmed, ! Measured, ? Suspected) and title, and a count of the closed ones.
+- **The pane:** each area's row says how many open findings it has ("3 findings"); opening it lists the open ones, most severe first, each with its status word (✕ Confirmed, ! Measured, ? Suspected) and title, and counts the closed ones ("and 4 closed") rather than listing them.
 - **The report:** confirmed problems first, then measured, then suspected, then what needs a decision, each with its impact and evidence; then what was not checked.
 - **Build:** "report, then offer Build" offers to fix the open high and medium findings the user picks.
 - **The self-check:** a finding closed as proven that an attack later breaks is the grade contradiction it already looks for.
@@ -488,5 +490,3 @@ The mod needs Claude Code 2.1.287 or later. It checks the running version and, o
 - How existing parts fold in. Proposed: forge's run folder, state file, finding IDs and reviewer hook into Build; ground's checklist and the Inspector idea into Inspect; guard's rules into Dev's practices. The old skills and agents were removed in 0.2.0; their text stays at tag `v0.1.0` for these phases to draw on.
 - When Build brings review agents back, a mod `tool.call` hook could replace the Python settings hook forge used up to 0.1.0 (`forge-reviewer-guard.py`, run on every Bash call), and give a destructive-command guard proceed and cancel buttons. A mod loads in every session once the plugin is installed, so an opt-in guard needs its own switch.
 - Re-plan `plan/now.md` around these two commands; the bench stays the way each command is proven.
-- **Findings in the pane: closed ones too?** Proposed: open findings listed, closed ones counted ("and 4 closed"), so the pane shows what is left without hiding the progress.
-- **Findings: how fine to group.** Proposed: by behaviour once a question is about it, and by file until then, so planted bugs never arrive as one line each.

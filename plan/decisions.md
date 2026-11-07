@@ -108,3 +108,7 @@ Inspect's own method was run on the owner: blind questions about what Imagineer 
 ## 2026-11-07 — 80% stays, but it is the user's to change
 
 The owner found the 80% test-strength threshold lacked a good backing reason. Research found no standard: real projects range from about 12% to 95%, studies avoid fixed cutoffs, and practitioner convention is 60–70% as a general gate and about 80% for critical code (docs/research/grading.md, 2.1b). The owner kept 80% for all code and for critical code, to see how real projects measure against it before adjusting, and asked for it to be adjustable: per repository, in words or with `--tests` and `--critical`, kept in `.claude/imagineer/settings.json`, used by Inspect and Build, and named "the thresholds you set" wherever they show. This replaces the intention check's "80% for every app": asked again with the research in hand, the owner wanted it adjustable.
+
+## 2026-11-07 — Findings approved
+
+The owner approved the Findings design as proposed: one list of everything Inspect found, each with a status (suspected, measured, confirmed, proven safe, decided, not checked) and a severity, set only by `grade.mjs`. The pane lists open findings and counts closed ones; findings group by behaviour once a question is about them, by file until then. Findings come first on the roadmap, ahead of secret scanning, so every later check adds to one list. The remaining mentions of the Structure area are now Code quality.

@@ -317,7 +317,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
     if (!out) throw new Error('--out <run folder> is required')
     if (step === 'prepare') prepare(resolve(arg('repo') ?? '.'), out)
     else if (['checks', 'fallow', 'security'].includes(step) && reuse(out, step, dir => step !== 'fallow' || readJsonIf(join(dir, 'fallow.json'))?.ok === true)) {
-      console.log(reusedLine(step === 'checks' ? 'Checks' : step === 'fallow' ? 'Structure' : 'Security scan', readJson(join(out, 'reused.json'))[step]))
+      console.log(reusedLine(step === 'checks' ? 'Checks' : step === 'fallow' ? 'Code quality' : 'Security scan', readJson(join(out, 'reused.json'))[step]))
     } else if (step === 'checks') checks(out)
     else if (step === 'fallow') fallow(out)
     else if (step === 'stryker' && arg('decline')) {
