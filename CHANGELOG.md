@@ -2,6 +2,12 @@
 
 Imagineer's releases, newest first. Below 1.0, the middle number goes up only when how you use Imagineer changes, or a command is added; those changes are listed first under **Changes you need to know**. Everything else is a patch (`0.2.1`). See [docs/proposals/inspect-and-build.md](docs/proposals/inspect-and-build.md#versioning).
 
+## 0.3.1 — unreleased
+
+### Fixed
+
+- The self-check blamed Imagineer when you chose to skip the test strength check ("Stryker did not run"). A check you skipped, or one with nothing to run, is no longer flagged. When the check really fails, the flag now says why, for example "The test strength check failed in Inspect run 3: Could not find a test runner".
+
 ## 0.3.0 — 2026-11-07
 
 Questions asked blind, a grade pane that fills in while Inspect runs, and a safer, leaner Inspect. Includes what was planned as 0.2.1, which was not released on its own.
