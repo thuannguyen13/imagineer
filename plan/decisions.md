@@ -83,3 +83,32 @@ The owner asked whether Imagineer should list findings without judging them agai
 ## 2026-11-06 — Slower versions, and 0.2.0 as the baseline
 
 The owner found the version moved too fast: 0.2.0 to 0.10.0 in two days, because every new check or option raised the middle number and every merged pull request was released on its own. Since only the owner uses Imagineer, the owner chose to fold everything since 0.1.0 into one baseline, 0.2.0: the GitHub releases and tags v0.2.0 to v0.8.0 were deleted (the commits stay), the changelog has one 0.2.0 entry, and v0.2.0 is tagged again on the merge that made it. v0.1.0 stays, since the bench compares against it and it is how the earlier skills are pinned. From now on the middle number goes up only for something users must know about (a change to how Imagineer is used, or a new command); everything else is a patch. Pull requests add to the next untagged version, and the owner releases a batch when it is ready.
+
+## 2026-11-06 — Questions asked blind
+
+The owner found the question format led the user: showing "You'd expect" (Inspect's guess) and "Today" (the code) before the answer invites agreement, and leaves a non-engineer to spot the difference between two similar sentences. An empty box asking for their expectation first was weighed and set aside: typing an expectation from scratch is hard without technical knowledge, and vague answers cannot be proven by a test. Chosen: predict, then reveal. A check describes a situation and offers possible outcomes, one of them what the app does today, unmarked and in an order that does not give it away. A match is confirmed in one step; a difference becomes a gap, and only then is today's behaviour shown, with "Fix it" or "Keep it as it is". The big picture and design decisions, where there is nothing to compare with, stay choices with a recommended suggestion. Released as 0.3.0, since the question format and how answers are recorded change.
+
+## 2026-11-06 — What Inspect checks, per area
+
+The owner restated Inspect's goal: keep trying to break the system and turn what it finds into a grade that shows where the codebase needs to improve, for people who dream up software with little technical knowledge. The design doc's "What Inspect checks" section now says, per area, what Inspect does today and what is planned, with a roadmap: secret scanning; intent asked from more than one angle and a scaffold for repos with no docs; a readability review agent and property-based tests in proofs; then data safety and foundations additions. Three choices settled:
+
+- **Secret scanning uses gitleaks**, which also searches the git history, where a deleted key still leaks. No weaker fallback: a pinned release is downloaded into Imagineer's tools folder (outside the repo, checksum checked, as Stryker is installed), and if that fails the scan shows as not checked with the reason.
+- **Structure is renamed Code quality**, since readability becomes a main focus. The area's id stays `structure`, so earlier results still load.
+- **A second angle only for answers about data, money and permissions**, where a wrong guess costs most; other answers keep one question, so the user is not asked everything twice.
+
+## 2026-11-06 — The owner's intention check
+
+Inspect's own method was run on the owner: blind questions about what Imagineer should do, then each again from a second angle. Settled:
+
+- **Fixing:** Inspect reports, then offers to start Build for the holes the user picks; Build fixes them on a branch with a pull request. The owner's first two answers disagreed (fix on a branch; report only), and asking once more with both side by side gave this third answer. That disagreement is the case the second angle exists for.
+- **Finish line:** 80% of planted bugs caught holds for every app, asked twice (once for a small personal tool). Thresholds set per repository are not wanted for now.
+- **Secrets:** nothing about a found secret in the pane, which may be on a shared screen. Security shows At risk, its evidence points to Inspect's report, and only the report says where and what kind, never the secret.
+- **File names:** visible but secondary, in a dim line for whoever helps the user. Matches the design.
+
+## 2026-11-07 — 80% stays, but it is the user's to change
+
+The owner found the 80% test-strength threshold lacked a good backing reason. Research found no standard: real projects range from about 12% to 95%, studies avoid fixed cutoffs, and practitioner convention is 60–70% as a general gate and about 80% for critical code (docs/research/grading.md, 2.1b). The owner kept 80% for all code and for critical code, to see how real projects measure against it before adjusting, and asked for it to be adjustable: per repository, in words or with `--tests` and `--critical`, kept in `.claude/imagineer/settings.json`, used by Inspect and Build, and named "the thresholds you set" wherever they show. This replaces the intention check's "80% for every app": asked again with the research in hand, the owner wanted it adjustable.
+
+## 2026-11-07 — Findings approved
+
+The owner approved the Findings design as proposed: one list of everything Inspect found, each with a status (suspected, measured, confirmed, proven safe, decided, not checked) and a severity, set only by `grade.mjs`. The pane lists open findings and counts closed ones; findings group by behaviour once a question is about them, by file until then. Findings come first on the roadmap, ahead of secret scanning, so every later check adds to one list. The remaining mentions of the Structure area are now Code quality.

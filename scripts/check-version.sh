@@ -21,6 +21,13 @@ if [ -z "$changed" ]; then
   exit 0
 fi
 
+# The pane shows the version in its title from plugin/hooks/version.ts; it must match plugin.json.
+pane=$(sed -n "s/^export const VERSION = '\\(.*\\)'$/\\1/p" plugin/hooks/version.ts)
+if [ "$pane" != "$(version_at HEAD)" ]; then
+  echo "plugin/hooks/version.ts says $pane but plugin.json says $(version_at HEAD). Make them match."
+  exit 1
+fi
+
 old=$(version_at "$base")
 new=$(version_at HEAD)
 

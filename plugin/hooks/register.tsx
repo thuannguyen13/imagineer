@@ -8,6 +8,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Results, Summary, Tab } from '../types'
+import { VERSION } from './version'
 import {
   dialogIds,
   FLAGS_PATH,
@@ -19,15 +20,17 @@ import {
   labelFor,
   MEASURED_LABEL,
   parseHead,
+  progressBar,
+  whose,
   PENDING_LABEL,
   QUESTIONS_PATH,
   readDetails,
   readFlags,
   questionLine,
+  readAnswered,
   readOpenQuestions,
   readResults,
   RESULTS_PATH,
-  rowLayout,
   runningTitle,
   whenTested,
   STATE_LABEL,
@@ -36,19 +39,26 @@ import {
 } from './results'
 
 const PANE = 'imagineer'
-const TITLE = 'Imagineer'
+const TITLE = `Imagineer ${VERSION}`
 const POLL_MS = 3000
 
 // Change the tag when Summary's fields change: a value an earlier version
 // stored is then read as "no results" until the file is read again.
 const summaryAtom = atom({ plugin: 'imagineer', key: 'summary' } as const, { kind: 'none' } as Summary, {
-  shape: 'summary-5',
+  shape: 'summary-7',
 })
 
-// Shaped, so a tab an earlier version stored (overview, evidence) reads as the grade.
-const tabAtom = atom({ plugin: 'imagineer', key: 'tab' } as const, 'grade' as Tab, { shape: 'tab-2' })
+// Two tabs, each with its own job. Overview: how the project is doing. Questions: what the user
+// told Imagineer, and what it still needs from them. Shaped, so a tab an earlier version stored reads as Overview.
+const tabAtom = atom({ plugin: 'imagineer', key: 'tab' } as const, 'overview' as Tab, { shape: 'tab-3' })
 // The areas whose evidence is open, by id; all closed at first.
 const openAtom = atom({ plugin: 'imagineer', key: 'open' } as const, [] as string[])
+// The spinner's frame while a run is under way; a timer advances it only then.
+const frameAtom = atom({ plugin: 'imagineer', key: 'frame' } as const, 0)
+const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+const SPIN_MS = 250
+let stopSpinning: (() => void) | null = null
+
 // Set when /imagineer:inspect starts, so the pane has something to say before the first results arrive.
 const startingAtom = atom({ plugin: 'imagineer', key: 'starting' } as const, false)
 
@@ -106,7 +116,10 @@ async function refresh($: EngineInterface): Promise<Summary> {
     summary = {
       ...lastBase,
       isStale: head !== null && !isSameCommit(head, lastBase.run.commit),
-      openQuestions: readOpenQuestions(await readIf($, QUESTIONS_PATH)),
+      ...(await (async () => {
+        const ledger = await readIf($, QUESTIONS_PATH)
+        return { openQuestions: readOpenQuestions(ledger), answered: readAnswered(ledger) }
+      })()),
       flags: readFlags(await readIf($, FLAGS_PATH)),
     }
   }
@@ -117,7 +130,21 @@ async function refresh($: EngineInterface): Promise<Summary> {
     lastShown = shown
     await update($, summaryAtom, () => summary)
   }
+  spin($, summary.kind === 'results' && summary.run.status === 'running')
   return summary
+}
+
+/** Runs the spinner's timer while a run is under way, and stops it once the run stops. */
+function spin($: EngineInterface, isRunning: boolean): void {
+  if (isRunning && !stopSpinning) {
+    const timer = $.clock.every(SPIN_MS, () => {
+      update($, frameAtom, n => (n + 1) % SPINNER.length).catch(() => undefined)
+    })
+    stopSpinning = () => timer.cancel()
+  } else if (!isRunning && stopSpinning) {
+    stopSpinning()
+    stopSpinning = null
+  }
 }
 
 /** Polls the results file while this repo uses Imagineer. Started once. */
@@ -140,6 +167,8 @@ export const register: Register = on => {
   on('session.end', async ($, e, next) => {
     stopWatching?.()
     stopWatching = null
+    stopSpinning?.()
+    stopSpinning = null
     return next(e)
   })
 
@@ -185,13 +214,10 @@ export const register: Register = on => {
 
     const tab = await read($, tabAtom)
     const overall = STATE_LABEL[summary.overall.state]
-    const layout = rowLayout(e.props.bodyColumns)
-    // The numbers line up in their own column, right-aligned, as wide as the widest.
-    const valueWidth = Math.max(0, ...summary.dimensions.map(d => (d.metric && d.metric.value !== '—' ? d.metric.value.length : 0)))
     const waiting = summary.questions.waiting
     const opened = await read($, openAtom)
     const tabs: { id: Tab; label: string }[] = [
-      { id: 'grade', label: 'Grade' },
+      { id: 'overview', label: 'Overview' },
       { id: 'questions', label: waiting ? `Questions (${waiting})` : 'Questions' },
     ]
 
@@ -199,63 +225,115 @@ export const register: Register = on => {
     // While a run is under way: that it is running, and what it is doing now.
     const tested = whenTested(summary.run.at)
     const isRunning = summary.run.status === 'running'
+
+    // One layout for every surface. Each area is one row of columns sized in character cells, which
+    // Desktop measures with its code font, so they line up there as in the terminal: icon, name, state,
+    // the number and what it counts. The chevron and the name are one button, the widest part of the
+    // row to press; the rest cannot be, as Desktop, VS Code and mobile draw a button as its plain label
+    // alone, without the columns or colours. So the coloured icon sits with the state.
+    const columns = e.props.bodyColumns
+    const nameWidth = Math.max(12, Math.min(26, columns - 2 - 14 - 16))
+    const toggleArea = (id: string) => () =>
+      update($, openAtom, ids => (ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]))
+
+    // The header is one box that always holds where things stand, moving from the process to the
+    // result. While Inspect runs: a spinner, what it is doing, and each threshold Imagineer suggests
+    // as a bar (no verdict yet: the grade is partial). Once it stops: the verdict and the commit lead,
+    // with Inspect's progress smaller beneath them while thresholds are left, and one line once all
+    // are met. The verdict and Inspect's progress are independent: Inspect can be done while the
+    // project still fails.
+    const frame = await read($, frameAtom)
+    const bar = summary.run.bar
+    const progress = bar && bar.progress.length > 0 ? bar : null
+    const doneCount = progress ? progress.progress.filter(p => p.met).length : 0
+    const bars = progress?.progress.map(step => {
+      const cells = progressBar(step.done, step.total)
+      return (
+        <Box flexDirection="row">
+          <Box width={2} flexShrink={0}>
+            <Text color="success">{step.met ? '✓' : ' '}</Text>
+          </Box>
+          <Box width={22} flexShrink={0}>
+            <Text wrap="truncate-end">{step.label}</Text>
+          </Box>
+          <Box width={15} flexShrink={0}>
+            <Text>
+              <Text color={step.met ? 'success' : 'warning'}>{cells.filled}</Text>
+              <Text dimColor>{cells.empty}</Text>
+            </Text>
+          </Box>
+          <Text dimColor wrap="truncate-end">
+            {step.text}
+          </Text>
+        </Box>
+      )
+    })
+    const progressTitle = progress ? `Inspect's progress · ${doneCount} of ${progress.progress.length} done` : ''
+
     const header = isRunning ? (
-      <Box flexDirection="column">
-        <Text weight="semibold">{runningTitle(summary.run)}</Text>
+      <Box flexDirection="column" borderStyle="round" borderColor="claude" paddingX={1}>
+        <Box flexDirection="row" flexWrap="wrap">
+          <Text color="claude">{`${SPINNER[frame % SPINNER.length]} `}</Text>
+          <Text weight="semibold">{progressTitle || runningTitle(summary.run).replace(/^◌ /, '')}</Text>
+          {progress && <Text dimColor>{`   by the thresholds ${whose(progress)}`}</Text>}
+        </Box>
         <Text dimColor>{summary.run.step || 'Working…'}</Text>
+        {bars}
       </Box>
     ) : (
-      <Box flexDirection="column">
+      <Box flexDirection="column" borderStyle="round" borderColor="inactive" borderDimColor paddingX={1}>
         <Text color={overall.color} weight="semibold">
           {overall.icon} {overall.word}
         </Text>
         <Text dimColor>{[summary.run.commit, tested ? `tested ${tested}` : ''].filter(Boolean).join(' · ')}</Text>
+        {/* Out of date: said once, here, not on every area. */}
+        {summary.isStale && (
+          <Text color="warning">⟳ Your code has changed since. Run /imagineer:inspect for a current grade.</Text>
+        )}
+        {progress?.met ? (
+          <Text color="success">{`✓ Inspect finished: every threshold ${whose(progress)} is met.`}</Text>
+        ) : progress ? (
+          <Box flexDirection="column" marginTop={1}>
+            <Text dimColor>{`${progressTitle} · by the thresholds ${whose(progress)}`}</Text>
+            {bars}
+            <Text dimColor>Run /imagineer:inspect to continue.</Text>
+          </Box>
+        ) : bar ? (
+          <Box flexDirection="column" marginTop={1}>
+            {finishLines(bar).map(line => (
+              <Text dimColor={!line.startsWith('✓')} color={line.startsWith('✓') ? 'success' : undefined}>
+                {line}
+              </Text>
+            ))}
+          </Box>
+        ) : null}
       </Box>
     )
 
-    // One row per area, a button that opens its evidence underneath. Laid out for the pane's
-    // width: icon, name, state and the area's number, with what it counts when there is room;
-    // two lines when the pane is narrow. A row's children are text only, as a button takes.
-    const row = (dimension: Results['dimensions'][number]) => {
+    const areaRow = (dimension: Results['dimensions'][number]) => {
       const label = labelFor(dimension)
       const isOpen = opened.includes(dimension.id)
-      const arrow = isOpen ? '▾ ' : '▸ '
-      const stateText = `${label.word}${!dimension.isPending && (dimension.isStale || summary.isStale) ? ' ⟳' : ''}`
-      const metric = dimension.metric && dimension.metric.value !== '—' ? dimension.metric : null
-      const toggle = () => update($, openAtom, ids => (ids.includes(dimension.id) ? ids.filter(id => id !== dimension.id) : [...ids, dimension.id]))
-      const plain = `${arrow}${label.icon} ${dimension.name} ${stateText}${metric ? ` ${metric.value} ${metric.label}` : ''}`
-
-      const button =
-        layout.kind === 'narrow' ? (
-          <Button key={`row-${dimension.id}`} label={plain} plain onPress={toggle}>
-            <Text dimColor>{arrow}</Text>
-            <Text color={label.color}>{label.icon}</Text>
-            {` ${dimension.name}`}
-          </Button>
-        ) : (
-          <Button key={`row-${dimension.id}`} label={plain} plain onPress={toggle}>
-            <Text dimColor>{arrow}</Text>
-            <Text color={label.color}>{`${label.icon}  `}</Text>
-            {dimension.name.padEnd(layout.nameWidth).slice(0, layout.nameWidth)}
-            <Text color={label.color}>{stateText.padEnd(layout.stateWidth)}</Text>
-            {metric ? metric.value.padStart(valueWidth) : ''.padStart(valueWidth)}
-            {metric && layout.kind === 'wide' && metric.label ? <Text dimColor>{`  ${metric.label}`}</Text> : ''}
-          </Button>
-        )
-
+      const metric = dimension.metric && dimension.metric.text ? dimension.metric : null
+      const stateText = label.word
       return (
         <Box flexDirection="column">
-          {button}
-          {layout.kind === 'narrow' && (
-            <Box paddingLeft={4}>
-              <Text>
-                <Text color={label.color}>{stateText}</Text>
-                {metric ? ` · ${metric.value}` : ''}
-              </Text>
+          <Box flexDirection="row">
+            <Box width={nameWidth + 2} flexShrink={0}>
+              <Button key={`row-${dimension.id}`} label={`${isOpen ? '▼' : '▶'} ${dimension.name}`} plain onPress={toggleArea(dimension.id)} />
             </Box>
-          )}
+            <Box width={14} flexShrink={0}>
+              <Text color={label.color}>{`${label.icon} ${stateText}`}</Text>
+            </Box>
+            {metric && (
+              <Box flexShrink={1}>
+                <Text dimColor={metric.value === '—'} wrap="truncate-end">
+                  {metric.text}
+                </Text>
+              </Box>
+            )}
+          </Box>
           {isOpen && (
-            <Box flexDirection="column" paddingLeft={5} marginBottom={1}>
+            <Box flexDirection="column" paddingLeft={2} marginBottom={1}>
               {dimension.summary !== '' && <Text>{dimension.summary}</Text>}
               {firstItems(dimension.items).map(item => (
                 <Box flexDirection="row">
@@ -270,6 +348,7 @@ export const register: Register = on => {
               <Text dimColor>
                 {MEASURED_LABEL[dimension.measured]}
                 {dimension.isClaimed ? ' · claimed, not re-run' : ''}
+                {dimension.isStale && !summary.isStale ? ' · measured before the latest changes' : ''}
               </Text>
             </Box>
           )}
@@ -277,44 +356,71 @@ export const register: Register = on => {
       )
     }
 
-    const grade = (
+    const overview = (
       <Box flexDirection="column">
-        {summary.dimensions.map(dimension => row(dimension))}
+        {summary.dimensions.map(d => areaRow(d))}
         <Box marginTop={1} flexDirection="column">
-          {isRunning && <Text dimColor>Areas fill in as Inspect measures them.</Text>}
-          {!isRunning &&
-            summary.run.bar &&
-            finishLines(summary.run.bar).map(line => (
-              <Text dimColor={!line.startsWith('✓')} color={line.startsWith('✓') ? 'success' : undefined}>
-                {line}
-              </Text>
-            ))}
-          <Box marginTop={1}>
-            <Text dimColor>Select a row for details.</Text>
-          </Box>
+          {waiting > 0 && (
+            <Box marginTop={1}>
+              <Button
+                key="go-questions"
+                label={`${waiting} ${waiting === 1 ? 'question waits' : 'questions wait'} for you: open Questions`}
+                plain
+                onPress={() => update($, tabAtom, () => 'questions')}
+              />
+            </Box>
+          )}
         </Box>
       </Box>
     )
 
+    const ANSWERS_SHOWN = 8
+    const toneColor = { good: 'success', gap: 'error', plain: undefined } as const
     const questions = (
       <Box flexDirection="column" gap={1}>
-        {waiting === 0 ? (
-          <Text dimColor>Nothing is waiting for you.</Text>
-        ) : (
-          <Text color="warning">
-            {waiting} {waiting === 1 ? 'question is' : 'questions are'} waiting. Run /imagineer:inspect to answer.
-          </Text>
-        )}
+        <Box flexDirection="column">
+          <Text weight="semibold">{waiting ? `Waiting for you (${waiting})` : 'Waiting for you'}</Text>
+          {waiting === 0 ? (
+            <Text dimColor>Nothing is waiting for you.</Text>
+          ) : (
+            <Text dimColor>Run /imagineer:inspect to answer.</Text>
+          )}
+        </Box>
         {summary.openQuestions.map(q => (
           <Box flexDirection="row">
             <Box width={5}>
               <Text dimColor>{q.id}</Text>
             </Box>
-            <Box flexShrink={1}>
+            <Box flexShrink={1} flexDirection="column">
               <Text>{q.text}</Text>
+              {q.isGap && <Text color="warning">Your answer differs from what the app does: fix it or keep it?</Text>}
             </Box>
           </Box>
         ))}
+        {summary.answered.length > 0 && (
+          <Box flexDirection="column" gap={1}>
+            <Box flexDirection="column">
+              <Text weight="semibold">Your answers ({summary.answered.length})</Text>
+              <Text dimColor>What you told Imagineer, and what came of it.</Text>
+            </Box>
+            {summary.answered.slice(0, ANSWERS_SHOWN).map(q => (
+              <Box flexDirection="row">
+                <Box width={5}>
+                  <Text dimColor>{q.id}</Text>
+                </Box>
+                <Box flexShrink={1} flexDirection="column">
+                  <Text>{q.text}</Text>
+                  <Text color={toneColor[q.tone]} dimColor={q.tone === 'plain'}>
+                    {q.outcome}
+                  </Text>
+                </Box>
+              </Box>
+            ))}
+            {summary.answered.length > ANSWERS_SHOWN && (
+              <Text dimColor>…and {summary.answered.length - ANSWERS_SHOWN} more in .claude/imagineer/questions.json</Text>
+            )}
+          </Box>
+        )}
         {summary.flags.length > 0 && (
           <Box flexDirection="column">
             <Text color="warning">Imagineer may have gone wrong on its side:</Text>
@@ -342,8 +448,7 @@ export const register: Register = on => {
           ))}
         </Box>
         {header}
-        {tab === 'questions' ? questions : grade}
-        <Text dimColor>Imagineer {summary.imagineer}</Text>
+        {tab === 'questions' ? questions : overview}
       </Box>
     )
   })

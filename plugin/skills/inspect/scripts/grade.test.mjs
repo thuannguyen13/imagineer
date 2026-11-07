@@ -122,16 +122,17 @@ test('detect finds env variables missing from .env.example, and no docs', t => {
   assert.equal(facts.lockfile, null)
 })
 
+// A check, asked blind: possible outcomes, one of them what the app does today (unmarked).
 const ask = (topic, extra = {}) => ({
   topic,
-  point: 'Bo can still read deal notes after losing Pipeline access.',
-  expectation: 'Notes follow Pipeline access.',
-  actual: 'Anyone still on the deal reads its notes.',
-  example: 'Bo moves to Marketing and still reads the Acme notes.',
-  suggestions: [
-    { label: 'Must not happen', means: 'Bo stops seeing the notes.' },
-    { label: 'Fine as it is', means: 'Bo keeps reading them.' },
+  point: 'What should happen to deal notes when someone loses Pipeline access?',
+  example: 'Bo is on the Acme deal and moves to Marketing, with no Pipeline access.',
+  outcomes: [
+    { label: 'Bo can no longer read them', means: 'Notes follow Pipeline access.' },
+    { label: 'Bo keeps reading them', means: 'Anyone still on the deal reads its notes.' },
   ],
+  today: 1,
+  actual: 'Bo still reads every note on the Acme deal.',
   ...extra,
 })
 
@@ -141,9 +142,12 @@ test('questions are ranked data, money, permissions, behaviour, wording', () => 
   assert.deepEqual(ledger.questions.map(q => q.id), ['Q1', 'Q2', 'Q3', 'Q4'])
 })
 
-test('a question needs an example and at least two suggestions', () => {
+test('a check needs an example, two or three outcomes, and which one the app does today', () => {
   assert.throws(() => addQuestions(emptyLedger(), [ask('data', { example: '' })]), /example/)
-  assert.throws(() => addQuestions(emptyLedger(), [ask('data', { suggestions: [{ label: 'only one', means: 'x' }] })]), /two or three suggestions/)
+  assert.throws(() => addQuestions(emptyLedger(), [ask('data', { outcomes: [{ label: 'only one', means: 'x' }] })]), /two or three outcomes/)
+  assert.throws(() => addQuestions(emptyLedger(), [ask('data', { today: 5 })]), /"today" names the outcome/)
+  assert.throws(() => addQuestions(emptyLedger(), [ask('data', { actual: '' })]), /needs "actual"/)
+  assert.equal(addQuestions(emptyLedger(), [ask('data', { today: 'Bo keeps reading them' })]).questions[0].today, 1)
   assert.throws(() => addQuestions(emptyLedger(), [ask('security')]), /Unknown topic/)
 })
 
@@ -153,12 +157,12 @@ test('intent: not checked, then failing while a critical question is open, then 
   assert.equal(intent({ ledger }).state, 'failing')
   assert.equal(intent({ ledger }).summary, '2 questions: 2 waiting. 1 about data, money or permissions still need your answer.')
   assert.equal(intent({ ledger }).items.length, 2)
-  answerQuestion(ledger, { id: 'Q1', status: 'answered', answer: 'Only the owner.' })
+  pick(ledger, { id: 'Q1', choice: 'Bo keeps reading them' })
   assert.equal(intent({ ledger }).state, 'weak')
   answerQuestion(ledger, { id: 'Q2', status: 'deferred', answer: null, reason: 'Later.' })
   const resolved = intent({ ledger })
   assert.equal(resolved.state, 'weak')
-  assert.equal(resolved.summary, '2 questions: 1 answered by you, 1 deferred. None of your answers is proven by a test yet.')
+  assert.equal(resolved.summary, '2 questions: 1 matched what the app does, 1 deferred. None of your answers is proven by a test yet.')
   ledger.questions[0].test = { file: 'test/q1.test.js', green: true, red: { killed: 2, total: 3 } }
   assert.equal(intent({ ledger }).state, 'weak')
   ledger.questions[0].test = { file: 'test/q1.test.js', green: true, red: { killed: 3, total: 3 } }
@@ -166,7 +170,7 @@ test('intent: not checked, then failing while a critical question is open, then 
   ledger.questions[0].test = { file: 'test/q1.test.js', green: false, red: null }
   const gap = intent({ ledger })
   assert.equal(gap.state, 'failing')
-  assert.match(gap.summary, /does not yet do what you answered for 1 question\./)
+  assert.match(gap.summary, /does not yet do what you said for 1 question\./)
   assert.match(gap.items[0], /^Q1: /)
 })
 
@@ -238,7 +242,7 @@ test('the finish thresholds need strong tests, clean structure and two clean att
   assert.equal(stopBar([{ id: 'test-strength', state: 'weak' }, { id: 'structure', state: 'strong' }], []).met, false)
 })
 
-import { askInput, dialogFor, notSure, plainLanguageProblem } from './questions.mjs'
+import { askInput, decide, dialogFor, notSure, pick, plainLanguageProblem, shuffled } from './questions.mjs'
 
 test('questions are plain language: code goes in detail, never in what the user reads', () => {
   assert.equal(plainLanguageProblem('Bo can still read deal notes after losing Pipeline access.'), null)
@@ -252,18 +256,23 @@ test('questions are plain language: code goes in detail, never in what the user 
   assert.match(ledger.questions[0].detail, /rules\.ts:14/)
 })
 
-test('every suggestion says what it means for people or data', () => {
-  assert.throws(() => addQuestions(emptyLedger(), [ask('data', { suggestions: [{ label: 'Yes', means: '' }, { label: 'No', means: 'x' }] })]), /needs "means"/)
+test('every option says what it means for people or data', () => {
+  assert.throws(() => addQuestions(emptyLedger(), [ask('data', { outcomes: [{ label: 'Yes', means: '' }, { label: 'No', means: 'x' }] })]), /needs "means"/)
   assert.throws(() => addQuestions(emptyLedger(), [ask('data', { point: 'x'.repeat(120) })]), /at most 100 characters/)
 })
 
-test('the dialog leads with the point, then expectation, today and an example, and always offers Not sure', () => {
+test('a check is asked blind: the point and an example, outcomes unmarked, and always Not sure', () => {
   const ledger = addQuestions(emptyLedger(), [ask('permissions')])
   const dialog = dialogFor(ledger.questions[0])
   assert.equal(dialog.header, 'Q1 Access')
-  assert.match(dialog.question, /^Bo can still read deal notes after losing Pipeline access\.\n\nYou'd expect: Notes follow Pipeline access\.\nToday: .*\nFor example: .*\n\nWhat should happen\?$/)
-  assert.deepEqual(dialog.options.map(o => o.label), ['Must not happen', 'Fine as it is', 'Not sure'])
-  assert.equal(dialog.options[0].description, 'Bo stops seeing the notes.')
+  assert.equal(
+    dialog.question,
+    'What should happen to deal notes when someone loses Pipeline access?\n\nFor example: Bo is on the Acme deal and moves to Marketing, with no Pipeline access.\n\nWhat should happen?',
+  )
+  // Nothing says what the app does today, or which answer is recommended.
+  assert.doesNotMatch(JSON.stringify(dialog), /Today|today|recommended|still reads/)
+  assert.deepEqual(new Set(dialog.options.map(o => o.label)), new Set(['Bo can no longer read them', 'Bo keeps reading them', 'Not sure']))
+  assert.equal(dialog.options.at(-1).label, 'Not sure')
   assert.ok(dialog.header.length <= 12)
   const input = askInput(addQuestions(emptyLedger(), [ask('wording'), ask('data'), ask('money'), ask('behaviour'), ask('permissions')]))
   assert.equal(input.questions.length, 4)
@@ -329,14 +338,17 @@ test('every area\'s number has one shape: done/total and its good outcome', () =
     return `${value} ${label}`
   }
   assert.equal(metric({ id: 'test-strength', state: 'strong', summary: '' }, { mutation: report, stryker: { ok: true } }), '48/51 breaks caught')
+  // The pane's phrase: plain words, no tool names.
+  assert.equal(metricFor({ id: 'test-strength', state: 'strong', summary: '' }, { mutation: report, stryker: { ok: true } }).text, '48 of 51 planted bugs caught')
+  assert.equal(metricFor({ id: 'structure', state: 'weak', summary: '' }, { fallow: { health: { health_score: { score: 63.6 } } } }).text, 'code health 63.6 of 100')
   assert.equal(metric({ id: 'test-strength', state: 'unchecked', summary: '728 of 729 breaks timed out' }, { mutation: report }), '— runs timed out')
   const attacks = [attackRow('A1', 1, 'permissions', 'broke'), attackRow('A2', 1, 'permissions', 'held'), attackRow('A3', 2, 'data', 'held')]
   assert.equal(metric({ id: 'security', state: 'failing', summary: '' }, { attacks, security: { audit: { critical: 1, high: 6 } } }), '1/2 attacks held')
   assert.equal(metric({ id: 'data-safety', state: 'weak', summary: '' }, { attacks }), '1/1 attacks held')
   const ledger = addQuestions(emptyLedger(), [ask('permissions'), ask('data')])
   assert.equal(metric({ id: 'intent', state: 'failing', summary: '' }, { ledger }), '— no answers yet')
-  answerQuestion(ledger, { id: 'Q1', status: 'answered', answer: 'x' })
-  answerQuestion(ledger, { id: 'Q2', status: 'answered', answer: 'y' })
+  pick(ledger, { id: 'Q1', choice: 'Bo keeps reading them' })
+  pick(ledger, { id: 'Q2', choice: 'Bo keeps reading them' })
   ledger.questions[1].test = { green: true, red: { killed: 2, total: 2 } }
   assert.equal(metric({ id: 'intent', state: 'weak', summary: '' }, { ledger }), '1/2 answers proven')
   assert.equal(metric({ id: 'structure', state: 'weak', summary: '' }, { fallow: { health: { health_score: { score: 87.5 } } } }), '87.5/100 Fallow health')
@@ -388,4 +400,148 @@ test('test strength the user chose not to measure is not checked, with the reaso
   assert.equal(d.state, 'unchecked')
   assert.equal(d.summary, 'Not measured this time: it would take about 45 minutes')
   assert.equal(markPending([d], { stryker: { ok: false, declined: 'x' } }, 'running')[0].pending, false)
+})
+
+test('a pick that matches what the app does is answered; one that differs becomes a gap, asked next', () => {
+  const ledger = addQuestions(emptyLedger(), [ask('permissions'), ask('permissions')])
+  assert.equal(pick(ledger, { id: 'Q1', choice: 'bo keeps reading them' }).matched, true)
+  assert.equal(ledger.questions[0].status, 'answered')
+  assert.equal(ledger.questions[0].answer, 'Bo keeps reading them')
+  assert.equal(pick(ledger, { id: 'Q2', choice: 'Bo can no longer read them' }).matched, false)
+  assert.equal(ledger.questions[1].status, 'gap')
+  assert.throws(() => pick(ledger, { id: 'Q2', choice: 'x' }), /is gap, not open/)
+  assert.throws(() => answerQuestion(ledger, { id: 'Q1', status: 'answered', answer: 'x' }), /is a check: record the user's pick/)
+
+  // Only now is today's behaviour shown, with the fix recommended.
+  const dialog = dialogFor(ledger.questions[1])
+  assert.match(dialog.question, /You said: Bo can no longer read them\. Notes follow Pipeline access\.\nToday: Bo still reads every note on the Acme deal\.\n\nFix it, or keep it as it is\?$/)
+  assert.deepEqual(dialog.options.map(o => o.label), ['Fix it (recommended)', 'Keep it as it is', 'Not sure'])
+  assert.equal(dialog.options[1].description, 'Anyone still on the deal reads its notes.')
+  // Gaps come first in the next ask.
+  addQuestions(ledger, [ask('data')])
+  assert.deepEqual(askInput(ledger).questions.map(q => q.header), ['Q2 Access', 'Q3 Data'])
+})
+
+test('a gap the user wants fixed counts against their intent at once; one they keep is answered as it is', () => {
+  const ledger = addQuestions(emptyLedger(), [ask('permissions'), ask('wording')])
+  pick(ledger, { id: 'Q1', choice: 'Bo can no longer read them' })
+  pick(ledger, { id: 'Q2', choice: 'Bo can no longer read them' })
+  assert.equal(intent({ ledger }).state, 'failing')
+  decide(ledger, { id: 'Q2', decision: 'keep' })
+  assert.equal(ledger.questions[1].answer, 'Bo keeps reading them')
+  decide(ledger, { id: 'Q1', decision: 'fix' })
+  const graded = intent({ ledger })
+  assert.equal(graded.state, 'failing')
+  assert.equal(graded.summary, '2 questions: 1 differs and you want it fixed, 1 differs, kept as it is. The app does not yet do what you said for 1 question.')
+  assert.equal(graded.items[0], 'Q1: What should happen to deal notes when someone loses Pipeline access? (you said: Bo can no longer read them)')
+  assert.throws(() => decide(ledger, { id: 'Q1', decision: 'fix' }), /not a gap/)
+})
+
+test('their own words need the Lead to say whether they describe what the app does today', () => {
+  const ledger = addQuestions(emptyLedger(), [ask('data')])
+  assert.throws(() => pick(ledger, { id: 'Q1', choice: 'Only managers keep them', own: true }), /--matches yes\|no/)
+  assert.equal(pick(ledger, { id: 'Q1', choice: 'Only managers keep them', own: true, matches: false }).matched, false)
+  assert.equal(ledger.questions[0].ownWords, true)
+  assert.match(dialogFor(ledger.questions[0]).question, /You said: Only managers keep them\n/)
+})
+
+test('outcomes may not give the answer away', () => {
+  for (const label of ['Keep it as it is', 'Recommended: Bo loses them', 'What happens today']) {
+    const outcomes = [{ label, means: 'x y' }, { label: 'Bo loses them', means: 'Notes follow access.' }]
+    assert.throws(() => addQuestions(emptyLedger(), [ask('data', { outcomes, today: 1 })]), /gives the answer away/, label)
+  }
+  assert.throws(() => addQuestions(emptyLedger(), [{ ...ask('data'), expectation: 'x' }]), /asks blind/)
+})
+
+test('the outcomes are not always in the same place: today\'s is not always first or last', () => {
+  const three = { outcomes: [{ label: 'One', means: 'a b' }, { label: 'Two', means: 'c d' }, { label: 'Three', means: 'e f' }], today: 0 }
+  const ledger = addQuestions(emptyLedger(), [ask('data', three), ask('data', three), ask('data', three)])
+  const firsts = ledger.questions.map(q => shuffled(q)[0].label)
+  assert.equal(new Set(firsts).size, 3)
+})
+
+test('a choice is for the big picture or something new: suggestions, the recommended first', () => {
+  const ledger = addQuestions(emptyLedger(), [
+    {
+      kind: 'choice',
+      topic: 'permissions',
+      point: 'Which parts of the product handle money, personal data or who may do what?',
+      suggestions: [
+        { label: 'Sign-in', means: 'Who can get in, and as whom.' },
+        { label: 'Roles and permissions', means: 'Who may see or change what.' },
+      ],
+      multi: true,
+    },
+  ])
+  const dialog = dialogFor(ledger.questions[0])
+  assert.equal(dialog.question, 'Which parts of the product handle money, personal data or who may do what?')
+  assert.equal(dialog.multiSelect, true)
+  assert.deepEqual(dialog.options.map(o => o.label), ['Sign-in', 'Roles and permissions', 'Not sure'])
+  answerQuestion(ledger, { id: 'Q1', status: 'answered', answer: 'Sign-in' })
+  assert.equal(intent({ ledger }).summary, '1 question: 1 answered by you. None of your answers is proven by a test yet.')
+})
+
+test('a question still open from before 0.3.0 is asked in its old layout', () => {
+  const ledger = emptyLedger()
+  ledger.questions.push({
+    id: 'Q1', topic: 'data', status: 'open', point: 'Old point.', expectation: 'Old expectation.', actual: 'Old actual.', example: 'Old example.',
+    suggestions: [{ label: 'A', means: 'a' }, { label: 'B', means: 'b' }],
+  })
+  const dialog = dialogFor(ledger.questions[0])
+  assert.match(dialog.question, /^Old point\.\n\nYou'd expect: Old expectation\./)
+  assert.deepEqual(dialog.options.map(o => o.label), ['A', 'B', 'Not sure'])
+})
+
+import { finishProgress } from './grade.mjs'
+
+test('each finish threshold says how far along it is, for the pane\'s bars', () => {
+  const report = { files: { 'a.ts': { mutants: [...Array.from({ length: 61 }, () => ({ status: 'Killed' })), ...Array.from({ length: 39 }, (_, i) => ({ id: String(i), status: 'Survived', location: { start: { line: i + 1 } } }))] } } }
+  const byId = id => ({ 'test-strength': { state: 'failing' }, structure: { state: 'weak' } })[id]
+  const ledger = { ...emptyLedger(), dismissed: { 'unused-file:a.ts:': { question: 'Q1' } } }
+  const findings = [
+    { key: 'unused-file:a.ts:', kind: 'unused-file' },
+    { key: 'complex:b.ts:3', kind: 'complex' },
+    { key: 'mutant:a.ts:1', kind: 'mutant' },
+  ]
+  const [tests, structure, attacks] = finishProgress(byId, 1, { stryker: { ok: true }, mutation: report, ledger, findings })
+  assert.deepEqual(tests, { label: 'Tests catch breaks', done: 61, total: 80, met: false, text: '61% of 80%' })
+  assert.deepEqual(structure, { label: 'Code quality reviewed', done: 1, total: 2, met: false, text: '1 of 2 findings' })
+  assert.deepEqual(attacks, { label: 'Clean attack rounds', done: 1, total: 2, met: false, text: '1 of 2 in a row' })
+  assert.equal(finishProgress(byId, 3, {})[2].done, 2)
+})
+
+import { recordUntested, untestedNow } from './attack.mjs'
+
+test('what the latest attack round did not reach is listed, never read as safe', () => {
+  const ledger = { attacks: [], untested: {} }
+  recordUntested(ledger, { round: 1, category: 'permissions', what: "exporting another team's report" })
+  recordUntested(ledger, { round: 1, category: 'data', what: 'two people editing one deal at once' })
+  recordUntested(ledger, { round: 2, category: 'permissions', what: 'the admin settings page' })
+  // The latest round's list is what is still untested: round 2 reached the export.
+  assert.deepEqual(untestedNow(ledger), [{ category: 'permissions', what: 'the admin settings page' }])
+  assert.throws(() => recordUntested(ledger, { round: 3, category: 'money', what: 'x' }), /Category/)
+
+  const held = [{ id: 'A1', round: 1, category: 'permissions', result: 'held' }, { id: 'A2', round: 1, category: 'data', result: 'held' }]
+  const s = security({ attacks: held, untested: untestedNow(ledger) })
+  assert.match(s.summary, /1 part not attacked yet/)
+  assert.deepEqual(s.items, ['Not attacked yet: the admin settings page'])
+  assert.doesNotMatch(dataSafety({ attacks: held, untested: untestedNow(ledger) }).summary, /not attacked yet/)
+  // An area no attack has reached yet still lists what is known to be untested.
+  const round1 = { 1: ledger.untested['1'] }
+  assert.deepEqual(dataSafety({ attacks: [], untested: untestedNow({ untested: round1 }) }).items, ['Not attacked yet: two people editing one deal at once'])
+})
+
+test('test strength is graded against the thresholds in force, and says whose they are', () => {
+  const caught = n => ({ files: { 'a.ts': { mutants: [...Array.from({ length: n }, () => ({ status: 'Killed' })), ...Array.from({ length: 100 - n }, (_, i) => ({ id: String(i), status: 'Survived', location: { start: { line: i + 1 } } }))] } } })
+  const stryker = { ok: true, measured: 'default' }
+  // 70%: Weak by Imagineer's 80 (within 20 below), Strong by a user's 65, At risk by a user's 95.
+  const imagineer = testStrength({ stryker, mutation: caught(70) })
+  assert.equal(imagineer.state, 'weak')
+  assert.match(imagineer.summary, /Imagineer suggests at least 80%\./)
+  const lenient = testStrength({ stryker, mutation: caught(70), thresholds: { tests: 65, critical: 80, bySetting: true } })
+  assert.equal(lenient.state, 'strong')
+  assert.match(lenient.summary, /You set at least 65%\./)
+  assert.equal(testStrength({ stryker, mutation: caught(70), thresholds: { tests: 95, critical: 95, bySetting: true } }).state, 'failing')
+  const steps = finishProgress(() => ({ state: 'weak' }), 0, { stryker, mutation: caught(70), thresholds: { tests: 65, critical: 80, bySetting: true } })
+  assert.deepEqual([steps[0].done, steps[0].total, steps[0].text], [65, 65, '70% of 65%'])
 })

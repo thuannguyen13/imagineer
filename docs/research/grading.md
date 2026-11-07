@@ -162,7 +162,19 @@ On the bench app this gives **overall: Failing**. Structure is Weak (Fallow 81 B
 - **Bench app, observed.** The overall Stryker score of 30.5% hides that `db.ts` is 100% while `config.ts` and `server.ts` are 0%. The averaged structure score (81 B) hides that test strength is failing. Two levels of averaging, two masked failures.
 - **Compensation is the core problem [inferred].** An average lets strength in one place pay for weakness in another. For trust, that trade is invalid: well-factored code does not make a missing permission test less dangerous.
 
-### 2.2 Why test strength must use mutation, not coverage
+### 2.1b What the 80% rests on (2026-11-07)
+
+The owner asked what backs the 80% test-strength threshold. Searched for a research-backed standard; there is none.
+
+- **Real projects vary widely.** StrykerJS scores on 13 JavaScript projects ran from about 12% to about 95% [cited: [LLMorpheus](https://arxiv.org/pdf/2404.09952)]. No study found reports a population distribution of mutation scores.
+- **The research avoids fixed cutoffs.** Mutation score correlates only weakly with real fault detection once suite size is controlled for, though raising it helps (Papadakis et al., ICSE 2018). Google computes no whole-codebase score and surfaces surviving mutants in review [cited: [Petrović et al.](https://arxiv.org/abs/2102.11378)]; Facebook's study sets no threshold either [cited: [Mutation Monkey](https://arxiv.org/pdf/2010.13464)].
+- **Practitioner convention, not validated cutoffs:** 60–70% as a general gate, with advice to run without a gate for a few weeks first [cited: [CircleCI](https://circleci.com/blog/what-is-mutation-testing/)]; about 80% for critical code; above 90% exceptional [cited: [industrial robotics study](https://arxiv.org/pdf/2511.14432)]; 75% called "very good" for real-world code [cited: [Jain et al.](https://clairelegoues.com/assets/papers/jainOracleGap.pdf)].
+- **Safety standards** (ISO 26262, DO-178C) mandate coverage criteria such as MC/DC, not a mutation score [cited: [Clang mutation paper](https://arxiv.org/pdf/2210.17215)].
+- **Stryker's own bands** are 60 (amber) and 80 (green), where Imagineer's 80% came from.
+
+**Decision.** The default stays at 80% overall and 80% in critical code, so real projects show whether it fits, and the user can set their own per repository (`--tests`, `--critical`, or in words). Bands follow the threshold: Strong at or above it, Weak within 20 points below (Stryker's band width), At risk below that. Revisit once a few real projects have been inspected: practitioner convention would put a general default nearer 70%.
+
+
 
 Inozemtseva and Holmes (ICSE 2014, later an ICSE Most Influential Paper) found that once suite size is controlled for, coverage is "not strongly correlated" with a suite's ability to catch faults [cited: [paper PDF](https://cs.ubc.ca/~rtholmes/papers/icse_2014_inozemtseva.pdf)]. Mutation is not perfect either (Papadakis 2018), but it directly measures "would a test notice this break?", which is the question the user cares about. The project's own research reaches the same conclusion: "A test never seen failing is reading-level evidence" (`docs/feedback/FEATURE_REVIEW_LOOP_VERIFICATION.md`).
 

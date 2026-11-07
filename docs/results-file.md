@@ -45,7 +45,7 @@ This page is format `1`. A reader that meets another format says so and asks for
 | `run.commit` | The commit the grade was measured at |
 | `run.at` | Optional. When the code was measured, as an ISO time |
 | `run.step` | Optional. While `running` or `waiting`: what the run is doing now, in plain words, for example "Measuring test strength (about 18 minutes, until 14:30)". The pane shows it in place of the verdict while `running` |
-| `run.bar` | Optional. Inspect's finish thresholds, Imagineer's suggestion: `{ "met": false, "missing": ["two attack rounds in a row that find nothing new"] }`, each missing item in plain words |
+| `run.bar` | Optional. Inspect's finish thresholds, Imagineer's suggestion: `{ "met": false, "missing": ["two attack rounds in a row that find nothing new"] }`, each missing item in plain words. From 0.3.0 also `progress`: one entry per threshold, `{ "label": "Tests catch breaks", "done": 61, "total": 80, "met": false, "text": "61% of 80%" }`, which the pane draws as a bar |
 | `overall.state` | `strong`, `weak`, `failing`, `unchecked` or `not-proven` |
 | `overall.reason` | One plain sentence: why the overall grade is what it is |
 | `dimensions[].id`, `name` | A stable id and the name shown to the user |

@@ -19,12 +19,15 @@ export type Dimension = {
   /** The list behind the summary (files, attacks, answers), shown under Evidence. */
   items: string[]
   /** The area's one measured number and what it counts, for its tile. */
-  metric: { value: string; label: string } | null
+  metric: { value: string; label: string; text: string } | null
   isStale: boolean
   isClaimed: boolean
   /** A running Inspect has not reached this area yet: coming up, not "not checked". */
   isPending: boolean
 }
+
+/** One finish threshold and how far along it is: `done` of `total`, and the numbers in words. */
+export type FinishStep = { label: string; done: number; total: number; met: boolean; text: string }
 
 export type RunStatus = 'running' | 'waiting' | 'done' | 'stopped'
 
@@ -38,11 +41,18 @@ export type Run = {
   /** When the run measured the code, as an ISO time; empty when unknown. */
   at: string
   /** Inspect's finish thresholds, when the run recorded them: met, or what is still missing. */
-  bar: { met: boolean; missing: string[] } | null
+  /** `by`: whose thresholds they are, the user's own (`you`) or Imagineer's suggestion. */
+  bar: { met: boolean; missing: string[]; progress: FinishStep[]; by: 'you' | 'imagineer' } | null
 }
 
 /** An open question from the question ledger, for the pane. */
-export type OpenQuestion = { id: string; topic: string; text: string }
+export type OpenQuestion = {
+  id: string
+  topic: string
+  text: string
+  /** The user's answer differs from what the app does: asked next whether to fix it. */
+  isGap: boolean
+}
 
 export type Results = {
   kind: 'results'
@@ -55,13 +65,18 @@ export type Results = {
   /** True once the repository's HEAD is no longer the commit the grade was measured at. */
   isStale: boolean
   openQuestions: OpenQuestion[]
+  /** A question the user resolved, and what came of it, for the Questions tab's record. */
+  answered: AnsweredQuestion[]
   /** The self-check's flags about Imagineer itself, as plain lines. */
   flags: string[]
 }
 
+/** A resolved question and its outcome in plain words; `tone` colours it. */
+export type AnsweredQuestion = { id: string; text: string; outcome: string; tone: 'good' | 'gap' | 'plain' }
+
 /** What the mod knows about the repo's results file. */
 /** The pane's tabs. */
-export type Tab = 'grade' | 'questions'
+export type Tab = 'overview' | 'questions'
 
 export type Summary =
   | { kind: 'none' }
@@ -70,6 +85,6 @@ export type Summary =
 
 declare module 'claude-code' {
   interface PluginState {
-    imagineer: { summary: Shaped<Summary>; tab: Shaped<Tab>; open: string[]; starting: boolean }
+    imagineer: { summary: Shaped<Summary>; tab: Shaped<Tab>; open: string[]; starting: boolean; frame: number }
   }
 }

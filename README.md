@@ -36,7 +36,7 @@ Open Claude Code in your project and run `/imagineer:inspect`.
 Inspect works in a throwaway copy of your last commit, so your project's files and git history are never changed. Uncommitted changes are not included. It:
 
 - **Measures** how well your tests catch deliberate breaks, how the code is structured, and the basics (tests, typecheck, CI, docs). If the test check would take more than 20 minutes, it asks first.
-- **Asks you questions** about what the app should do, in plain language, each with an example and suggested answers. Pick one, write your own, or choose "Not sure".
+- **Asks you questions** about what the app should do, in plain language. It describes a situation and asks what should happen, without telling you what the app does, so your answer is your own. Pick an option, write your own, or choose "Not sure". Only if your answer differs from what the app does does it show you what happens today, and ask whether to fix it or keep it.
 - **Proves your answers** with tests, and **tries to break the app** (for example, a user seeing another team's data). Anything that breaks through comes back to you as a question. Before the first attack, it asks once which models to use (see Build below); the choice is shared.
 
 It never fixes your code. When it finds a gap, it tells you in plain words. It offers to add the tests it proved, or docs from your answers, as new files for you to review. Nothing is added without your yes, and nothing is committed.
@@ -45,9 +45,11 @@ It never fixes your code. When it finds a gap, it tells you in plain words. It o
 
 The pane opens on its own during Inspect, and `/imagineer:status` reopens it at any time, even after you restart Claude Code.
 
-Each area gets one state: **✓ Strong**, **! Weak**, **✕ Failing** or **? Not checked**. The areas are test strength, structure, foundations, matches your intent, security and permissions, and data safety. The overall grade is the weakest area that matters most, not an average. Select a row to see its evidence. The **Questions** tab lists what is waiting for your answer.
+Each area gets one state: **✓ Strong**, **! Weak**, **✕ At risk** (something that matters is known to be wrong or unprotected) or **? Not checked**. The areas are test strength, code quality, foundations, matches your intent, security and permissions, and data safety. The overall grade is the weakest area that matters most, not an average. Select a row to see its evidence.
 
-The pane also says whether Inspect is finished, by the thresholds Imagineer suggests: tests that catch at least 80% of deliberate breaks, every break in critical code caught or explained, and two attack rounds in a row that find nothing new. If not, it says what is still needed. Run `/imagineer:inspect` again to continue; questions you already answered are not asked again.
+The pane has two tabs. **Overview** is how your project is doing: the areas above, and a line telling you when questions wait. **Questions** is what Imagineer still needs from you, and **Your answers**: everything you've told it and what came of each, such as "Matches what the app does" or "Differs from the app: you want it fixed".
+
+The pane also says whether Inspect is finished, by the thresholds Imagineer suggests: tests that catch at least 80% of deliberate breaks, every break in critical code caught or explained, and two attack rounds in a row that find nothing new. 80% is a starting point, not a standard. To use your own numbers for a project, say so ("use 65% for tests") or run `/imagineer:inspect --tests 65 --critical 85`; Inspect and Build keep them for that project, and the pane then says "the thresholds you set". If not, it says what is still needed. Run `/imagineer:inspect` again to continue; questions you already answered are not asked again.
 
 ### 3. Build something new
 

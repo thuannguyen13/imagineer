@@ -6,6 +6,7 @@ import type {
   GradeState,
   Measured,
   OpenQuestion,
+  AnsweredQuestion,
   OverallState,
   Results,
   Run,
@@ -58,7 +59,15 @@ function toDimension(raw: unknown): Dimension | null {
     measured: oneOf(raw.measured, MEASURED, 'none'),
     summary: text(raw.summary),
     items: Array.isArray(raw.items) ? raw.items.filter((i): i is string => typeof i === 'string') : [],
-    metric: isObject(raw.metric) && typeof raw.metric.value === 'string' ? { value: raw.metric.value, label: text(raw.metric.label) } : null,
+    // `text` is the plain phrase; results written before it had one say the number and its label.
+    metric:
+      isObject(raw.metric) && typeof raw.metric.value === 'string'
+        ? {
+            value: raw.metric.value,
+            label: text(raw.metric.label),
+            text: text(raw.metric.text) || (raw.metric.value === '—' ? text(raw.metric.label) : `${raw.metric.value} ${text(raw.metric.label)}`.trim()),
+          }
+        : null,
     isStale: raw.stale === true,
     isClaimed: raw.claimed === true,
     isPending: raw.pending === true,
@@ -76,7 +85,20 @@ function toRun(raw: unknown): Run {
     step: text(run.step),
     at: text(run.at),
     bar: isObject(run.bar)
-      ? { met: run.bar.met === true, missing: Array.isArray(run.bar.missing) ? run.bar.missing.filter((m): m is string => typeof m === 'string') : [] }
+      ? {
+          met: run.bar.met === true,
+          by: run.bar.by === 'you' ? 'you' : 'imagineer',
+          missing: Array.isArray(run.bar.missing) ? run.bar.missing.filter((m): m is string => typeof m === 'string') : [],
+          progress: Array.isArray(run.bar.progress)
+            ? run.bar.progress.filter(isObject).map(p => ({
+                label: text(p.label),
+                done: count(p.done),
+                total: Math.max(1, count(p.total)),
+                met: p.met === true,
+                text: text(p.text),
+              }))
+            : [],
+        }
       : null,
   }
 }
@@ -93,12 +115,52 @@ export function readOpenQuestions(source: string | null, limit = 5): OpenQuestio
     return []
   }
   if (!isObject(parsed) || !Array.isArray(parsed.questions)) return []
-  const rank = (topic: string) => (TOPIC_ORDER.includes(topic) ? TOPIC_ORDER.indexOf(topic) : TOPIC_ORDER.length)
+  // Gaps first (the user's answer differs from what the app does), then by topic.
+  const rank = (q: OpenQuestion) => (q.isGap ? 0 : 100) + (TOPIC_ORDER.includes(q.topic) ? TOPIC_ORDER.indexOf(q.topic) : TOPIC_ORDER.length)
   return parsed.questions
-    .filter((q): q is Json => isObject(q) && q.status === 'open' && typeof q.id === 'string')
-    .map(q => ({ id: String(q.id), topic: text(q.topic, 'behaviour'), text: text(q.point) || text(q.expectation).replace(/^My guess \(no docs found\):\s*/, '') }))
-    .sort((a, b) => rank(a.topic) - rank(b.topic) || Number(a.id.slice(1)) - Number(b.id.slice(1)))
+    .filter((q): q is Json => isObject(q) && (q.status === 'open' || q.status === 'gap') && typeof q.id === 'string')
+    .map(q => ({
+      id: String(q.id),
+      topic: text(q.topic, 'behaviour'),
+      text: text(q.point) || text(q.expectation).replace(/^My guess \(no docs found\):\s*/, ''),
+      isGap: q.status === 'gap',
+    }))
+    .sort((a, b) => rank(a) - rank(b) || Number(a.id.slice(1)) - Number(b.id.slice(1)))
     .slice(0, limit)
+}
+
+const isProvenJson = (q: Json): boolean => {
+  const test = isObject(q.test) ? q.test : null
+  const red = test && isObject(test.red) ? test.red : null
+  return test?.green === true && red !== null && count(red.total) > 0 && count(red.killed) === count(red.total)
+}
+
+/** What came of a resolved question, in plain words. */
+function outcomeOf(q: Json): { outcome: string; tone: AnsweredQuestion['tone'] } {
+  const proven = isProvenJson(q) ? ' · proven by a test' : ''
+  if (q.status === 'decided') return { outcome: 'Settled from the docs or code', tone: 'plain' }
+  if (q.status === 'deferred') return { outcome: `Deferred${text(q.reason) ? `: ${text(q.reason)}` : ''}`, tone: 'plain' }
+  if (q.decision === 'fix') return { outcome: `Differs from the app: you want it fixed (${text(q.answer)})`, tone: 'gap' }
+  if (q.decision === 'keep') return { outcome: `Differs from the app: kept as it is${proven}`, tone: 'plain' }
+  if (q.matches === true) return { outcome: `Matches what the app does${proven}`, tone: 'good' }
+  if (isObject(q.test) && q.test.green === false) return { outcome: `${text(q.answer) ? `You answered: ${text(q.answer)}` : 'Answered'} · the app does not do this yet`, tone: 'gap' }
+  return { outcome: `${text(q.answer) ? `You answered: ${text(q.answer)}` : 'Answered'}${proven}`, tone: proven ? 'good' : 'plain' }
+}
+
+/** The questions the user resolved, gaps to fix first, for the Questions tab's record. Never throws. */
+export function readAnswered(source: string | null): AnsweredQuestion[] {
+  if (source === null) return []
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(source)
+  } catch {
+    return []
+  }
+  if (!isObject(parsed) || !Array.isArray(parsed.questions)) return []
+  return parsed.questions
+    .filter((q): q is Json => isObject(q) && typeof q.id === 'string' && ['answered', 'decided', 'deferred'].includes(String(q.status)))
+    .map(q => ({ id: String(q.id), text: text(q.point) || text(q.expectation).replace(/^My guess \(no docs found\):\s*/, ''), ...outcomeOf(q) }))
+    .sort((a, b) => (a.tone === 'gap' ? 0 : 1) - (b.tone === 'gap' ? 0 : 1) || Number(a.id.slice(1)) - Number(b.id.slice(1)))
 }
 
 /** What the self-check said about Imagineer itself, as plain lines. Never throws. */
@@ -186,6 +248,7 @@ export function readResults(source: string): Summary {
     questions: { waiting: count(questions.waiting), resolved: count(questions.resolved) },
     isStale: false,
     openQuestions: [],
+    answered: [],
     flags: [],
   }
 
@@ -194,16 +257,7 @@ export function readResults(source: string): Summary {
 
 const shortText = (value: string, max = 110) => (value.length > max ? `${value.slice(0, max - 1).trimEnd()}…` : value)
 
-export const questionLine = (q: OpenQuestion) => `${q.id} (${q.topic}): ${shortText(q.text)}`
-
-/** How the Overview lays out a row at a pane width: the full row, the number alone, or two lines. */
-export type RowLayout = { kind: 'wide' | 'medium' | 'narrow'; nameWidth: number; stateWidth: number }
-
-export function rowLayout(columns: number): RowLayout {
-  if (columns >= 64) return { kind: 'wide', nameWidth: Math.min(26, Math.floor(columns * 0.32)), stateWidth: 13 }
-  if (columns >= 44) return { kind: 'medium', nameWidth: Math.min(24, columns - 3 - 12 - 10), stateWidth: 12 }
-  return { kind: 'narrow', nameWidth: columns - 3, stateWidth: 0 }
-}
+export const questionLine = (q: OpenQuestion) => `${q.id} (${q.isGap ? 'differs from what the app does' : q.topic}): ${shortText(q.text)}`
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -216,11 +270,23 @@ export function whenTested(iso: string, now = new Date()): string {
   return `${MONTHS[at.getMonth()]} ${at.getDate()}${year}, ${time}`
 }
 
+/**
+ * A segmented bar of `width` cells for `done` of `total`, as its filled and empty parts, drawn in two
+ * colours. The segments do not fill the line's height, so bars on consecutive rows stay apart.
+ */
+export function progressBar(done: number, total: number, width = 12): { filled: string; empty: string } {
+  const filled = total > 0 ? Math.round((Math.min(done, total) / total) * width) : 0
+  return { filled: '▰'.repeat(filled), empty: '▱'.repeat(width - filled) }
+}
+
 /** Whether Inspect is finished, and if not, what it still needs, in plain words. */
-export function finishLines(bar: { met: boolean; missing: string[] }): string[] {
-  if (bar.met) return ['✓ Finished, by the thresholds Imagineer suggests: tests catch enough breaks, nothing is left to review, and two attack rounds in a row found nothing new.']
+/** Whose thresholds they are, as the pane says it. */
+export const whose = (bar: { by?: 'you' | 'imagineer' }) => (bar.by === 'you' ? 'you set' : 'Imagineer suggests')
+
+export function finishLines(bar: { met: boolean; missing: string[]; by?: 'you' | 'imagineer' }): string[] {
+  if (bar.met) return [`✓ Finished, by the thresholds ${whose(bar)}: tests catch enough breaks, nothing is left to review, and two attack rounds in a row found nothing new.`]
   return [
-    'Not finished yet. By the thresholds Imagineer suggests, Inspect still needs:',
+    `Not finished yet. By the thresholds ${whose(bar)}, Inspect still needs:`,
     ...bar.missing.map(m => `  • ${m}`),
     'Run /imagineer:inspect to continue.',
   ]
@@ -238,7 +304,8 @@ export function firstItems(items: string[], shown = ITEMS_SHOWN): string[] {
 export const STATE_LABEL: Record<OverallState, { icon: string; word: string; color: string }> = {
   strong: { icon: '✓', word: 'Strong', color: 'success' },
   weak: { icon: '!', word: 'Weak', color: 'warning' },
-  failing: { icon: '✕', word: 'Failing', color: 'error' },
+  // `failing` in the results file; said as "At risk": something that matters is known to be wrong or unprotected.
+  failing: { icon: '✕', word: 'At risk', color: 'error' },
   unchecked: { icon: '?', word: 'Not checked', color: 'inactive' },
   'not-proven': { icon: '?', word: 'Not proven yet', color: 'inactive' },
 }
@@ -291,7 +358,7 @@ export function summaryText(summary: Summary): string {
   if (summary.isStale) lines.push(`⟳ Measured at ${summary.run.commit}; the code has changed since. Run /imagineer:inspect again for a current grade.`)
   for (const dimension of summary.dimensions) {
     const label = labelFor(dimension)
-    const notes = [dimension.isStale || summary.isStale ? 'stale' : '', dimension.isClaimed ? 'claimed' : ''].filter(Boolean)
+    const notes = [dimension.isStale && !summary.isStale ? 'stale' : '', dimension.isClaimed ? 'claimed' : ''].filter(Boolean)
     lines.push(
       `  ${label.icon} ${dimension.name}: ${label.word}${dimension.summary ? `. ${dimension.summary}` : ''}${notes.length ? ` [${notes.join(', ')}]` : ''}`,
     )

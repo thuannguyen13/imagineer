@@ -105,11 +105,11 @@ export function selfCheck(repo) {
   const answered = (ledger?.questions ?? []).filter(q => q.status === 'answered')
   const own = answered.filter(q => q.ownWords).length
   if (answered.length >= 4 && own / answered.length > 0.5) {
-    flags.push(flag('poor-questions', 'inspect', 'own-words', `The user typed their own answer to ${own} of ${answered.length} questions: the suggestions did not fit.`))
+    flags.push(flag('poor-questions', 'inspect', 'own-words', `The user typed their own answer to ${own} of ${answered.length} questions: the options did not fit.`))
   }
   const seen = new Map()
   for (const q of ledger?.questions ?? []) {
-    const key = normalize(q.expectation)
+    const key = normalize(q.point ?? q.expectation)
     if (key.length < 12) continue
     if (seen.has(key)) flags.push(flag('poor-questions', 'inspect', 'repeated', `${q.id} asks again what ${seen.get(key)} asked.`))
     else seen.set(key, q.id)
@@ -120,7 +120,7 @@ export function selfCheck(repo) {
   for (const slug of existsSync(buildDir) ? readdirSync(buildDir) : []) {
     const state = readJsonIf(join(buildDir, slug, 'state.json'))
     const rounds = state?.rounds ?? []
-    if (rounds.length >= 4 && !rounds.at(-1)?.bar?.met) flags.push(flag('stuck', 'build', slug, `Build "${slug}" ran ${rounds.length} rounds without meeting the done bar.`))
+    if (rounds.length >= 4 && !rounds.at(-1)?.bar?.met) flags.push(flag('stuck', 'build', slug, `Build "${slug}" ran ${rounds.length} rounds without meeting the done thresholds.`))
   }
   return flags
 }

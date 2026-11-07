@@ -2,14 +2,43 @@
 
 Imagineer's releases, newest first. Below 1.0, the middle number goes up only when how you use Imagineer changes, or a command is added; those changes are listed first under **Changes you need to know**. Everything else is a patch (`0.2.1`). See [docs/proposals/inspect-and-build.md](docs/proposals/inspect-and-build.md#versioning).
 
-## 0.2.1 — unreleased
+## 0.3.0 — 2026-11-07
+
+Questions asked blind, a grade pane that fills in while Inspect runs, and a safer, leaner Inspect. Includes what was planned as 0.2.1, which was not released on its own.
+
+### Changes you need to know
+
+- Inspect no longer tells you what you seem to want, or what the app does, before you answer. It describes a situation and asks what should happen; one of the options is what the app does today, unmarked. Only if your answer differs does it show you what happens today, and ask whether to fix it or keep it as it is.
+- The question format changes. A question about what the app does is a **check**: a point, an example, possible outcomes, which one the app does today (never shown) and what a person sees today (shown only on a difference). The big picture and design decisions are a **choice**: suggestions, the recommended one first. `questions.mjs add` refuses the old format (`expectation` and `suggestions` on a check), and outcomes that give the answer away ("recommended", "today", "keep it as it is"). Questions still open from 0.2 are asked in their old layout.
+- A check's answer is recorded with `questions.mjs pick` (and `decide` for a gap), not `answer`.
 
 ### New
 
+- The Structure area is called **Code quality**, as readability becomes a main focus. Its id in the results file stays `structure`.
+- Inspect, Build and Feedback run their own scripts without asking you each time during a run (only `node` running Imagineer's scripts, and only for that run).
+- A run on a commit Inspect has already measured, with the same versions, reuses the earlier checks, structure, security scan and test strength instead of measuring again (the test strength check alone took 18 minutes on a real project), and says so. Ask to measure again to force it.
+- Each attack round records the parts of the app it did not reach. Security and Data safety list them as "Not attacked yet" and count them as gaps, never as safe, and the next round aims at them first.
+- Questions raised by attacks are asked before the run ends, instead of waiting for the next run.
+- Inspect's instructions are a short core plus references read only when a step starts (questions, proofs, attacks, repos with no docs), so each run loads less and the steps cannot contradict each other.
+- **Set your own test-strength thresholds per project:** say "use 65% for tests", or run `/imagineer:inspect --tests 65 --critical 85`. Inspect and Build keep them for that project, the grade bands follow them, and the pane says "the thresholds you set". Without them, Imagineer suggests 80% and 80%, now with what that number rests on written down.
+- The grade's worst state is called **At risk** instead of Failing: something that matters is known to be wrong or unprotected. The results file still says `failing`, so older results read the same.
+- "Matches your intent" counts what the questions found: answers that matched what the app does, gaps you want fixed, and gaps you chose to keep. A gap you want fixed counts against it at once, as Failing when it is about data, money or permissions.
+- Gaps are asked first, and the report lists each one: what you said, what the app does today, and whether you want it fixed.
+- Build's Architect writes choices for what is new, and checks, asked blind, for what the app already does.
+- The pane is drawn by one layout in every app: each area is one row of aligned columns (icon, name, state, its number and what it counts) with a › that opens its evidence, in the terminal and in Desktop alike.
+- The pane's two tabs each have a job. **Overview** (was Grade) shows how your project is doing, and says when questions wait for you, with a line that opens them. **Questions** shows what is waiting, gaps first, then **Your answers**: each question you resolved and what came of it ("Matches what the app does", "Differs from the app: you want it fixed", "Settled from the docs or code"), and whether a test proves it.
 - The grade pane fills in while Inspect runs. It opens as soon as Inspect starts, even on a project's first run, and each area appears as soon as it is measured; areas not reached yet show as **◌ Coming up**. The header and the line above the prompt say what Inspect is doing now, for example "Measuring test strength (about 18 minutes, until 14:30)". On the main screen, where a pane would cover the conversation, the **Details** button above the prompt opens it.
 - Choosing to skip the test-strength check shows it as not checked, with your reason, instead of waiting for it.
-- Build's Architect writes its questions the way Inspect does: the point first, what you'd expect, what happens today, an example, answers that say what they mean, and Not sure, with no code in the text. They are checked the same way, and kept with Inspect's answers, so neither asks them twice.
 - The model choice (Recommended, Budget, Maximum) now covers Inspect's attacker too. On Budget, Inspect's attacks run on the faster model instead of always on the strongest. Inspect asks once if you have not chosen yet.
+
+### Fixed
+
+- **Your project's tests could run with your credentials.** Inspect and Build ran the project's install, tests, mutation testing, proofs and attacks with your whole environment, so a test could reach a real database or service with your keys. They now get only what tools need (paths, locale, proxies); the run records the names left out, never their values. Network access is not blocked.
+- **A stopped test-strength check could leave its workers running.** Stopping Inspect while mutation testing ran left Stryker's processes working in the background. They now run as one group that stops with Inspect.
+- An Inspect run that was stopped before it finished left its throwaway copy, installed packages and all, in the temp folder. The next run removes copies earlier runs left behind.
+- Imagineer no longer writes to your repository's `.git/info/exclude`. Its folders keep themselves out of git with a `.gitignore` inside them. An entry an earlier version added stays until you remove it.
+- In the Desktop app, VS Code and on mobile, the pane's area rows were one flat line each, without colours or columns, because those apps draw a button as its plain label.
+- The self-check said "done bar" about a Build stuck at its round limit; it now says "done thresholds".
 
 ## 0.2.0 — 2026-11-06
 
