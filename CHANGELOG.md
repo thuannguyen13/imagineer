@@ -2,6 +2,10 @@
 
 ## 0.3.1 — unreleased
 
+### Improvements
+
+- **Version in the pane:** The grade pane shows Imagineer's version on the right of its tabs.
+
 ### Bug Fixes
 
 - **Skipped test strength check:** The self-check no longer blames Imagineer when you skip the test strength check or there is nothing to test. When the check really fails, the flag says why, for example "Could not find a test runner".

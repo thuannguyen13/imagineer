@@ -437,15 +437,19 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column" gap={1}>
-        <Box flexDirection="row" gap={1}>
-          {tabs.map(t => (
-            <Button
-              key={`tab-${t.id}`}
-              label={t.label}
-              variant={t.id === tab ? 'primary' : 'secondary'}
-              onPress={() => update($, tabAtom, () => t.id)}
-            />
-          ))}
+        {/* The tabs on the left, the plugin's version on the right of the same line. */}
+        <Box flexDirection="row" justifyContent="space-between">
+          <Box flexDirection="row" gap={1}>
+            {tabs.map(t => (
+              <Button
+                key={`tab-${t.id}`}
+                label={t.label}
+                variant={t.id === tab ? 'primary' : 'secondary'}
+                onPress={() => update($, tabAtom, () => t.id)}
+              />
+            ))}
+          </Box>
+          <Text dimColor>{`v${VERSION}`}</Text>
         </Box>
         {header}
         {tab === 'questions' ? questions : overview}
