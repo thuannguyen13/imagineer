@@ -24,7 +24,7 @@ Add feature-review-loop despite "no multi-agent ceremony by default". It is used
 
 Guard (one change, automatic), forge (one feature, `/forge`), ground (whole product, `/ground`). Each has one action and one reason to exist. Stage-per-skill sets (charter, ground, guard, forge, gate, tend) were rejected: five or six skills read as a pipeline, and their jobs fold into these three. Supersedes the 2026-10-13 plan for separate Forge and Pact skills.
 
-Guard is the base: it owns risk tiers and single-change rules, and forge and ground use them, so guard is installed with either. Skills never call each other; they hand off through project docs that people also read. Each concern has one owner; both lists are in `docs/proposals/skillset.md` §4.
+Guard is the base: it owns risk tiers and single-change rules, and forge and ground use them, so guard is installed with either. Skills never call each other; they hand off through project docs that people also read. Each concern has one owner; both lists are in `docs/archive/skillset.md` §4.
 
 ## 2026-10-28 — Names
 
@@ -58,7 +58,7 @@ The pull request lists what was removed and the bench results before and after.
 
 ## 2026-11-03 — Plugin packaging, with forge's roles as agents
 
-Package the repository as one Claude Code plugin, after a proposed "PO, Architect, Dev, QA" pipeline plugin. Its useful parts map onto what exists: PO is forge's orchestrator, Architect is `forge-scout` and `forge-plan-reviewer`, Dev is `forge-implementer` (preloads guard), QA is reviewers a–d and `forge-validator`. Role limits move from prose into agent frontmatter (`model`, `tools`, `maxTurns`, `isolation`), and the reviewer rule against commits, pushes and GitHub calls becomes a plugin hook keyed on `agent_type`, which works even though plugin agents ignore their own `hooks`. Supersedes "No plugin yet" in `docs/proposals/skillset.md` §5.
+Package the repository as one Claude Code plugin, after a proposed "PO, Architect, Dev, QA" pipeline plugin. Its useful parts map onto what exists: PO is forge's orchestrator, Architect is `forge-scout` and `forge-plan-reviewer`, Dev is `forge-implementer` (preloads guard), QA is reviewers a–d and `forge-validator`. Role limits move from prose into agent frontmatter (`model`, `tools`, `maxTurns`, `isolation`), and the reviewer rule against commits, pushes and GitHub calls becomes a plugin hook keyed on `agent_type`, which works even though plugin agents ignore their own `hooks`. Supersedes "No plugin yet" in `docs/archive/skillset.md` §5.
 
 Not adopted from that proposal: routing every change through the pipeline, and a lead that never edits code (routine work stays with guard, and no skill must run before another); `PROJECT_CONTEXT.md` (ground's project docs already hold it); `commands/` (skills supersede them); a handoff log hook (forge's `state.json` already records each spawn and round). Ground's hooks stay opt-in per project rather than plugin hooks, because they change what every session may do.
 

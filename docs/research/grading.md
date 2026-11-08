@@ -176,7 +176,7 @@ The owner asked what backs the 80% test-strength threshold. Searched for a resea
 
 
 
-Inozemtseva and Holmes (ICSE 2014, later an ICSE Most Influential Paper) found that once suite size is controlled for, coverage is "not strongly correlated" with a suite's ability to catch faults [cited: [paper PDF](https://cs.ubc.ca/~rtholmes/papers/icse_2014_inozemtseva.pdf)]. Mutation is not perfect either (Papadakis 2018), but it directly measures "would a test notice this break?", which is the question the user cares about. The project's own research reaches the same conclusion: "A test never seen failing is reading-level evidence" (`docs/feedback/FEATURE_REVIEW_LOOP_VERIFICATION.md`).
+Inozemtseva and Holmes (ICSE 2014, later an ICSE Most Influential Paper) found that once suite size is controlled for, coverage is "not strongly correlated" with a suite's ability to catch faults [cited: [paper PDF](https://cs.ubc.ca/~rtholmes/papers/icse_2014_inozemtseva.pdf)]. Mutation is not perfect either (Papadakis 2018), but it directly measures "would a test notice this break?", which is the question the user cares about. The project's own research reaches the same conclusion: "A test never seen failing is reading-level evidence" (`docs/archive/feature-review-loop/FEATURE_REVIEW_LOOP_VERIFICATION.md`).
 
 ### 2.3 What credible systems do
 
@@ -378,7 +378,7 @@ Rules [inferred]:
 - **Stale or degraded evidence can never be Strong.** It becomes Weak, labelled "needs re-check".
 - Confidence never changes the state silently. It is a separate visible axis, so a user can see "Strong ◐" (good, with defaults) as distinct from "Strong ●".
 
-Precedents: Fallow's `workspace_diagnostics` and N/A semantics; Scorecard's per-check `reason` and `details` fields; the project's own evidence-ledger design `{rid, method, artifact, sha}` (`docs/feedback/FEATURE_REVIEW_LOOP_FEEDBACK_B.md`).
+Precedents: Fallow's `workspace_diagnostics` and N/A semantics; Scorecard's per-check `reason` and `details` fields; the project's own evidence-ledger design `{rid, method, artifact, sha}` (`docs/archive/feature-review-loop/FEATURE_REVIEW_LOOP_FEEDBACK_B.md`).
 
 ---
 
@@ -455,6 +455,6 @@ Fallow's "81 B" is still visible, but only inside Structure, where it belongs.
 - Vasilescu et al., By no means (WETSoM 2011): https://researchr.org/publication/VasilescuSB11-0/bibtex
 - Front-of-pack label comprehension: https://www.foodnavigator.com/Legislation/Traffic-light-GDA-combo-best-in-UK-labelling-study
 - WCAG 2.2, 1.4.1 Use of Color: https://www.w3.org/WAI/WCAG22/Understanding/use-of-color.html
-- Internal: `docs/feedback/FEATURE_REVIEW_LOOP_VERIFICATION.md`, `docs/feedback/FEATURE_REVIEW_LOOP_FEEDBACK_B.md`
+- Internal: `docs/archive/feature-review-loop/FEATURE_REVIEW_LOOP_VERIFICATION.md`, `docs/archive/feature-review-loop/FEATURE_REVIEW_LOOP_FEEDBACK_B.md`
 
 **Not verified directly:** Code Climate's B–F bands; the full text of Heitlager 2007 and Vasilescu 2011 (cited via secondary sources); the exact ISO 25010:2023 characteristic list (paid standard; from secondary sources and my own knowledge); Test Certified levels 4–5.

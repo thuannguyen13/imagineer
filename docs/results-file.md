@@ -7,7 +7,7 @@ This page is format `1`. A reader that meets another format says so and asks for
 ## Where it lives
 
 - `.claude/imagineer/results.json`, at the repository root.
-- Inspect adds `.claude/imagineer/` to `.git/info/exclude` the first time it writes there, so the file is never committed unless the user chooses to.
+- `.claude/imagineer/` keeps itself out of git with a `.gitignore` inside it (since 0.3.0; earlier versions added it to `.git/info/exclude`), so the file is never committed unless the user chooses to. Nothing in `.git` is written.
 
 ## Format 1
 

@@ -1,6 +1,6 @@
 # Imagineer: Inspect and Build
 
-**Status:** direction set by the owner on 2026-11-05. What Inspect checks in each area set on 2026-11-06 ([What Inspect checks](#what-inspect-checks)); parts marked *Planned* are not built yet. Supersedes the three-skill entry points in [skillset.md](skillset.md): guard, forge and ground become parts of these two commands. The failure research in skillset.md §1 still applies.
+**Status:** direction set by the owner on 2026-11-05. What Inspect checks in each area set on 2026-11-06 ([What Inspect checks](#what-inspect-checks)); parts marked *Planned* are not built yet. Supersedes the three-skill entry points in [skillset.md](../archive/skillset.md): guard, forge and ground become parts of these two commands. The failure research in skillset.md §1 still applies.
 
 ## Purpose
 
