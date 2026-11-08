@@ -64,7 +64,7 @@ Not adopted from that proposal: routing every change through the pipeline, and a
 
 ## 2026-11-05 — Two commands: Inspect and Build
 
-Supersedes "Three skills, split by scope" and the forge redesign entries of 2026-11-03 as the plugin's entry points. The owner could not tell where to start with three skills and many agents. Imagineer now has two jobs, each one command: `/imagineer:inspect` makes an existing repo hard to break, and `/imagineer:build` builds new work to the same bar. A third command, `/imagineer:status`, shows the grade. Design: [docs/proposals/inspect-and-build.md](../docs/proposals/inspect-and-build.md).
+Supersedes "Three skills, split by scope" and the forge redesign entries of 2026-11-03 as the plugin's entry points. The owner could not tell where to start with three skills and many agents. Imagineer now has two jobs, each one command: `/imagineer:inspect` makes an existing repo hard to break, and `/imagineer:build` builds new work to the same bar. A third command, `/imagineer:status`, shows the grade. Design: [docs/proposals/inspect-and-build.md](proposals/inspect-and-build.md).
 
 Decided by the owner: the audience includes people with little or no technical knowledge, so every question goes to the user in plain language with suggestions and a type-your-own option; the Architect designs ahead but Dev builds only what is needed now; Inspect stops at a measured bar; JS/TS first; agent models are a per-user choice with a recommended default (Architect and QA on Opus, Dev on Sonnet); the grade is shown in a mod. Guard, forge and ground stop being entry points; their useful parts move into the two commands. The unmerged four-agent forge pipeline (`claude/serene-carson-pihsu8`) is input to Build, not merged as is.
 

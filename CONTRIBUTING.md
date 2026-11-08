@@ -6,8 +6,9 @@ For people changing Imagineer itself. Using it: see [README.md](README.md).
 
 - `plugin/`: what users install: skills, agents, the mod that draws the grade, and their tests.
 - `bench/`: a fixture app with planted defects, used to prove each change catches at least as much as before.
-- `docs/`: the design ([docs/proposals/inspect-and-build.md](docs/proposals/inspect-and-build.md)), the grading research and the results file format.
-- `plan/`: current work ([plan/now.md](plan/now.md)), later candidates and decisions.
+- `docs/`: the design ([docs/proposals/inspect-and-build.md](docs/proposals/inspect-and-build.md)), the grading research, the results file format, and earlier designs in `docs/archive/`.
+- [docs/decisions.md](docs/decisions.md): each decision about the design, dated, with why.
+- Current work and candidate ideas: GitHub issues, tracked on the Imagineer project board (Project #12). Candidates are Backlog issues titled "Candidate: …".
 - `CHANGELOG.md`: what changed in each release.
 
 To try a local checkout, run `claude --plugin-dir <path to this repository>/plugin`.

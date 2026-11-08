@@ -212,6 +212,22 @@ Each step is its own release, measured on the bench app before and after, and ke
 5. **The data safety and foundations additions.**
 6. **Hosted backends.** Read Supabase's row-level security policies and Firebase's security rules, ask about them like any other permission, and attack them against a local copy of the backend (the Supabase CLI's local stack, the Firebase emulator), never the user's live project. The first scope extension, ahead of any other language. Its place among the steps above is the owner's call.
 
+### Validation
+
+Imagineer is not marked validated until all of these hold, each with dated evidence (a test, a bench run or a real-project run) in its issue or pull request:
+
+- Test strength measured on the sales portal: a real number, on its business-rule code, in reasonable time ([#28](https://github.com/thuannguyen13/imagineer/issues/28)).
+- A run with the database the project's tests expect, so test strength matches CI ([#32](https://github.com/thuannguyen13/imagineer/issues/32)).
+- A run the owner starts with `/imagineer:inspect` in their own project, from the released version.
+- Inspect fully measures several projects with different layouts, with no layout assumptions left ([#29](https://github.com/thuannguyen13/imagineer/issues/29)). This is also the condition for turning Build back on.
+- The pane and band seen drawn in an interactive session in the Desktop app.
+
+### Not planned
+
+- A pipeline where one command must run before another.
+- A full architecture review on each change.
+- Copying each application's architecture into this repository.
+
 ## `/build`
 
 **Status:** turned off from 0.4.0 (decided 2026-11-08). Build stands on Inspect: it reads the project through Inspect's scan, learns intent from Inspect's questions and proves "done" with Inspect's test strength check. Until the scan reads any layout ([#29](https://github.com/thuannguyen13/imagineer/issues/29)) and test strength measures the right code in reasonable time ([#28](https://github.com/thuannguyen13/imagineer/issues/28)), Build cannot prove its work on projects like the sales portal. Its command and agents are kept in `parked/build/`, not installed; its script stays, because Inspect's attacker uses its model choice. Build comes back when Inspect fully measures several projects with different layouts (the bench app, the sales portal, a Vue or Svelte app, a monorepo) with no layout assumptions left.
@@ -524,4 +540,3 @@ The mod needs Claude Code 2.1.287 or later. It checks the running version and, o
 - What decides when Dev runs on Opus. Proposed: the Architect marks each task that touches data, money or permissions.
 - How existing parts fold in. Proposed: forge's run folder, state file, finding IDs and reviewer hook into Build; ground's checklist and the Inspector idea into Inspect; guard's rules into Dev's practices. The old skills and agents were removed in 0.2.0; their text stays at tag `v0.1.0` for these phases to draw on.
 - When Build brings review agents back, a mod `tool.call` hook could replace the Python settings hook forge used up to 0.1.0 (`forge-reviewer-guard.py`, run on every Bash call), and give a destructive-command guard proceed and cancel buttons. A mod loads in every session once the plugin is installed, so an opt-in guard needs its own switch.
-- Re-plan `plan/now.md` around these two commands; the bench stays the way each command is proven.

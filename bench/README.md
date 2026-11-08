@@ -1,6 +1,6 @@
 # Bench
 
-Seeded-defect scenarios that decide whether a skill is **validated** (`plan/decisions.md`). A skill change is kept only if the bench shows it catches at least as much as before.
+Seeded-defect scenarios that decide whether a skill is **validated** (`docs/decisions.md`). A skill change is kept only if the bench shows it catches at least as much as before.
 
 ## Layout
 
