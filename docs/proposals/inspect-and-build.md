@@ -418,21 +418,48 @@ Records go to a feedback log on the user's machine, outside their repo.
 The user sees the full record and can edit or delete any of it. Then:
 
 - **Report to Imagineer** opens a pre-filled GitHub issue on the Imagineer repository in their browser; they press Submit themselves. A mod's link holds about 2 KB, so the record is kept short.
-- **Save as file**, for users without a GitHub account.
+- **Save as file**, for users without a GitHub account, or who cannot file issues on the repository (it is private, so only people the owner invites can).
 
 No server, no background upload, nothing sent without the user seeing it.
 
-### Triage
+*Planned:* **each flag as a card in the pane**, with one click for each next step:
 
-For the owner, in the Imagineer repository, not shipped in the plugin, so users never see it:
+- **Send:** opens the pre-filled issue (the flag, the run, Imagineer's version and the user's note), showing exactly what goes, with the line "Never includes your code". The user presses Submit.
+- **Add a note:** a text box in the pane, "What happened, in your words?", sent with the report. The same draft can be started from the CLI with `/imagineer:feedback`.
+- **Not a problem:** hides the flag, remembered in the mod's own storage, never in the user's project.
+- **Try again:** where there is a clear next step, puts the command (such as `/imagineer:inspect`) in the prompt box, ready for Enter; the mod runs nothing itself.
+- A flag says in plain words what went wrong and what it means for the user, counts repeats ("seen in 3 runs") instead of listing them, and shows "Reported Nov 7" once sent, so it is not raised again.
+- **This was useful**, one click on a finished result, sends praise the same way; good results are evidence too.
 
-1. **Label** each issue: source (user or self-check), kind, area.
-2. **Group** issues with the same fingerprint into one, and count them.
-3. **Rank** by kind and count: misses and broken rules first, then false alarms, poor questions, cost.
-4. **Decide**: duplicate, needs more information, or accepted.
-5. **Learn** from an accepted issue: plant the same kind of defect in the bench app (never the user's code), add an oracle test that fails while it is present, change the skill or agent, and compare bench results before and after. Keep the change only if it catches at least as much at no more cost.
+### Triage and improvement (planned: automatic)
 
-Triage runs on request or on a schedule. The plugin never edits its own skills or agents in place; every change is a pull request the owner reviews.
+For the owner, in the Imagineer repository, not shipped in the plugin, so users never see it. It runs on its own as scheduled cloud agents (Claude Code routines), so it works while the owner's machine is off, and stops at two decisions that stay the owner's: which issues to act on, and which changes to merge.
+
+```
+Report ──▶ Issue ──▶ Triage agent ──▶ Owner: accept? ──▶ Improver agent ──▶ Branch with proof ──▶ Owner: merge
+          labelled    daily summary     one reply          per issue         bench before/after     next release
+```
+
+1. **Intake (automatic).** A report from the pane, the CLI or the self-check becomes a GitHub issue carrying its fingerprint (kind, area, rule), so repeats are recognised.
+2. **Triage (a scheduled agent, daily):**
+   - **labels** each new issue: source (user or self-check), kind, area;
+   - **groups** issues with the same fingerprint into one and counts them ("reported 4 times");
+   - **reproduces** each on the bench app where it can, so a real problem is told apart from a false alarm or a one-off;
+   - **ranks** them: misses and broken rules first, then false alarms, poor questions, cost;
+   - **sends the owner one short summary**: "3 new: 1 real (the test strength estimate runs 20% low), 1 duplicate, 1 needs information".
+3. **The owner decides.** One reply accepts, declines or asks for more ("accept 1", "accept all real"). Triage is automatic; what Imagineer should become is the owner's call.
+4. **Improve (an agent per accepted issue):** plant the same kind of defect in the bench app (never anyone's code), add an oracle test that fails while it is present, change the skill, agent or script, and run the bench before and after. Keep the change only if it catches at least as much at no more cost; otherwise report why it was dropped.
+5. **Review.** The result is a branch with its evidence: the reproduction, the bench before and after, and the diff. Following the owner's standing rule, the routine opens no pull request; it reports the branch ready, and the owner opens it or merges. Changes collect into the next release.
+
+**Guardrails.**
+
+- **Issue text is untrusted.** Anyone who can file an issue can write instructions into it. The triage and improver agents read issue text as data, never as orders.
+- **What they may touch:** only the plugin and the bench app, on their own branches. Never `main`, CI, releases, settings or secrets.
+- **Never in place:** Imagineer never edits its own skills or agents where they run; every change is a branch the owner reviews.
+- **A cap per day**, for example 3 improvements, so a flood of issues cannot spend the owner's usage.
+- **Every decision is logged**: why an issue was grouped, declined or accepted, and what the bench showed.
+
+**Built in pieces:** flag cards with Send (intake); then the triage routine; then the improver.
 
 ## Versioning
 
