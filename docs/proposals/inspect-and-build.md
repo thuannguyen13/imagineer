@@ -12,7 +12,11 @@ Imagineer makes AI-built software trustworthy without the user having to trust t
 2. **`/build`** new work in a new or ongoing repo, to the same quality thresholds.
 
 **Audience:** people with little or no technical knowledge, and the owner (technical). Used by the owner only, for now.
-**Stack:** JavaScript and TypeScript first. Other stacks later, each with its own tools.
+**Stack:** JavaScript and TypeScript web apps, in any layout and framework (see [Principles](#principles)).
+
+- **Hosted backends are in scope.** Many apps built by prompting are a front end on Supabase or Firebase, where who may see or change what is set by the backend's own rules (Supabase row-level security policies in SQL, Firebase security rules), not by the app's code. Inspect checks and attacks those rules too, or Security and Data safety would grade the front end while the real permissions go unchecked. *Planned* ([Roadmap](#roadmap)).
+- **What is not covered is said, never left out.** A part of the repository outside the stack, such as a Python back end beside a React front end, is reported as not checked, by name, in the pane and the report. The grade never reads as covering code Inspect did not look at.
+- **Later, each with its own tools:** other languages (Python, Ruby, PHP, Go), added when real users bring those projects; mobile apps in JavaScript (React Native, Expo), whose attacks and checks need more than a server and a browser.
 
 ## How each part is started
 
@@ -36,6 +40,7 @@ When a command runs, Claude Code fires a `command.run` event before the skill do
 - **Evidence over claims.** A report written by an agent is not proof. Tests that are seen failing and then passing, tool results, and the user's answers are.
 - **Separation of duties.** Whoever writes code does not write its tests, and whoever writes tests does not write code.
 - **The user decides intent.** Agents never guess what the user meant when they can ask.
+- **Read the project; never assume it.** Imagineer works on any project in its stacks, whatever its layout, framework, package manager or CI. Every run starts from a scan of the project's structure, and each later step plans from what the scan found, never from a fixed folder, file name or tool. Where the scan cannot tell, Imagineer asks the user once and keeps the answer for that project. A default is used only when it is shown to the user as a default (like the 80% thresholds); it is never applied silently. *Planned:* the scan records a layout and every step reads it ([#29](https://github.com/thuannguyen13/imagineer/issues/29)).
 - **Leave no trace unless asked.** Inspect does not add files, dependencies or config to the user's repo, and never writes in its `.git`. Its own files live under `.claude/imagineer/`, kept out of git by a `.gitignore` inside that folder.
 - **The project's code runs without the user's credentials.** Inspect and Build run the project's install, tests and attacks with only what tools need from the environment, so a test cannot reach a real database or service with the user's keys. Network access is not blocked: that would need a container, a heavier dependency than the risk calls for today.
 
@@ -45,7 +50,7 @@ When a command runs, Claude Code fires a `command.run` event before the skill do
 
 ### Steps
 
-1. **Research.** Read the docs and the code. At the same time, run the tools (below).
+1. **Research.** Scan the project's structure first: where its packages, source, tests, docs and agent instructions are, and which test runner, scripts and CI it uses. Every later step starts from that scan. Then read the docs and the code, and run the tools (below).
 2. **Ask.** Turn every gap between what the code does and what it seems meant to do into a question for the user (format below).
 3. **Attack.** Try to break the system: permissions, data integrity, double submits, partial saves, errors, inputs. Every break that gets through becomes a question for the user and, once confirmed, a test that fails until it is fixed.
 4. **Repeat** from 2 until the finish thresholds are met.
@@ -205,6 +210,7 @@ Each step is its own release, measured on the bench app before and after, and ke
 3. **Intent from more than one angle, and the no-docs scaffold.** What sets Imagineer apart from a scanner: it finds out what the user wants, not only what the code does.
 4. **The readability review agent, and property-based tests in proofs.**
 5. **The data safety and foundations additions.**
+6. **Hosted backends.** Read Supabase's row-level security policies and Firebase's security rules, ask about them like any other permission, and attack them against a local copy of the backend (the Supabase CLI's local stack, the Firebase emulator), never the user's live project. The first scope extension, ahead of any other language. Its place among the steps above is the owner's call.
 
 ## `/build`
 
