@@ -20,9 +20,10 @@ In Claude Code:
 | Command | Use it when |
 | --- | --- |
 | `/imagineer:inspect` | You have a project and want to know whether it does what you meant, and how safe it is |
-| `/imagineer:build <what to build>` | You want to add a feature and have it built with tests, ready for your review |
 | `/imagineer:status` | You want to see your project's grade and any questions waiting for you |
 | `/imagineer:feedback` | Imagineer got something wrong, or right, and you want to say so |
+
+Build, which made new features with tests, is turned off for now while Inspect learns to read any project reliably.
 
 ### Inspect: check what you have
 
@@ -31,14 +32,6 @@ Run `/imagineer:inspect` in your project, ideally first, and again after big cha
 It asks you, in plain words, what the app should do, checks your answers against what the app actually does, and tries to break it, for example by letting one user see another's data. When something doesn't match, it tells you and asks whether to fix it or keep it.
 
 It never changes your code or your git history. It can offer tests and docs as new files, but nothing is added without your yes. Run it again to continue where you left off.
-
-### Build: add something new
-
-Run `/imagineer:build` followed by what you want, for example `/imagineer:build let managers approve expenses over $500`.
-
-It turns your request into plain-language requirements for you to approve, then builds the feature with tests on its own branch, apart from your work. You see what was built for each requirement, and it asks before opening a pull request. It never merges.
-
-Run `/imagineer:build` on its own to pick up an unfinished build.
 
 ### Status: see the grade
 

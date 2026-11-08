@@ -1,6 +1,10 @@
 # Changelog
 
-## 0.3.1 — unreleased
+## 0.4.0 — unreleased
+
+### Changes you need to know
+
+- **Build turned off:** `/imagineer:build` is no longer available while Inspect learns to read any project's layout and to measure test strength reliably; on some projects Build could not prove its work was done. Unfinished Build runs stay in `.claude/imagineer/build/` and can be resumed once Build is back. ([#28](https://github.com/thuannguyen13/imagineer/issues/28), [#29](https://github.com/thuannguyen13/imagineer/issues/29))
 
 ### Improvements
 
