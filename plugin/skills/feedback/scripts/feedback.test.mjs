@@ -108,3 +108,14 @@ test('a test strength check the user chose to skip is not Imagineer going wrong;
   assert.equal(flag.kind, 'tool-trouble')
   assert.equal(flag.said, 'The test strength check failed in Inspect run 3: Error: Could not find a test runner for "vitest".')
 })
+
+test("a test strength check that failed is flagged, even where only the estimate recorded it or it was recorded as the user's skip", t => {
+  const output = ' FAIL  features/audit/writing-actions.test.ts > uses every action\n10:00:00 (1) ERROR Stryker There were failed tests in the initial test run.'
+  const onlyEstimate = repo(t, { '.claude/imagineer/runs/3/stryker-estimate.json': { ok: false, output } })
+  assert.equal(selfCheck(onlyEstimate)[0]?.said, 'The test strength check failed in Inspect run 3: some tests fail under the test strength tool, though they pass in a normal run')
+  const maskedAsSkip = repo(t, {
+    '.claude/imagineer/runs/2/stryker-estimate.json': { ok: false, output },
+    '.claude/imagineer/runs/2/stryker.json': { ok: false, declined: 'Some tests fail when run under the test-strength tool' },
+  })
+  assert.equal(selfCheck(maskedAsSkip)[0]?.rule, 'stryker')
+})

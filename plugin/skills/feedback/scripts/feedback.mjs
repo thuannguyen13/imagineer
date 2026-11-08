@@ -14,6 +14,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, write
 import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { testStrengthResult } from '../../inspect/scripts/lib.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO_URL = 'https://github.com/thuannguyen13/imagineer'
@@ -79,7 +80,9 @@ export function selfCheck(repo) {
   if (latest) {
     const out = join(runsDir, latest)
     const fallow = readJsonIf(join(out, 'fallow.json'))
-    const stryker = readJsonIf(join(out, 'stryker.json'))
+    // Read as the grade reads it: a first test run that failed is a failure, even where only the
+    // estimate recorded it or it was recorded as the user's skip.
+    const stryker = testStrengthResult(out)
     // Only a tool that failed is Imagineer's trouble. A test-strength check the user chose to skip
     // (declined), or one with nothing to run (skipped: no test command), is not.
     const why = result => {

@@ -8,6 +8,7 @@
 
 ### Bug Fixes
 
+- **Test strength check that couldn't run:** When the check failed at its first test run, the pane said "not measured" and nothing was flagged. It now says "could not run", why, and which tests failed, the self-check flags it, and a failure is never recorded as your choice to skip. ([#28](https://github.com/thuannguyen13/imagineer/issues/28))
 - **Skipped test strength check:** The self-check no longer blames Imagineer when you skip the test strength check or there is nothing to test. When the check really fails, the flag says why, for example "Could not find a test runner".
 
 ## 0.3.0 — 2026-11-07

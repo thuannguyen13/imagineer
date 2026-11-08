@@ -18,7 +18,7 @@ import { availableParallelism, tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { detect } from './detect.mjs'
-import { arg, PINNED, projectEnv, readJson, readJsonIf, run, runGroup, tail, writeJson } from './lib.mjs'
+import { arg, PINNED, projectEnv, readJson, readJsonIf, run, runGroup, strykerFailure, tail, writeJson } from './lib.mjs'
 
 const INSTALL = {
   npm: lock => (lock ? ['npm', 'ci', '--no-audit', '--no-fund'] : ['npm', 'install', '--no-audit', '--no-fund']),
@@ -190,7 +190,9 @@ async function stryker(out, isEstimate) {
     if (!existsSync(bin)) {
       const installed = run(['npm', 'install', '--prefix', tools, '--no-audit', '--no-fund', `@stryker-mutator/core@${PINNED.stryker}`, 'typescript@5'], { timeoutMs: 10 * 60_000 })
       if (!installed.ok) {
-        writeJson(join(out, isEstimate ? 'stryker-estimate.json' : 'stryker.json'), { ok: false, error: `Could not install Stryker: ${tail(installed.stderr)}` })
+        const failed = { ok: false, error: `Could not install Stryker: ${tail(installed.stderr)}` }
+        if (isEstimate) writeJson(join(out, 'stryker-estimate.json'), failed)
+        writeJson(join(out, 'stryker.json'), failed)
         console.log('Stryker could not be installed.')
         return
       }
@@ -238,7 +240,15 @@ async function stryker(out, isEstimate) {
     // Runs side by side slow each other down; 1.5 is what the first real project showed at this concurrency.
     const minutes = Number.isFinite(mutants) && Number.isFinite(testSeconds) ? Math.ceil((mutants * testSeconds * 1.5) / concurrency / 60) : null
     writeJson(join(out, 'stryker-estimate.json'), { ok: result.ok, mutants, testSeconds, concurrency, minutes, output: result.ok ? '' : tail(log) })
-    console.log(result.ok ? `Stryker: ${mutants} mutants, about ${minutes} minutes with ${concurrency} at a time.` : `Stryker dry run failed:\n${tail(log)}`)
+    if (result.ok) {
+      console.log(`Stryker: ${mutants} mutants, about ${minutes} minutes with ${concurrency} at a time.`)
+      return
+    }
+    // A failed first run means the full run cannot run either: recorded as a failed check, so the grade
+    // says it could not run and why, and the self-check flags it. Never left looking like "not measured yet".
+    const { reason, failingTests } = strykerFailure(log)
+    writeJson(join(out, 'stryker.json'), { ok: false, error: reason, failingTests })
+    console.log(`Test strength could not run: ${reason}.${failingTests.length ? `\nFailing tests:\n${failingTests.map(t => `- ${t}`).join('\n')}` : ''}`)
     return
   }
 
@@ -322,6 +332,12 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
     else if (step === 'fallow') fallow(out)
     else if (step === 'stryker' && arg('decline')) {
       // The user chose not to run it this time: recorded, so the grade says so instead of waiting for it.
+      // A check that already failed is never recorded as the user's choice: that would hide the failure.
+      const earlier = readJsonIf(join(out, 'stryker.json'))
+      if (earlier && earlier.ok === false && earlier.error) {
+        console.error(`Test strength could not run (${earlier.error}); it stays recorded as a failure, not as skipped.`)
+        process.exit(1)
+      }
       writeJson(join(out, 'stryker.json'), { ok: false, declined: arg('decline') })
       console.log('Test strength not measured this time.')
     } else if (step === 'stryker') {

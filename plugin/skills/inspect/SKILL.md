@@ -53,7 +53,7 @@ You are the Lead. You talk to the user, run the steps below, and explain what wa
 6. **Test strength.** Regrade with `--step "Estimating how long the test check takes"`, run `node $S/measure.mjs stryker --out $O --estimate` and read `$O/stryker-estimate.json`.
    - If the estimate is 20 minutes or less, go on.
    - If it is longer, ask: run it now (say the estimate), or skip it this time. To skip, run `node $S/measure.mjs stryker --out $O --decline "<why, in plain words>"`: test strength then shows as not checked, with that reason.
-   - If the dry run failed, report why in one sentence and skip to step 7.
+   - If the dry run failed, the script has already recorded it as could not run, with the reason and the failing tests it found. Tell the user in one sentence, name those tests, and skip to step 7. Never record a failure with `--decline`: that is for the user's own choice, and the script refuses it once the check has failed.
    - To run it: regrade with `--step "Measuring test strength (about <n> minutes, until <time>)"`, then `node $S/measure.mjs stryker --out $O`, in the background, and tell the user roughly when it will finish.
 
 7. **Grade.** Run `node $S/grade.mjs --repo $R --out $O --status running --step "Reading the code to write your questions"`. Keep the copy: the next steps use it. If the user asked for measuring alone, regrade with `--status done` and go to step 12.

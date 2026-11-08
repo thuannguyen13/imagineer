@@ -70,6 +70,41 @@ export function run(argv, { cwd, timeoutMs = 10 * 60_000, env, project = false }
 /** The last lines of a command's output, for a report. */
 export const tail = (text, lines = 20) => text.trim().split('\n').slice(-lines).join('\n')
 
+/**
+ * Why a test strength run stopped, in plain words, and the tests that failed in it, read from its
+ * whole output (the failing tests' names come long before the last lines).
+ */
+export function strykerFailure(log) {
+  const text = String(log ?? '').replace(/\u001b\[[0-9;]*m/g, '')
+  const names = pattern =>
+    [...new Set([...text.matchAll(pattern)].map(m => m[1].replace(/\s+\d+(\.\d+)?m?s$/, '').trim()))].filter(Boolean)
+  // A file's FAIL line names it; the × lines name single tests when no FAIL line was printed.
+  const byFile = names(/^\s*FAIL\s+(\S.*)$/gm)
+  const failingTests = (byFile.length ? byFile : names(/^\s*[×✗✕]\s+(\S.*)$/gm)).slice(0, 10)
+  if (/failed tests in the initial test run/i.test(text)) {
+    return { reason: 'some tests fail under the test strength tool, though they pass in a normal run', failingTests }
+  }
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
+  const error = lines.find(l => /ERROR Stryker/.test(l))?.replace(/^.*ERROR Stryker\s*/, '') ?? lines.at(-1) ?? 'the tool stopped without saying why'
+  return { reason: error.length > 140 ? `${error.slice(0, 139)}…` : error, failingTests }
+}
+
+/**
+ * A run's test strength result (`stryker.json`). Runs from before 0.3.1 wrote only the estimate when
+ * its first test run failed, and an agent sometimes recorded that failure as the user's skip: both are
+ * read as the failure they were.
+ */
+export function testStrengthResult(out) {
+  const recorded = readJsonIf(join(out, 'stryker.json'))
+  const estimate = readJsonIf(join(out, 'stryker-estimate.json'))
+  if (estimate && estimate.ok === false && !estimate.reused && (!recorded || recorded.declined)) {
+    if (estimate.error) return { ok: false, error: estimate.error, failingTests: [] }
+    const { reason, failingTests } = strykerFailure(estimate.output)
+    return { ok: false, error: reason, failingTests }
+  }
+  return recorded
+}
+
 /** Every file under a folder, relative to it, skipping dependencies and build output. */
 export function listFiles(root, { skip = ['node_modules', '.git', 'dist', 'build', 'coverage', '.next', '.claude', 'reports', '.stryker-tmp'] } = {}) {
   const out = []
