@@ -444,11 +444,19 @@ The user sees the full record and can edit or delete any of it. Then:
 - **Report to Imagineer** opens a pre-filled GitHub issue on the Imagineer repository in their browser; they press Submit themselves. A mod's link holds about 2 KB, so the record is kept short.
 - **Save as file**, for users without a GitHub account, or who cannot file issues on the repository (it is private, so only people the owner invites can).
 
-No server, no background upload, nothing sent without the user seeing it.
+No background upload, and nothing sent without the user seeing it.
+
+*Planned (decided 2026-11-09, [#39](https://github.com/thuannguyen13/imagineer/issues/39)):* **send from inside Imagineer.** The repository is private, so a pre-filled issue only works for people the owner invites, and a saved file rarely reaches the owner. Instead:
+
+- **One click to send.** The user sees the exact record, can edit it, and presses **Send**. That is the pane's Send button, or a confirmation in `/imagineer:feedback`. No GitHub account is needed.
+- **A small relay** receives it and files it as an issue in this repository, with the `feedback` label and its fingerprint, so triage works as before. The relay only forwards what the user sent. It holds the repository key itself, so nothing secret ships in the plugin, and it limits how much one sender can file.
+- **Private by default.** Feedback from attacks, or about permissions, data, money or secrets, can describe how a user's app can be broken. It only ever goes through this private channel. Records stay generic where they can: kind, area, rule and what Imagineer did.
+- **Save as file** stays as the fallback when the relay cannot be reached.
+- Open: how the pane's button sends while the mod stays read-only (a network call allowed to the mod for this one action, or handing the send to `feedback.mjs`); and where the relay runs.
 
 *Planned:* **each flag as a card in the pane**, with one click for each next step:
 
-- **Send:** opens the pre-filled issue (the flag, the run, Imagineer's version and the user's note), showing exactly what goes, with the line "Never includes your code". The user presses Submit.
+- **Send:** shows exactly what goes (the flag, the run, Imagineer's version and the user's note), with the line "Never includes your code", and sends it with one click through the relay above.
 - **Add a note:** a text box in the pane, "What happened, in your words?", sent with the report. The same draft can be started from the CLI with `/imagineer:feedback`.
 - **Not a problem:** hides the flag, remembered in the mod's own storage, never in the user's project.
 - **Try again:** where there is a clear next step, puts the command (such as `/imagineer:inspect`) in the prompt box, ready for Enter; the mod runs nothing itself.
