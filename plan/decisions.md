@@ -24,7 +24,7 @@ Add feature-review-loop despite "no multi-agent ceremony by default". It is used
 
 Guard (one change, automatic), forge (one feature, `/forge`), ground (whole product, `/ground`). Each has one action and one reason to exist. Stage-per-skill sets (charter, ground, guard, forge, gate, tend) were rejected: five or six skills read as a pipeline, and their jobs fold into these three. Supersedes the 2026-10-13 plan for separate Forge and Pact skills.
 
-Guard is the base: it owns risk tiers and single-change rules, and forge and ground use them, so guard is installed with either. Skills never call each other; they hand off through project docs that people also read. Each concern has one owner; both lists are in `docs/proposals/skillset.md` §4.
+Guard is the base: it owns risk tiers and single-change rules, and forge and ground use them, so guard is installed with either. Skills never call each other; they hand off through project docs that people also read. Each concern has one owner; both lists are in `docs/archive/skillset.md` §4.
 
 ## 2026-10-28 — Names
 
@@ -58,7 +58,7 @@ The pull request lists what was removed and the bench results before and after.
 
 ## 2026-11-03 — Plugin packaging, with forge's roles as agents
 
-Package the repository as one Claude Code plugin, after a proposed "PO, Architect, Dev, QA" pipeline plugin. Its useful parts map onto what exists: PO is forge's orchestrator, Architect is `forge-scout` and `forge-plan-reviewer`, Dev is `forge-implementer` (preloads guard), QA is reviewers a–d and `forge-validator`. Role limits move from prose into agent frontmatter (`model`, `tools`, `maxTurns`, `isolation`), and the reviewer rule against commits, pushes and GitHub calls becomes a plugin hook keyed on `agent_type`, which works even though plugin agents ignore their own `hooks`. Supersedes "No plugin yet" in `docs/proposals/skillset.md` §5.
+Package the repository as one Claude Code plugin, after a proposed "PO, Architect, Dev, QA" pipeline plugin. Its useful parts map onto what exists: PO is forge's orchestrator, Architect is `forge-scout` and `forge-plan-reviewer`, Dev is `forge-implementer` (preloads guard), QA is reviewers a–d and `forge-validator`. Role limits move from prose into agent frontmatter (`model`, `tools`, `maxTurns`, `isolation`), and the reviewer rule against commits, pushes and GitHub calls becomes a plugin hook keyed on `agent_type`, which works even though plugin agents ignore their own `hooks`. Supersedes "No plugin yet" in `docs/archive/skillset.md` §5.
 
 Not adopted from that proposal: routing every change through the pipeline, and a lead that never edits code (routine work stays with guard, and no skill must run before another); `PROJECT_CONTEXT.md` (ground's project docs already hold it); `commands/` (skills supersede them); a handoff log hook (forge's `state.json` already records each spawn and round). Ground's hooks stay opt-in per project rather than plugin hooks, because they change what every session may do.
 
@@ -112,3 +112,15 @@ The owner found the 80% test-strength threshold lacked a good backing reason. Re
 ## 2026-11-07 — Findings approved
 
 The owner approved the Findings design as proposed: one list of everything Inspect found, each with a status (suspected, measured, confirmed, proven safe, decided, not checked) and a severity, set only by `grade.mjs`. The pane lists open findings and counts closed ones; findings group by behaviour once a question is about them, by file until then. Findings come first on the roadmap, ahead of secret scanning, so every later check adds to one list. The remaining mentions of the Structure area are now Code quality.
+
+## 2026-11-07 — Read the project; never assume it
+
+Inspect run 3 on the sales portal measured test strength on 26 helper files in `lib/` and none of `features/` or `app/`, because Stryker fell back to its own default folders (#28). A sweep of Inspect and Build then found 17 more places that act on a fixed folder, file name or tool instead of on what the project has: the file walk, a single `package.json` at the root, source and test file patterns, env access, CI, script names, package managers, the audit, the docs location and Build's role guard (#29). They held only because Imagineer had been tried on two repositories with the same layout. The owner set the principle: Imagineer must work on any project in its stacks, so every run starts from a structure scan that the later steps plan from. Discussed and refined: defaults cannot be avoided entirely, so the rule is that none is applied silently. Imagineer reads the project, asks once when it cannot tell, and shows any default as a default. Supporting stacks beyond JavaScript and TypeScript stays a roadmap decision.
+
+## 2026-11-07 — Scope: JavaScript and TypeScript web, hosted backends included
+
+The owner confirmed the scope as JavaScript and TypeScript web apps and asked whether that covers enough. It covers the stack most apps built by prompting use, but permissions in those apps often live in a hosted backend (Supabase row-level security, Firebase security rules), where Inspect would grade the front end and miss the real rules. The owner added hosted backends to the scope, as the first extension ahead of any other language, attacked only against a local copy of the backend. Any part of a repository outside the stack is reported as not checked, by name, so the grade never reads as covering it. Other languages and JavaScript mobile apps stay for later.
+
+## 2026-11-08 — Build turned off until Inspect's foundations hold
+
+The owner asked whether shipping Build was premature, since Inspect cannot yet learn enough about a repository for an agent to build on it. Build's done check depends on Inspect's test strength check: on the sales portal that check cannot run, so every Build round would end "mutation testing skipped" until the round limit, and each round would run the whole test suite per planted bug. Build also carries its own layout assumptions (#29). The owner turned Build off for 0.4.0 rather than gating it. Its command and agents are parked in `parked/build/`, outside the plugin; `build.mjs` stays because Inspect's attacker uses its model choice. Build returns when Inspect fully measures several projects with different layouts with no layout assumptions left (#28 part 2, #29).

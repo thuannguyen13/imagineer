@@ -100,3 +100,44 @@ test("thresholds are Imagineer's 80 and 80 until the user sets their own for a r
   assert.ok(existsSync(join(repo, '.claude/imagineer/.gitignore')))
   assert.deepEqual(saveThresholds(repo, { reset: true }), { tests: 80, critical: 80, bySetting: false })
 })
+
+import { strykerFailure, testStrengthResult } from './lib.mjs'
+
+// The shape of Stryker's output when the first test run fails, cut from a real Vitest project.
+const FAILED_DRY_RUN = [
+  '\u001b[31m FAIL \u001b[39m features/audit/writing-actions.test.ts > audit actions > uses every action in the list in a write',
+  'AssertionError: expected [ "user.join", "user.link" ] to deeply equal []',
+  '   × uses every action in the list in a write 15ms',
+  ' Test Files  1 failed | 193 passed (194)',
+  '\u001b[91m15:54:00 (32625) ERROR Stryker\u001b[39m There were failed tests in the initial test run.',
+  'ConfigError: There were failed tests in the initial test run.',
+].join('\n')
+
+test('a failed first test run is read as a plain reason, with the tests that failed', () => {
+  assert.deepEqual(strykerFailure(FAILED_DRY_RUN), {
+    reason: 'some tests fail under the test strength tool, though they pass in a normal run',
+    failingTests: ['features/audit/writing-actions.test.ts > audit actions > uses every action in the list in a write'],
+  })
+  // Any other stop: Stryker's own error line, never its stack.
+  assert.equal(strykerFailure('x\n10:00:00 (1) ERROR Stryker Could not find a test runner\n    at y').reason, 'Could not find a test runner')
+  assert.deepEqual(strykerFailure('').failingTests, [])
+})
+
+test("a failure only the estimate recorded, or recorded as the user's skip, reads as the failure it was", t => {
+  const dir = mkdtempSync(join(tmpdir(), 'imagineer-ts-'))
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  const write = (name, value) => writeFileSync(join(dir, name), JSON.stringify(value))
+
+  write('stryker-estimate.json', { ok: false, output: FAILED_DRY_RUN })
+  assert.equal(testStrengthResult(dir).error, 'some tests fail under the test strength tool, though they pass in a normal run')
+  write('stryker.json', { ok: false, declined: 'Some tests fail when run under the test-strength tool' })
+  assert.equal(testStrengthResult(dir).declined, undefined)
+  assert.equal(testStrengthResult(dir).failingTests.length, 1)
+
+  // A later run that worked wins; a skip with nothing failed stays the user's skip.
+  write('stryker.json', { ok: true })
+  assert.deepEqual(testStrengthResult(dir), { ok: true })
+  write('stryker-estimate.json', { ok: true, minutes: 45 })
+  write('stryker.json', { ok: false, declined: 'it would take about 45 minutes' })
+  assert.equal(testStrengthResult(dir).declined, 'it would take about 45 minutes')
+})

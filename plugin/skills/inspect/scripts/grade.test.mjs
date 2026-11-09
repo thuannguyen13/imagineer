@@ -545,3 +545,21 @@ test('test strength is graded against the thresholds in force, and says whose th
   const steps = finishProgress(() => ({ state: 'weak' }), 0, { stryker, mutation: caught(70), thresholds: { tests: 65, critical: 80, bySetting: true } })
   assert.deepEqual([steps[0].done, steps[0].total, steps[0].text], [65, 65, '70% of 65%'])
 })
+
+test('test strength that could not run says so and why, names the failing tests, and is never "not measured yet"', () => {
+  const stryker = { ok: false, error: 'some tests fail under the test strength tool, though they pass in a normal run', failingTests: ['features/audit/writing-actions.test.ts'] }
+  const d = testStrength({ stryker })
+  assert.equal(d.state, 'unchecked')
+  assert.equal(d.summary, 'Could not run: Some tests fail under the test strength tool, though they pass in a normal run.')
+  assert.deepEqual(d.items, ['features/audit/writing-actions.test.ts'])
+  assert.equal(metricFor(d, { stryker }).text, 'could not run')
+  assert.deepEqual(testStrengthNeeds({ stryker }), ['a measurement of test strength (the last one could not run)'])
+  const byId = id => (id === 'test-strength' ? d : undefined)
+  assert.equal(finishProgress(byId, 0, { stryker })[0].text, 'could not run')
+
+  // Skipped by the user, and not reached yet, each say their own thing.
+  const declined = { ok: false, declined: 'it would take about 45 minutes' }
+  assert.equal(metricFor(testStrength({ stryker: declined }), { stryker: declined }).text, 'skipped this time')
+  assert.equal(finishProgress(byId, 0, { stryker: declined })[0].text, 'skipped this time')
+  assert.equal(finishProgress(byId, 0, {})[0].text, 'not measured yet')
+})

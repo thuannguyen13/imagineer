@@ -10,7 +10,7 @@
 import { existsSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { arg, DEFAULT_THRESHOLDS, keepOutOfGit, loadThresholds, readJson, readJsonIf, writeJson } from './lib.mjs'
+import { arg, DEFAULT_THRESHOLDS, keepOutOfGit, loadThresholds, readJson, readJsonIf, testStrengthResult, writeJson } from './lib.mjs'
 import { loadAttacks, rounds, untestedNow } from './attack.mjs'
 import { CRITICAL_TOPICS, emptyLedger, findings, isCritical, isGapToFix, loadLedger, openQuestions, summary } from './questions.mjs'
 
@@ -57,6 +57,10 @@ export function testStrength(evidence) {
   if (!stryker) return dimension('test-strength', name, 'trust', 'unchecked', 'none', 'Not measured yet.')
   if (stryker.skipped) return dimension('test-strength', name, 'trust', 'failing', 'default', stryker.skipped)
   if (stryker.declined) return dimension('test-strength', name, 'trust', 'unchecked', 'none', `Not measured this time: ${stryker.declined}`)
+  if (stryker.error) {
+    const why = stryker.error.replace(/^\w/, c => c.toUpperCase()).replace(/\.?$/, '.')
+    return dimension('test-strength', name, 'trust', 'unchecked', 'none', `Could not run: ${why}`, stryker.failingTests ?? [])
+  }
   if (!stryker.ok || !mutation) return dimension('test-strength', name, 'trust', 'unchecked', 'none', 'Mutation testing could not run, so test strength is unknown.')
 
   const { caught, total, timeouts, score, files } = mutationScore(mutation)
@@ -300,6 +304,10 @@ export function dataSafety(evidence) {
 /** Shown where an area has nothing measured. */
 const NONE = label => ({ value: '—', label, text: label })
 
+/** Why test strength has no number, in the pane's words: failed, skipped by the user, or not reached yet. */
+const notMeasured = (stryker, timedOut = false) =>
+  stryker?.skipped ? 'no test command' : stryker?.error ? 'could not run' : stryker?.declined ? 'skipped this time' : timedOut ? 'runs timed out' : 'not measured yet'
+
 const ratio = (done, total) => ({ done, total, value: `${done}/${total}` })
 
 /**
@@ -313,7 +321,7 @@ export function metricFor(d, evidence) {
   const ledger = evidence.ledger ?? emptyLedger()
   if (d.id === 'test-strength') {
     const report = evidence.mutation
-    if (!report || d.state === 'unchecked') return NONE(evidence.stryker?.skipped ? 'no test command' : /timed out/.test(d.summary) ? 'runs timed out' : 'not measured')
+    if (!report || d.state === 'unchecked') return NONE(notMeasured(evidence.stryker, /timed out/.test(d.summary)))
     const { caught, total } = mutationScore(report)
     return { ...ratio(caught, total), label: 'breaks caught', text: `${caught} of ${total} planted bugs caught` }
   }
@@ -360,8 +368,10 @@ export function metricFor(d, evidence) {
 export function testStrengthNeeds(evidence = {}) {
   const ledger = evidence.ledger ?? emptyLedger()
   const report = evidence.mutation
+  if (evidence.stryker?.skipped) return ['tests: the project has no test command']
+  if (evidence.stryker?.error) return ['a measurement of test strength (the last one could not run)']
+  if (evidence.stryker?.declined) return ['a measurement of test strength (skipped this time)']
   if (!evidence.stryker || !report) return ['a measurement of test strength (not measured yet)']
-  if (evidence.stryker.skipped) return ['tests: the project has no test command']
   const { total, timeouts, score, files } = mutationScore(report)
   if (total === 0) return ['code to measure: no breaks were made']
   if (timeouts > 10 && timeouts / total > 0.2) return ['a test strength measurement that does not time out']
@@ -405,7 +415,7 @@ export function finishProgress(byId, cleanInARow, evidence = {}) {
     const met = byId('test-strength')?.state === 'strong'
     const report = evidence.mutation
     const target = thresholdsOf(evidence).tests
-    if (!evidence.stryker?.ok || !report) return { label: 'Tests catch breaks', done: 0, total: target, met, text: 'not measured yet' }
+    if (!evidence.stryker?.ok || !report) return { label: 'Tests catch breaks', done: 0, total: target, met, text: notMeasured(evidence.stryker) }
     const { total, score } = mutationScore(report)
     if (total === 0) return { label: 'Tests catch breaks', done: 0, total: target, met, text: 'nothing measured' }
     const caught = Math.round(score * 100)
@@ -471,7 +481,7 @@ export function gradeRun(out, repo = null, status = 'done') {
     copy: readJsonIf(join(out, 'copy.json')),
     checks: readJsonIf(join(out, 'checks.json')),
     fallow: readJsonIf(join(out, 'fallow.json')),
-    stryker: readJsonIf(join(out, 'stryker.json')),
+    stryker: testStrengthResult(out),
     mutation: readJsonIf(join(out, 'mutation.json')),
   }
   const dimensions = [

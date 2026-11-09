@@ -2,28 +2,15 @@
 
 These are **candidates**, not commitments.
 
-## Run-stage skill
-
-**Trigger:** repeated failures in incidents or upkeep that guard, ground's check and Claude Code's built-in debugging miss.
-
-Possible scope: turn an incident into a regression test and a decision record. Avoid duplicating built-in incident or tech-debt skills.
-
-## Guard improvements
-
-- Examples calibrated from real failures and successful tasks, only if they improve behavior.
-- Optional specialized references only when the short skill demonstrably misses recurring domain risks.
-
 ## Not planned
 
 - A pipeline where one skill must run before another.
-- One skill per development stage (charter, gate, tend): folded into ground and forge.
-- A separate verify-fix-repeat skill: forge owns the loop.
 - Full architecture review on each change.
 - Copying each application's architecture into this repository.
 
 ## Destructive-command guard with buttons
 
-**Trigger:** users of Inspect or Build ask for protection against destructive commands (`rm -rf`, force pushes, database drops) in their own sessions.
+**Trigger:** users of Imagineer ask for protection against destructive commands (`rm -rf`, force pushes, database drops) in their own sessions.
 
 A mod that holds such a command and shows what it would change, with Proceed and Cancel, as Anthropic's `blast-radius` sample does. It would be the plugin's first mod that changes tool calls, so it needs its own on/off switch and stays out of the read-only grade mod.
 
@@ -33,8 +20,20 @@ A mod that holds such a command and shows what it would change, with Proceed and
 
 Inspect would start a disposable database (Postgres in Docker, or PGlite where it fits), apply the project's migrations as its CI does, and set the variable the tests read, so mutation testing sees the same tests CI runs.
 
-## Thresholds the user sets per repository
+## Going public
 
-**Trigger:** the owner, or a user, finds the thresholds Imagineer suggests (80% of breaks caught, every break in critical code explained, two clean attack rounds) wrong for a project: too strict for a prototype, too loose for payments.
+**Trigger:** the owner decides Imagineer is ready for people outside the repository, such as a team without GitHub accounts. Decided 2026-11-07: stay private until then.
 
-Inspect would ask once how strict the project should be (prototype, standard, critical, or their own numbers), keep it with the repository, and judge against it, saying "your thresholds" instead of "the thresholds Imagineer suggests".
+Installing from a marketplace with git auto-update, without a GitHub account, needs a public repository. The plan:
+
+- **A separate public repository, `imagineer-plugin`,** holding only what gets installed: the plugin and its marketplace file. Plans, research, design docs and the bench app stay private in `imagineer`.
+- **Publishing as part of each release:** a script copies the released plugin there. Users turn on auto-update once (`/plugin` → Marketplaces → Enable auto-update) and get each release by its `version`.
+- **Install in one line:** `/plugin install imagineer --marketplace thuannguyen13/imagineer-plugin` (Claude Code 2.1.275 or later).
+- **Feedback** goes to that public repository's issues, from anyone with a GitHub account; Save as file for the rest. The triage loop watches it.
+
+**Before it goes public:**
+
+- Imagineer has been run end to end on a few real projects by people other than the owner, and the grade, the questions and the pane hold up.
+- A license is chosen (the plugin has none; see the 2026-11-05 decision).
+- Everything in `plugin/` is read for what should not be public: keys, internal URLs, names or data from the owner's projects, the sales portal included. A secret scan of the plugin's files and of what will be published.
+- The README and an install guide describe the public install, and the feedback link points at the public repository.

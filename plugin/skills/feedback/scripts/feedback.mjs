@@ -14,6 +14,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, write
 import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { testStrengthResult } from '../../inspect/scripts/lib.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO_URL = 'https://github.com/thuannguyen13/imagineer'
@@ -79,9 +80,19 @@ export function selfCheck(repo) {
   if (latest) {
     const out = join(runsDir, latest)
     const fallow = readJsonIf(join(out, 'fallow.json'))
-    const stryker = readJsonIf(join(out, 'stryker.json'))
-    if (fallow && !fallow.ok) flags.push(flag('tool-trouble', 'inspect', 'fallow', `Fallow did not run in Inspect run ${latest}.`))
-    if (stryker && !stryker.ok && !stryker.skipped) flags.push(flag('tool-trouble', 'inspect', 'stryker', `Stryker did not run in Inspect run ${latest}.`))
+    // Read as the grade reads it: a first test run that failed is a failure, even where only the
+    // estimate recorded it or it was recorded as the user's skip.
+    const stryker = testStrengthResult(out)
+    // Only a tool that failed is Imagineer's trouble. A test-strength check the user chose to skip
+    // (declined), or one with nothing to run (skipped: no test command), is not.
+    const why = result => {
+      const line = String(result.error ?? '').split('\n').map(l => l.trim()).find(Boolean)
+      return line ? `: ${line.length > 140 ? `${line.slice(0, 139)}…` : line}` : '.'
+    }
+    if (fallow && !fallow.ok) flags.push(flag('tool-trouble', 'inspect', 'fallow', `Fallow failed in Inspect run ${latest}${why(fallow)}`))
+    if (stryker && !stryker.ok && !stryker.skipped && !stryker.declined) {
+      flags.push(flag('tool-trouble', 'inspect', 'stryker', `The test strength check failed in Inspect run ${latest}${why(stryker)}`))
+    }
     // Most breaks timing out means the runs were too slow to tell anything, not that tests caught them.
     const mutants = Object.values(readJsonIf(join(out, 'mutation.json'))?.files ?? {}).flatMap(f => f.mutants ?? [])
     const timeouts = mutants.filter(m => m.status === 'Timeout').length

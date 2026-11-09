@@ -43,7 +43,7 @@ Three skills, split by what the action covers. Each has one reason to exist.
 ### forge
 - Plan as a contract: each requirement is a rule with examples, a risk tier and a proof method. Then build, then verify → fix → repeat until the exit criteria are met. The PR leads with requirement → evidence.
 - `--verify <branch|PR>` skips plan and build: requirements are drafted from the issue or PR and the diff, the user confirms them, then the same rounds run.
-- Design detail: `docs/feedback/FEATURE_REVIEW_LOOP_RESEARCH.md` and `FEATURE_REVIEW_LOOP_VERIFICATION.md`.
+- Design detail: `docs/archive/feature-review-loop/FEATURE_REVIEW_LOOP_RESEARCH.md` and `FEATURE_REVIEW_LOOP_VERIFICATION.md`.
 
 ### ground
 - **Set up** (no app code yet): product questions → brief, who-can-do-what table, data model, environments, secrets, backups, CI checks, CLAUDE.md commands.

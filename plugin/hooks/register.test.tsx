@@ -145,6 +145,8 @@ test('status opens the pane: an aligned overview first, on every surface', async
     }
     expect(await ui.find({ type: 'Button', key: 'row-intent' })).toBeDefined()
     expect(await ui.find({ type: 'Button', key: 'tab-questions' })).toBeDefined()
+    // The version sits on the tabs' line, on every surface, since not every app shows the pane's title.
+    expect(await ui.find({ type: 'Text', text: `v${VERSION}` })).toBeDefined()
     // All rows start closed: no evidence until a row is pressed.
     expect(await ui.find({ type: 'Text', text: /deliberate breaks/ })).toBeUndefined()
     await ui.unmount()

@@ -34,8 +34,9 @@ test("every link between the skills, their references and the agents points at a
   }
 })
 
-test('Inspect, Build and Feedback run their own scripts without a prompt each time, and nothing else', () => {
-  for (const name of ['inspect', 'build', 'feedback']) {
+// Build is turned off from 0.4.0: its SKILL.md is parked outside the plugin (parked/build/README.md).
+test('Inspect and Feedback run their own scripts without a prompt each time, and nothing else', () => {
+  for (const name of ['inspect', 'feedback']) {
     const front = readFileSync(join(SKILLS, name, 'SKILL.md'), 'utf8').split('---')[1]
     assert.match(front, /^allowed-tools: Bash\(node \$\{CLAUDE_PLUGIN_ROOT\}\/skills\/\*\)$/m, name)
   }

@@ -74,3 +74,17 @@ test('a new run removes the throwaway copies earlier runs left behind, and nothi
   assert.equal(existsSync(left), false)
   assert.equal(existsSync(notOurs), true)
 })
+
+test("a test strength check that failed is never recorded as the user's skip", t => {
+  const make = runs(t)
+  const failed = make('1', { key: 'K', at: 'a' }, { 'stryker.json': { ok: false, error: 'some tests fail under the test strength tool, though they pass in a normal run' } })
+  const refused = measure('stryker', '--out', failed, '--decline', 'Some tests fail under the tool')
+  assert.equal(refused.status, 1)
+  assert.match(refused.stderr, /stays recorded as a failure, not as skipped/)
+  assert.equal(JSON.parse(readFileSync(join(failed, 'stryker.json'), 'utf8')).declined, undefined)
+
+  // The user's own choice, with nothing failed, is still recorded.
+  const fresh = make('2', { key: 'K', at: 'b' })
+  assert.equal(measure('stryker', '--out', fresh, '--decline', 'it would take about 45 minutes').status, 0)
+  assert.equal(JSON.parse(readFileSync(join(fresh, 'stryker.json'), 'utf8')).declined, 'it would take about 45 minutes')
+})

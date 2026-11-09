@@ -99,3 +99,23 @@ test('a mutation run where most breaks timed out is flagged as tool trouble', t 
   assert.equal(f.rule, 'stryker-timeouts')
   assert.match(f.said, /30 of 31 breaks timed out/)
 })
+
+test('a test strength check the user chose to skip is not Imagineer going wrong; a failed one says why', t => {
+  const declined = repo(t, { '.claude/imagineer/runs/2/stryker.json': { ok: false, declined: 'it would take about 45 minutes' } })
+  assert.deepEqual(selfCheck(declined), [])
+  const failed = repo(t, { '.claude/imagineer/runs/3/stryker.json': { ok: false, error: '\nError: Could not find a test runner for "vitest".\n  at x' } })
+  const [flag] = selfCheck(failed)
+  assert.equal(flag.kind, 'tool-trouble')
+  assert.equal(flag.said, 'The test strength check failed in Inspect run 3: Error: Could not find a test runner for "vitest".')
+})
+
+test("a test strength check that failed is flagged, even where only the estimate recorded it or it was recorded as the user's skip", t => {
+  const output = ' FAIL  features/audit/writing-actions.test.ts > uses every action\n10:00:00 (1) ERROR Stryker There were failed tests in the initial test run.'
+  const onlyEstimate = repo(t, { '.claude/imagineer/runs/3/stryker-estimate.json': { ok: false, output } })
+  assert.equal(selfCheck(onlyEstimate)[0]?.said, 'The test strength check failed in Inspect run 3: some tests fail under the test strength tool, though they pass in a normal run')
+  const maskedAsSkip = repo(t, {
+    '.claude/imagineer/runs/2/stryker-estimate.json': { ok: false, output },
+    '.claude/imagineer/runs/2/stryker.json': { ok: false, declined: 'Some tests fail when run under the test-strength tool' },
+  })
+  assert.equal(selfCheck(maskedAsSkip)[0]?.rule, 'stryker')
+})
