@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1 — 2026-11-12
+
+### Changes you need to know
+
+- **Grade pane opens when you ask:** Inspect no longer opens the grade pane on its own. Open it with **Details** above the prompt or `/imagineer:status`, or turn on **Open the pane when Inspect or Build runs** in `/config` to have it open with each run.
+
 ## 0.4.0 — 2026-11-08
 
 ### Changes you need to know

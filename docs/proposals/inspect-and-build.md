@@ -33,7 +33,7 @@ When a command runs, Claude Code fires a `command.run` event before the skill do
 | Command | The mod | The skill reaches Claude |
 |---|---|---|
 | `/imagineer:status` | Answers it: opens the grade pane | No: no turn, no cost |
-| `/imagineer:inspect`, `/imagineer:build` | Watches it: opens the pane and the band, then passes the command on | Yes |
+| `/imagineer:inspect`, `/imagineer:build` | Watches it: shows the band, then passes the command on. Opens the pane too only when the user turned on the plugin setting **Open the pane when Inspect or Build runs** (off by default) | Yes |
 
 ## Principles
 
