@@ -41,9 +41,9 @@ export function projectEnv(source = process.env) {
   return { env: { ...env, CI: '1' }, dropped: dropped.sort() }
 }
 
-// What an agent may never reach for to make a test run: the settings files that hold real credentials,
-// a credential set by hand, a database, or the repository itself. An agent that finds a test skipped
-// for want of a database goes looking for one; these say no at each place it could bring one in.
+// What a proof or an attack may never be pointed at: a database nobody set up for it. An agent
+// that finds a test skipped for want of a database goes looking for one, and the user's own is
+// the nearest. These say what counts as reaching for one, by name and by address, never by value.
 
 /** A file that can hold real settings: `.env`, `.env.local`, `.env.production.local`, `.envrc`. Example files hold none. */
 export const isEnvFile = path => {
@@ -51,80 +51,108 @@ export const isEnvFile = path => {
   return /^\.env(rc|(\.[\w-]+)*)$/.test(name) && !/\.(example|sample|template|dist|defaults)$/.test(name)
 }
 
-// An env file named in a command, a path or a file pattern (`.env*` too). `process.env.NAME` is not one.
-const ENV_FILE_IN_TEXT = /(?:^|[\s/'"=<>(:,])(\.env(?:rc|(?:\.[\w-]+)*))(?=$|[\s'")|;&<>,:*])/g
+// An env file named in a command, a path or a pattern of file names (`.env*`, `.env.*`). `process.env.NAME` is not one.
+const ENV_FILE_IN_TEXT = /(?:^|[\s/'"=<>(:,])(\.env(?:rc|(?:\.[\w*?-]+)*))(?=$|[\s'")|;&<>,:*?])/g
 
-/** The env file a text names, or null. */
+/** The env file a text names, or the pattern that would match one; null otherwise. */
 export function envFileIn(text) {
-  for (const [, name] of String(text ?? '').matchAll(ENV_FILE_IN_TEXT)) if (isEnvFile(name)) return name
+  for (const [, name] of String(text ?? '').matchAll(ENV_FILE_IN_TEXT)) if (/[*?]/.test(name) || isEnvFile(name)) return name
   return null
 }
 
-const DATASTORE = /^(postgres(ql)?|mysql|mariadb|mongodb(\+srv)?|rediss?|amqps?|mssql|sqlserver|libsql|cockroachdb|clickhouse)$/i
+// Settings that say where a database (or a hosted backend, a cache, a queue) is, or how to sign in to it.
+const DATABASE_NAME =
+  /(^|_)(DATABASE|DB|PG|PG(HOST|HOSTADDR|PORT|USER|PASSWORD|PASSFILE|DATABASE|SERVICE|OPTIONS|SSL[A-Z]*)|POSTGRES(QL)?|MYSQL|MARIADB|MONGO(DB)?|REDIS|SQLITE|MSSQL|SQLSERVER|SUPABASE|FIREBASE|FIRESTORE|PRISMA|DRIZZLE|TURSO|LIBSQL|NEON|PLANETSCALE|COCKROACH(DB)?|DYNAMO(DB)?|CLICKHOUSE|ELASTIC(SEARCH)?|UPSTASH|KV|AMQP|RABBITMQ)(_|$)/i
+const DATABASE_SCHEME = /^(postgres(ql)?|mysql|mariadb|mongodb|rediss?|amqps?|mssql|sqlserver|libsql|cockroachdb|clickhouse|sqlite)(\+[\w.-]+)?$/i
 
-/** Why a value points at a database, or at a service with a sign-in: its scheme, never the value. Null otherwise. */
-function connectionIn(text) {
-  for (const [, scheme, signIn] of String(text ?? '').matchAll(/\b([a-z][a-z0-9+.-]*):\/\/([^\s'"@/]*@)?/gi)) {
-    if (DATASTORE.test(scheme) || signIn) return scheme.toLowerCase()
+/**
+ * The scheme of a database address in a text (`postgres://…`, `mongodb+srv://…`), or, with `signIn`,
+ * of any address that carries a sign-in (`https://user:pw@host`); null when there is none.
+ */
+export function databaseAddressIn(text, { signIn = true } = {}) {
+  for (const [, scheme, user] of String(text ?? '').matchAll(/\b([a-z][a-z0-9+.-]*):\/\/([^\s'"@/]*@)?/gi)) {
+    if (DATABASE_SCHEME.test(scheme) || (signIn && user)) return scheme.toLowerCase()
   }
   return null
 }
 
+/** Whether a setting says where a database is or how to sign in to it, by its name or its value. */
+export const isDatabaseSetting = (name, value = '') => DATABASE_NAME.test(name) || databaseAddressIn(value) !== null
+
 /**
- * Why a command reaches for credentials, in plain words, or null: it reads an env file, sets a
- * variable that reads like a credential, or names a database or a service with a sign-in. Says
- * names and schemes only, never a value.
+ * Why a command reaches for a database, in plain words, or null: it reads an env file, sets a
+ * database setting, or names a database. Says names and schemes only, never a value.
  */
-export function credentialProblem(command) {
+export function databaseProblem(command) {
   const text = String(command ?? '')
   const file = envFileIn(text)
   if (file) return `reads an env file (${file})`
   for (const [, name] of text.matchAll(/(?:^|[\s;&|('"`])(?:export\s+)?([A-Z_][A-Z0-9_]*)=/g)) {
-    if (SECRET_LIKE.test(name)) return `sets ${name}, which reads like a credential`
+    if (DATABASE_NAME.test(name)) return `sets ${name}, which says where a database is or how to sign in to it`
   }
-  const scheme = connectionIn(text)
+  const scheme = databaseAddressIn(text)
   if (scheme) return `names a database, or a service with a sign-in (${scheme}://…)`
   return null
 }
 
+const CASELESS = process.platform === 'darwin' || process.platform === 'win32'
+
 /** A path as the file system knows it, links followed, whether or not it exists yet. */
-function real(path) {
+export function real(path) {
   const full = resolve(path)
   try {
-    return realpathSync(full)
+    return realpathSync.native(full)
   } catch {
     const parent = dirname(full)
     return parent === full ? full : join(real(parent), basename(full))
   }
 }
 
-/** Whether a path is in the repository itself, outside Imagineer's own folder there (and outside `allowed`). */
-export function inRepository(path, repo, allowed = []) {
-  const target = real(path)
-  const root = real(repo)
-  const under = dir => target === dir || target.startsWith(dir + sep)
-  return under(root) && !under(join(root, '.claude', 'imagineer')) && !allowed.some(dir => under(real(dir)))
+/** Whether a path is at or under a folder, as the file system sees both. */
+export function isUnder(path, dir) {
+  const [target, root] = [real(path), real(dir)].map(p => (CASELESS ? p.toLowerCase() : p))
+  return target === root || target.startsWith(root.endsWith(sep) ? root : root + sep)
 }
 
-/** Why a text (a command, a test file) reaches into the repository itself, or null. Everything runs in the copy. */
-export function repositoryProblem(text, repo, allowed = []) {
+/** Whether a path is in the repository itself, outside Imagineer's own folder there. */
+export const inRepository = (path, repo) => isUnder(path, repo) && !isUnder(path, join(repo, '.claude', 'imagineer'))
+
+/**
+ * Why a text (a command, a test file) reaches into the repository itself, or null: everything runs
+ * in the copy. Paths are read as the shell would from `cwd`: quoted, relative, under `~` or `$HOME`,
+ * joined with colons, or as a `file://` address.
+ */
+export function repositoryProblem(text, repo, { cwd = null } = {}) {
   if (!repo) return null
-  for (const token of String(text ?? '').split(/[\s'"=;&|()<>`,]+/)) {
+  const plain = String(text ?? '').replace(/["']/g, '').replace(/file:\/\//g, ' ')
+  for (const token of plain.split(/[\s=;&|()<>`,:]+/)) {
     const path = token.replace(/^(~|\$HOME|\$\{HOME\})(?=\/|$)/, homedir())
-    if (path.startsWith('/') && inRepository(path, repo, allowed)) return 'reaches into the repository itself, not the copy'
+    const reaches = path.startsWith('/') ? inRepository(path, repo) : cwd && /^\.\.?(\/|$)/.test(path) && inRepository(resolve(cwd, path), repo)
+    if (reaches) return 'reaches into the repository itself, not the copy'
   }
   return null
 }
 
-/** Why a command for a proof or an attack must not run, or null. */
-export const runCommandProblem = (command, { source = null } = {}) => credentialProblem(command) ?? repositoryProblem(command, source)
+/**
+ * Why a proof or an attack must not run as asked, or null. Its command runs in the copy (`cwd`) and
+ * may not reach for a database or the repository (`source`); its test may not name a database or the
+ * repository either. A test may still say `.env` or sign in to the app under test: those are attacks.
+ */
+export function runProblem({ command, test = '', source = null, cwd = null }) {
+  const inCommand = databaseProblem(command) ?? repositoryProblem(command, source, { cwd })
+  if (inCommand) return `the command ${inCommand}`
+  const scheme = databaseAddressIn(test, { signIn: false })
+  if (scheme) return `the test names a database (${scheme}://…)`
+  const inTest = repositoryProblem(test, source)
+  return inTest ? `the test ${inTest}` : null
+}
 
 /**
- * An env file's text without the settings that hold credentials or point at a database: those lines
- * are left out (a quoted value over several lines too), the rest is kept as it is. Returns the names
- * left out, never their values.
+ * An env file's text without its database settings: those lines are left out (a quoted value over
+ * several lines too), every other line is kept as it is, so the project's own test settings still
+ * work. Returns the names left out, never their values.
  */
-export function withoutCredentials(text) {
+export function withoutDatabaseSettings(text) {
   const kept = []
   const leftOut = []
   const closes = (rest, quote) => new RegExp(`(^|[^\\\\])${quote}`).test(rest)
@@ -134,8 +162,9 @@ export function withoutCredentials(text) {
       if (closes(line, open)) open = null
       continue
     }
-    const [, name, value] = line.match(/^\s*(?:export\s+)?([A-Za-z_][\w.-]*)\s*=\s*(.*)$/) ?? []
-    if (!name || !(SECRET_LIKE.test(name) || connectionIn(value))) {
+    // Windows line endings stay on the lines kept, and never hide a setting.
+    const [, name, value] = line.replace(/\r$/, '').match(/^\s*(?:export\s+)?([A-Za-z_][\w.-]*)\s*=\s*(.*)$/) ?? []
+    if (!name || !isDatabaseSetting(name, value)) {
       kept.push(line)
       continue
     }
@@ -159,13 +188,15 @@ const stripAnsi = text => String(text ?? '').replace(/\u001b\[[0-9;]*m/g, '')
 /**
  * How many tests a run says passed and were skipped, read from the summary of the usual runners
  * (Vitest, Jest, node:test, Mocha, Playwright, Bun), or null when the output has no such summary.
+ * A runner counts the tests a name filter left out as skipped too.
  */
 export function testCounts(output) {
   const text = stripAnsi(output)
   const count = (from, pattern) => Number(from.match(pattern)?.[1] ?? 0)
   const first = pattern => (pattern.test(text) ? count(text, pattern) : null)
-  // Vitest: "Tests  3 passed | 1 skipped (4)". Jest: "Tests:  1 skipped, 2 passed, 3 total".
-  const line = text.match(/^\s*Tests:?\s+(.+)$/m)?.[1]
+  // Vitest: "Tests  3 passed | 1 skipped (4)". Jest: "Tests:  1 skipped, 2 passed, 3 total". The last
+  // such line with a count in it: the app's own output may start a line with "Tests" too.
+  const line = [...text.matchAll(/^\s*Tests:?\s+(.*\b\d+ (?:passed|failed|skipped|todo|total)\b.*)$/gm)].at(-1)?.[1]
   if (line) return { passed: count(line, /(\d+) passed/), skipped: count(line, /(\d+) skipped/) + count(line, /(\d+) todo/) }
   // node:test: "ℹ pass 3", "ℹ skipped 1" (or "# pass 3").
   const pass = first(/^(?:ℹ|#) pass (\d+)$/m)
@@ -176,7 +207,9 @@ export function testCounts(output) {
   // Playwright: "3 passed (2.1s)", "1 skipped". Bun: "3 pass", "1 skip".
   const passed = first(/^\s*(\d+) pass(?:ed)?\b/m)
   const skipped = first(/^\s*(\d+) skip(?:ped)?\b/m)
-  return passed === null && skipped === null ? null : { passed: passed ?? 0, skipped: skipped ?? 0 }
+  if (passed !== null || skipped !== null) return { passed: passed ?? 0, skipped: skipped ?? 0 }
+  // A runner told to pass when it finds nothing: "No tests found, exiting with code 0".
+  return /\bno tests?(?: files?)?(?: were)? found\b/i.test(text) ? { passed: 0, skipped: 0 } : null
 }
 
 /**

@@ -63,17 +63,17 @@ export function selfCheck(repo) {
 
   // An agent tried to step outside its role, and the role guard refused it.
   const denials = readLines(join(base, 'denials.jsonl'))
-  // Reaching for credentials, or running a proof or an attack outside the copy, is its own flag,
+  // Reaching for a database (an env file, a database setting, the repository itself) is its own flag,
   // whichever tool it came through: it is how an attack once ran against a real database.
-  const reaching = denials.filter(d => d.kind === 'credentials')
+  const reaching = denials.filter(d => d.kind === 'database')
   for (const agent of new Set(reaching.map(d => d.agent))) {
     const mine = reaching.filter(d => d.agent === agent)
     const n = mine.length
     const who = agent === 'lead' ? 'Inspect' : `The ${agent} agent`
-    flags.push(flag('rule-broken', 'agent', `${agent}:credentials`, `${who} reached ${n === 1 ? 'once' : `${n} times`} for credentials or outside the copy, and was refused (first: ${String(mine[0].reason).replace(/\.$/, '')}).`))
+    flags.push(flag('rule-broken', 'agent', `${agent}:database`, `${who} reached ${n === 1 ? 'once' : `${n} times`} for a database or outside the copy, and was refused (first: ${String(mine[0].reason).replace(/\.$/, '')}).`))
   }
   const byRole = new Map()
-  for (const d of denials.filter(d => d.kind !== 'credentials')) byRole.set(`${d.agent}:${d.tool}`, (byRole.get(`${d.agent}:${d.tool}`) ?? 0) + 1)
+  for (const d of denials.filter(d => d.kind !== 'database')) byRole.set(`${d.agent}:${d.tool}`, (byRole.get(`${d.agent}:${d.tool}`) ?? 0) + 1)
   for (const [key, n] of byRole) {
     const [agent, tool] = key.split(':')
     flags.push(flag('rule-broken', 'agent', key, `The ${agent} agent tried ${n === 1 ? 'once' : `${n} times`} to use ${tool} outside its role; the role guard refused it.`))

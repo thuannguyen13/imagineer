@@ -11,7 +11,7 @@
 
 import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { arg, readJson, readJsonIf, recordDenial, run, runCommandProblem, tail, writeJson } from './lib.mjs'
+import { arg, readJson, readJsonIf, recordDenial, run, runProblem, tail, writeJson } from './lib.mjs'
 import { LEDGER, loadLedger } from './questions.mjs'
 
 /** Character offset of a 1-based { line, column } in a text. */
@@ -50,14 +50,13 @@ function prove({ repo, out, id, file, command }) {
   const ledger = loadLedger(repo)
   const question = ledger.questions.find(q => q.id === id)
   if (!question) throw new Error(`No question ${id}.`)
-  // A proof runs in the copy, with no credentials, as an attack does.
-  const problem = runCommandProblem(command, { source: copy.source ?? repo })
-  if (problem) {
-    recordDenial(repo, { agent: 'lead', tool: 'prove.mjs', kind: 'credentials', reason: `the command ${problem}` })
-    throw new Error(`Refused: the command ${problem}. Proofs run in the copy, with no credentials; a test that needs a database that is not there cannot be proven yet.`)
-  }
-
   const source = join(out, 'tests', file)
+  // A proof runs in the copy, never against a database nobody set up for it, as an attack does.
+  const problem = runProblem({ command, test: readFileSync(source, 'utf8'), source: copy.source ?? repo, cwd: copy.path })
+  if (problem) {
+    recordDenial(repo, { agent: 'lead', tool: 'prove.mjs', kind: 'database', reason: problem })
+    throw new Error(`Refused: ${problem}. Proofs run in the copy; an answer whose test needs a database that is not there cannot be proven yet.`)
+  }
   const target = join(copy.path, file)
   mkdirSync(dirname(target), { recursive: true })
   copyFileSync(source, target)

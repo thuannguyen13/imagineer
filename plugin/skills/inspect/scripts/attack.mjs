@@ -2,10 +2,11 @@
 // Attack rounds: tests that try to make the app do what it must not. Each
 // attack test asserts the app holds (refuses, keeps data apart, saves once);
 // it passes when the app held and fails when the attack broke through.
-// Runs in the throwaway copy only, with no credentials: a command that reads an
-// env file, sets a credential, names a database or reaches into the repository
-// itself is refused. An attack whose test did not run (skipped, most often for
-// want of a database) is never "held": it is recorded as not attacked yet.
+// Runs in the throwaway copy only, never against a database nobody set up for it:
+// a command that reads an env file, sets a database setting, names a database or
+// reaches into the repository itself is refused, and so is a test that names a
+// database or the repository. An attack whose test did not run (skipped, most
+// often for want of a database) is never "held": it is listed as not attacked yet.
 //
 //   node attack.mjs run  --out <run folder> --round 1 --id A3 --category permissions|data
 //                        --title "<what was tried, in plain words>" --file <path> --run "<command>" [--about Q8]
@@ -17,7 +18,7 @@
 
 import { copyFileSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { arg, readJson, readJsonIf, recordDenial, repositoryProblem, run, runCommandProblem, tail, testCounts, writeJson } from './lib.mjs'
+import { arg, readJson, readJsonIf, recordDenial, run, runProblem, tail, testCounts, writeJson } from './lib.mjs'
 
 export const CATEGORIES = ['permissions', 'data']
 
@@ -25,57 +26,48 @@ const ledgerPath = out => join(out, 'attacks.json')
 export const loadAttacks = out => ({ attacks: [], untested: {}, notRun: [], ...readJsonIf(ledgerPath(out)) })
 
 /**
- * What the latest round says it did not attack: never safe, only not tested yet. A later round
- * that reaches a part leaves it out of its own list.
+ * What is not attacked yet: never safe, only not tested. The parts the latest round says it did
+ * not reach (a later round that reaches one leaves it out of its own list), and every attack whose
+ * test did not run, from any round, until it is run again under its ID.
  */
 export function untestedNow(ledger) {
   const rounds = Object.keys(ledger.untested ?? {}).map(Number)
-  if (!rounds.length) return []
-  return ledger.untested[String(Math.max(...rounds))] ?? []
+  const parts = rounds.length ? (ledger.untested[String(Math.max(...rounds))] ?? []) : []
+  return [...parts, ...(ledger.notRun ?? []).map(a => ({ category: a.category, what: `${a.title} (${a.why})`, id: a.id }))]
 }
 
-export function recordUntested(ledger, { round, category, what, id = null }) {
+export function recordUntested(ledger, { round, category, what }) {
   if (!CATEGORIES.includes(category)) throw new Error(`Category must be one of ${CATEGORIES.join(', ')}.`)
   if (!what?.trim()) throw new Error('--what says, in plain words, which part was not attacked.')
   const list = (ledger.untested[String(round)] ??= [])
-  // `id`: the attack whose test did not run, so a later run of that attack takes the line away.
-  if (!list.some(u => u.category === category && u.what === what)) list.push(id ? { category, what, id } : { category, what })
+  if (!list.some(u => u.category === category && u.what === what)) list.push({ category, what })
   return ledger
 }
 
 /**
  * Why a test run that ended well still says nothing about the app, or null: no test passed, or
- * some were skipped. Output with no summary this reads (an unusual runner) is taken as it ended.
+ * some were skipped. A skipped test cannot be told from one a name filter left out, so the
+ * command must run the attack's own test and nothing else. Output with no summary this reads
+ * (an unusual runner) is taken as it ended.
  */
 export function didNotRun(output) {
   const counts = testCounts(output)
   if (!counts) return null
   if (counts.passed === 0) return counts.skipped ? 'its test was skipped' : 'no test ran'
-  return counts.skipped ? `${counts.skipped} of its tests ${counts.skipped === 1 ? 'was' : 'were'} skipped` : null
+  return counts.skipped ? `${counts.skipped} of the tests in that run ${counts.skipped === 1 ? 'was' : 'were'} skipped` : null
 }
 
-/** Why an attack must not run as asked, or null: its command or its test reaches for credentials or the repository itself. */
-export function refused({ command, test, source }) {
-  const problem = runCommandProblem(command, { source })
-  if (problem) return `the command ${problem}`
-  const inTest = repositoryProblem(test, source)
-  return inTest ? `the test ${inTest}` : null
-}
-
-/** Records an attack's outcome in the ledger, replacing what an earlier run under the same ID left. */
+/**
+ * Records an attack's outcome in the ledger, replacing what an earlier run under the same ID left.
+ * With `why`, its test did not run: it is kept apart, as evidence and as a part not attacked yet,
+ * and counts in no round.
+ */
 export function recordAttack(ledger, entry, why = null) {
   ledger.attacks = ledger.attacks.filter(a => a.id !== entry.id)
   ledger.notRun = (ledger.notRun ?? []).filter(a => a.id !== entry.id)
-  for (const list of Object.values(ledger.untested)) {
-    for (let i = list.length - 1; i >= 0; i -= 1) if (list[i].id === entry.id) list.splice(i, 1)
-  }
-  if (!why) {
-    ledger.attacks.push(entry)
-    return ledger
-  }
-  // Not an attack that held: evidence of why it did not run, and a line under "Not attacked yet".
-  ledger.notRun.push({ ...entry, result: 'not-run', why })
-  return recordUntested(ledger, { round: entry.round, category: entry.category, what: `${entry.title} (${why})`, id: entry.id })
+  if (why) ledger.notRun.push({ ...entry, result: 'not-run', why })
+  else ledger.attacks.push(entry)
+  return ledger
 }
 
 /** What the rounds found: breaks still standing, and how many rounds in a row found nothing new. */
@@ -99,11 +91,11 @@ function attack({ out, round, id, category, title, file, command, about = null }
   if (!CATEGORIES.includes(category)) throw new Error(`Category must be one of ${CATEGORIES.join(', ')}.`)
   const copy = readJson(join(out, 'copy.json'))
   const source = join(out, 'attacks', file)
-  const problem = refused({ command, test: readFileSync(source, 'utf8'), source: copy.source })
+  const problem = runProblem({ command, test: readFileSync(source, 'utf8'), source: copy.source, cwd: copy.path })
   if (problem) {
-    if (copy.source) recordDenial(copy.source, { agent: 'attacker', tool: 'attack.mjs', kind: 'credentials', reason: problem })
+    if (copy.source) recordDenial(copy.source, { agent: 'attacker', tool: 'attack.mjs', kind: 'database', reason: problem })
     throw new Error(
-      `Refused: ${problem}. Attacks run in the copy, with no credentials. If this attack needs a database or a service that is not there, ` +
+      `Refused: ${problem}. Attacks run in the copy, never against a database nobody set up for them. If this attack needs a database or a service that is not there, ` +
         `record it instead: attack.mjs untested --out ${out} --round ${round} --category ${category} --what "<the part, in plain words> (needs a database)".`,
     )
   }
@@ -121,11 +113,13 @@ function attack({ out, round, id, category, title, file, command, about = null }
   const entry = { id, round, category, title, about, file, run: command, result: result.ok ? 'held' : 'broke', output: result.ok && !why ? '' : tail(output, 15), void: null }
   writeJson(ledgerPath(out), recordAttack(loadAttacks(out), entry, why))
   if (why) {
-    console.log(`${id} (${category}): not attacked, because ${why}, most often for want of a database or a setting. It is listed as not attacked yet and does not count as held. ${title}`)
+    console.log(`${id} (${category}): not attacked, because ${why}, most often for want of a database or a setting, or because the command ran more than the attack's own test. It is listed as not attacked yet and does not count as held. ${title}`)
+    console.log(tail(output, 40))
     return
   }
   console.log(`${id} (${category}): ${result.ok ? 'the app held' : 'the attack broke through'}. ${title}`)
-  if (!result.ok) console.log(tail(output, 15))
+  // The attacker sees the app's code run nowhere else, so enough of the output to tell a wrong test from a real break.
+  if (!result.ok) console.log(tail(output, 40))
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

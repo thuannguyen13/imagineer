@@ -4,18 +4,25 @@
 //   dev        writes code, never tests; may commit, never push or call GitHub
 //   qa         writes tests only; never commits, pushes or calls GitHub
 //   architect  writes only under .claude/imagineer/; never commits, pushes or calls GitHub
-//   attacker   writes only under .claude/imagineer/; never commits, pushes or calls GitHub;
-//              never reads an env file, sets a credential or names a database in a command
+//   attacker   runs one thing, Imagineer's attack script; reads only the throwaway copy, its
+//              run folder and Imagineer's scripts, never an env file; writes only its attack
+//              tests. So the app's code runs in one place: the copy, through attack.mjs.
 //
 // Plugin agents ignore their own `hooks` frontmatter, so this runs for every
 // matching tool call in the session and acts only when `agent_type` names one
 // of these agents. Everyone else, the main session included, passes untouched.
 
-import { readFileSync } from 'node:fs'
-import { credentialProblem, envFileIn, recordDenial } from '../skills/inspect/scripts/lib.mjs'
+import { readFileSync, readdirSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { basename, dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { envFileIn, isUnder, real, recordDenial } from '../skills/inspect/scripts/lib.mjs'
 
 const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit'])
 const READ_TOOLS = new Set(['Read', 'Grep', 'Glob'])
+// Imagineer's own files, wherever the plugin is installed.
+const PLUGIN = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const ATTACK_SCRIPT = join(PLUGIN, 'skills', 'inspect', 'scripts', 'attack.mjs')
 const GIT_WRITES = new Set(['commit', 'push', 'merge', 'rebase', 'cherry-pick', 'revert', 'am', 'pull', 'reset', 'checkout', 'switch'])
 const GIT_VALUE_OPTIONS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path'])
 
@@ -23,6 +30,9 @@ export const isTestFile = path =>
   /(^|\/)(test|tests|__tests__|spec|e2e)\//.test(path) || /\.(test|spec)\.[cm]?[jt]sx?$/.test(path)
 
 export const isImagineerFile = path => /(^|\/)\.claude\/imagineer\//.test(path)
+
+/** An attack test, where the attacker writes them: a run's `attacks` folder. Nothing else of a run is the attacker's to write. */
+export const isAttackTest = path => /(^|\/)\.claude\/imagineer\/runs\/[^/]+\/attacks\/./.test(path)
 
 /** The agent's short name: `imagineer:dev` and `dev` are both `dev`. */
 export const role = agentType => (agentType ?? '').split(':').pop()
@@ -96,30 +106,105 @@ export function blockedCommand(name, command) {
 export function blockedWrite(name, path) {
   if (name === 'dev' && isTestFile(path) && !isImagineerFile(path)) return 'is a test file, and Dev never writes or edits tests'
   if (name === 'qa' && !isTestFile(path) && !isImagineerFile(path)) return 'is not a test file, and QA writes only tests'
-  if ((name === 'architect' || name === 'attacker') && !isImagineerFile(path)) return `is outside .claude/imagineer/, where the ${name} writes`
+  if (name === 'architect' && !isImagineerFile(path)) return 'is outside .claude/imagineer/, where the architect writes'
+  // Not the run's own records (the copy's path, the results of attacks): those are the scripts' to write.
+  if (name === 'attacker' && !isAttackTest(resolve('/', path))) return "is outside its run's attacks folder (.claude/imagineer/runs/<n>/attacks/), where the attacker writes"
   return null
 }
 
 /**
- * Why a tool call reaches for credentials, or null. The attacker only: an attack that needs a
- * database that is not there is recorded as not attacked, never run against one the attacker found.
- * (That the app's code runs in the copy and nowhere else is attack.mjs's to enforce: this hook
- * cannot tell which folder a command runs in.)
+ * The words of a command that is one plain program call, or null: nothing chained, piped,
+ * redirected or expanded by the shell (`$`, backticks), which would run before the program does.
+ * Text in single quotes is passed on as it is.
  */
-export function offLimits(payload) {
-  if (role(payload.agent_type) !== 'attacker') return null
-  const input = payload.tool_input ?? {}
-  if (payload.tool_name === 'Bash') {
-    const reason = credentialProblem(input.command)
-    return reason ? `This command ${reason}.` : null
+export function plainCall(command) {
+  const words = []
+  let word = ''
+  let started = false
+  let quote = null
+  const text = String(command ?? '').trim()
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text[i]
+    if (quote === "'") {
+      if (c === "'") quote = null
+      else word += c
+    } else if (c === '$' || c === '`') return null
+    else if (quote === '"') {
+      if (c === '"') quote = null
+      else if (c === '\\' && i + 1 < text.length) word += text[++i]
+      else word += c
+    } else if (c === '"' || c === "'") {
+      quote = c
+      started = true
+    } else if (c === '\\') {
+      if (i + 1 >= text.length || text[i + 1] === '\n') return null
+      word += text[++i]
+      started = true
+    } else if (c === '\n' || ';&|()<>'.includes(c)) return null
+    else if (/\s/.test(c)) {
+      if (started) words.push(word)
+      word = ''
+      started = false
+    } else {
+      word += c
+      started = true
+    }
   }
-  if (!READ_TOOLS.has(payload.tool_name)) return null
-  // Read names a file; Grep and Glob a folder and a pattern of file names.
-  const file = envFileIn(input.file_path) ?? envFileIn(input.path) ?? envFileIn(payload.tool_name === 'Glob' ? input.pattern : input.glob)
-  return file ? `${file} is an env file.` : null
+  if (quote) return null
+  if (started) words.push(word)
+  return words
 }
 
-const OFF_LIMITS = 'The attacker never looks for credentials. If an attack needs a database or a service that is not there, record it as not attacked (attack.mjs untested).'
+/**
+ * Why the attacker may not run this command, or null. It runs Imagineer's attack script and nothing
+ * else: a shell cannot be kept in the copy or away from a database by reading what it is asked to
+ * run, so the app's code runs only where attack.mjs runs it.
+ */
+export function blockedAttackerCommand(command, cwd = null) {
+  const words = plainCall(command)
+  if (!words) return 'is more than one plain call. Give one command with every path written out: no $, pipes, && or redirects, and the --run command in single quotes'
+  const isAttackScript = words[0] === 'node' && words[1] && real(resolve(cwd ?? '/', words[1])) === real(ATTACK_SCRIPT)
+  return isAttackScript ? null : `runs something other than Imagineer's attack script (node ${ATTACK_SCRIPT} run | void | untested | list). Read and search with Read, Grep and Glob`
+}
+
+/** The throwaway copies of the runs kept in the session's folder, as each run recorded its own. */
+function copiesOf(cwd) {
+  if (!cwd) return []
+  const runs = join(cwd, '.claude', 'imagineer', 'runs')
+  try {
+    return readdirSync(runs).flatMap(run => {
+      try {
+        const path = JSON.parse(readFileSync(join(runs, run, 'copy.json'), 'utf8')).path
+        return typeof path === 'string' && basename(path).startsWith('imagineer-') ? [path] : []
+      } catch {
+        return []
+      }
+    })
+  } catch {
+    return []
+  }
+}
+
+/** Whether the attacker may read here: a throwaway copy, Imagineer's folder in a repository, or Imagineer's own scripts. */
+function attackerMayRead(path, cwd) {
+  const target = real(resolve(cwd ?? '/', path))
+  if (/(^|\/)\.claude\/imagineer(\/|$)/.test(target) || isUnder(target, PLUGIN)) return true
+  if (copiesOf(cwd).some(copy => isUnder(target, copy))) return true
+  // A copy whose run is kept elsewhere (Inspect was given another folder): every copy is made in the temp folder under this name.
+  const temp = real(tmpdir())
+  return isUnder(target, temp) && target.slice(temp.length + 1).startsWith('imagineer-')
+}
+
+/** Why the attacker may not read or search this, or null; `envFile` says the reason is an env file. */
+export function blockedAttackerRead(toolName, input, cwd = null) {
+  // Read names a file; Grep and Glob a folder (the session's own when none is given) and a pattern of file names.
+  const pattern = toolName === 'Glob' ? input.pattern : input.glob
+  const file = envFileIn(input.file_path) ?? envFileIn(input.path) ?? envFileIn(pattern)
+  if (file) return { envFile: true, reason: `${file} is an env file, which the attacker never reads` }
+  const where = input.file_path ?? input.path ?? (pattern?.startsWith('/') ? pattern.split(/[*?[{]/)[0] : (cwd ?? '.'))
+  if (attackerMayRead(where, cwd)) return null
+  return { envFile: false, reason: "is outside the throwaway copy, the run folder and Imagineer's scripts, where the attacker reads. Give the copy's path" }
+}
 
 const ROLES = new Set(['dev', 'qa', 'architect', 'attacker'])
 
@@ -127,8 +212,15 @@ export function decide(payload) {
   const name = role(payload.agent_type)
   if (!ROLES.has(name)) return null
   const input = payload.tool_input ?? {}
-  const outside = offLimits(payload)
-  if (outside) return `${outside} ${OFF_LIMITS}`
+  if (name === 'attacker' && payload.tool_name === 'Bash') {
+    const reason = blockedAttackerCommand(input.command ?? '', payload.cwd)
+    return reason ? `This command ${reason}.` : null
+  }
+  if (name === 'attacker' && READ_TOOLS.has(payload.tool_name)) {
+    const blocked = blockedAttackerRead(payload.tool_name, input, payload.cwd)
+    if (!blocked) return null
+    return blocked.envFile ? `${blocked.reason}. If an attack needs a database that is not there, record it as not attacked (attack.mjs untested).` : `That ${blocked.reason}.`
+  }
   if (payload.tool_name === 'Bash') {
     const reason = blockedCommand(name, input.command ?? '')
     return reason ? `This command ${reason}. ${name === 'dev' ? 'Dev commits; the Lead pushes and opens the pull request.' : 'The Lead owns commits, pushes and GitHub.'}` : null
@@ -151,8 +243,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const reason = decide(payload)
   if (reason) {
     // Keep a record for Imagineer's self-check: an agent stepping outside its role is a sign Imagineer went wrong.
-    const outside = offLimits(payload)
-    recordDenial(payload.cwd ?? process.cwd(), { agent: role(payload.agent_type), tool: payload.tool_name, ...(outside ? { kind: 'credentials', reason: outside } : { reason }) })
+    // An attacker reaching for an env file is flagged apart: it is how an attack once ran against a real database.
+    const read = role(payload.agent_type) === 'attacker' && READ_TOOLS.has(payload.tool_name) ? blockedAttackerRead(payload.tool_name, payload.tool_input ?? {}, payload.cwd) : null
+    recordDenial(payload.cwd ?? process.cwd(), { agent: role(payload.agent_type), tool: payload.tool_name, ...(read?.envFile ? { kind: 'database', reason: read.reason } : { reason }) })
     process.stdout.write(
       JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } }),
     )

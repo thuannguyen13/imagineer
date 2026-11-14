@@ -13,12 +13,12 @@
 // checks, fallow, security and stryker reuse an earlier run's result when it measured the same
 // commit with the same Imagineer and tool versions, and say so; --fresh measures again.
 
-import { mkdtempSync, rmSync, writeFileSync, existsSync, copyFileSync, lstatSync, readFileSync, readdirSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync, existsSync, copyFileSync, readFileSync, readdirSync } from 'node:fs'
 import { availableParallelism, tmpdir } from 'node:os'
-import { basename, dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { detect } from './detect.mjs'
-import { arg, isEnvFile, listFiles, PINNED, projectEnv, readJson, readJsonIf, run, runGroup, strykerFailure, tail, withoutCredentials, writeJson } from './lib.mjs'
+import { arg, isEnvFile, PINNED, projectEnv, readJson, readJsonIf, run, runGroup, strykerFailure, tail, withoutDatabaseSettings, writeJson } from './lib.mjs'
 
 const INSTALL = {
   npm: lock => (lock ? ['npm', 'ci', '--no-audit', '--no-fund'] : ['npm', 'install', '--no-audit', '--no-fund']),
@@ -100,25 +100,34 @@ export function removeLeftCopies(out) {
 }
 
 /**
- * A commit can carry env files, and the project's own tests load them. In the copy, the settings in
- * them that hold credentials or point at a database are left out, so no test reaches a real database
- * or service through them. A link is removed whole, never written through. Returns each file with the
- * names left out, never their values.
+ * A commit can carry env files, an install can write more, and the project's own tests load them.
+ * In the copy their database settings are left out, so no test reaches a database through them;
+ * every other setting stays, so the project's own test settings still work. A link is never
+ * followed: an env file that is one is removed, and a linked folder is not entered, so nothing
+ * outside the copy is read or written. Returns each file with the names left out, never their values.
  */
 export function cleanEnvFiles(root) {
   const cleaned = []
-  for (const file of listFiles(root).filter(isEnvFile)) {
-    const path = join(root, file)
-    if (lstatSync(path).isSymbolicLink()) {
-      rmSync(path, { force: true })
-      cleaned.push({ file, removed: true, leftOut: [] })
-      continue
+  const walk = dir => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name)
+      const file = relative(root, path)
+      if (entry.isDirectory()) {
+        if (entry.name !== 'node_modules' && entry.name !== '.git') walk(path)
+      } else if (isEnvFile(entry.name)) {
+        if (entry.isSymbolicLink()) {
+          rmSync(path, { force: true })
+          cleaned.push({ file, removed: true, leftOut: [] })
+        } else if (entry.isFile()) {
+          const { text, leftOut } = withoutDatabaseSettings(readFileSync(path, 'utf8'))
+          if (!leftOut.length) continue
+          writeFileSync(path, text)
+          cleaned.push({ file, leftOut })
+        }
+      }
     }
-    const { text, leftOut } = withoutCredentials(readFileSync(path, 'utf8'))
-    if (!leftOut.length) continue
-    writeFileSync(path, text)
-    cleaned.push({ file, leftOut })
   }
+  walk(root)
   return cleaned
 }
 
@@ -141,6 +150,12 @@ function prepare(repo, out) {
   const install = facts.isNodeProject
     ? run(INSTALL[facts.manager](facts.lockfile), { cwd: path, timeoutMs: 15 * 60_000, project: true })
     : { ok: false, seconds: 0, stderr: 'No package.json.' }
+  // Again after the install: its scripts can write an env file (a copy of the example, most often).
+  for (const entry of facts.isNodeProject ? cleanEnvFiles(path) : []) {
+    const earlier = envFilesCleaned.find(e => e.file === entry.file)
+    if (earlier) earlier.leftOut.push(...entry.leftOut)
+    else envFilesCleaned.push(entry)
+  }
   writeJson(join(out, 'copy.json'), {
     path,
     source: repo,
@@ -151,14 +166,14 @@ function prepare(repo, out) {
     install: { ok: install.ok, seconds: install.seconds, output: install.ok ? '' : tail(install.stderr || install.stdout) },
     // The project's code runs without the user's environment: the names left out, never their values.
     envLeftOut: projectEnv().dropped,
-    // The same for the env files the commit carries: each file, and the names left out of it in the copy.
+    // The env files in the copy, and the database settings left out of each there: names, never values.
     envFilesCleaned,
     // What a later run on the same commit, with the same versions, may reuse from this one.
     key: measurementKey(head.stdout.trim(), facts),
   })
   console.log(`Copied ${head.stdout.trim()}${dirty ? ' (uncommitted changes not included)' : ''} to ${path}; install ${install.ok ? 'passed' : 'failed'}.`)
   for (const { file, removed, leftOut } of envFilesCleaned) {
-    console.log(removed ? `${file} is committed as a link: removed from the copy.` : `${file} is committed: in the copy it runs without ${leftOut.join(', ')}.`)
+    console.log(removed ? `${file} is a link: removed from the copy.` : `${file}: in the copy it runs without ${leftOut.join(', ')}.`)
   }
 }
 

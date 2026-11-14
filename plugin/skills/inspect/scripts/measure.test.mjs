@@ -92,27 +92,38 @@ test("a test strength check that failed is never recorded as the user's skip", t
 import { symlinkSync } from 'node:fs'
 import { cleanEnvFiles } from './measure.mjs'
 
-test("env files a commit carries run in the copy without their credentials; a link is removed, never written through", t => {
+test("env files run in the copy without their database settings, wherever they are; a link is never followed", t => {
   const root = mkdtempSync(join(tmpdir(), 'imagineer-env-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const copy = join(root, 'copy')
-  mkdirSync(join(copy, 'apps/web'), { recursive: true })
-  writeFileSync(join(copy, '.env'), 'APP_NAME=Lunch\nDATABASE_URL=postgresql://app:hunter2@db.example.com/app\nSTRIPE_SECRET_KEY=sk_live_x\n')
+  const outside = join(root, 'outside')
+  mkdirSync(join(copy, 'apps/web/build'), { recursive: true })
+  mkdirSync(join(copy, 'node_modules/pkg'), { recursive: true })
+  mkdirSync(outside)
+  writeFileSync(join(copy, '.env'), 'APP_NAME=Lunch\nJWT_SECRET=test-secret\nDATABASE_URL=postgresql://app:hunter2@db.example.com/app\nPGHOST=localhost\n')
   writeFileSync(join(copy, '.env.example'), 'DATABASE_URL=\n')
   writeFileSync(join(copy, 'apps/web/.env.development'), 'PORT=3000\n')
-  writeFileSync(join(root, 'outside.env'), 'API_TOKEN=real\n')
-  symlinkSync(join(root, 'outside.env'), join(copy, '.env.local'))
+  // A folder a file walk usually skips.
+  writeFileSync(join(copy, 'apps/web/build/.env.test'), 'REDIS_URL=redis://localhost:6379\n')
+  writeFileSync(join(copy, 'node_modules/pkg/.env'), 'DATABASE_URL=x\n')
+  // Links out of the copy: a file, and a folder that holds one.
+  writeFileSync(join(outside, 'real.env'), 'DATABASE_URL=real\n')
+  writeFileSync(join(outside, '.env'), 'DATABASE_URL=real\n')
+  symlinkSync(join(outside, 'real.env'), join(copy, '.env.local'))
+  symlinkSync(outside, join(copy, 'config'))
 
-  const cleaned = cleanEnvFiles(copy)
-  assert.deepEqual(
-    cleaned.sort((a, b) => a.file.localeCompare(b.file)),
-    [
-      { file: '.env', leftOut: ['DATABASE_URL', 'STRIPE_SECRET_KEY'] },
-      { file: '.env.local', removed: true, leftOut: [] },
-    ],
-  )
-  assert.equal(readFileSync(join(copy, '.env'), 'utf8'), 'APP_NAME=Lunch\n')
+  const cleaned = cleanEnvFiles(copy).sort((a, b) => a.file.localeCompare(b.file))
+  assert.deepEqual(cleaned, [
+    { file: '.env', leftOut: ['DATABASE_URL', 'PGHOST'] },
+    { file: '.env.local', removed: true, leftOut: [] },
+    { file: 'apps/web/build/.env.test', leftOut: ['REDIS_URL'] },
+  ])
+  assert.equal(readFileSync(join(copy, '.env'), 'utf8'), 'APP_NAME=Lunch\nJWT_SECRET=test-secret\n')
   assert.equal(readFileSync(join(copy, '.env.example'), 'utf8'), 'DATABASE_URL=\n')
   assert.equal(existsSync(join(copy, '.env.local')), false)
-  assert.equal(readFileSync(join(root, 'outside.env'), 'utf8'), 'API_TOKEN=real\n')
+  // Nothing outside the copy was written.
+  assert.equal(readFileSync(join(outside, 'real.env'), 'utf8'), 'DATABASE_URL=real\n')
+  assert.equal(readFileSync(join(outside, '.env'), 'utf8'), 'DATABASE_URL=real\n')
+  // Cleaning again, as after an install, finds nothing more.
+  assert.deepEqual(cleanEnvFiles(copy), [])
 })

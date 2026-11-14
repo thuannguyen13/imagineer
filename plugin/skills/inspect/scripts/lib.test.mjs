@@ -142,37 +142,53 @@ test("a failure only the estimate recorded, or recorded as the user's skip, read
   assert.equal(testStrengthResult(dir).declined, 'it would take about 45 minutes')
 })
 
-import { credentialProblem, envFileIn, inRepository, isEnvFile, repositoryProblem, runCommandProblem, testCounts, withoutCredentials } from './lib.mjs'
+import { databaseAddressIn, databaseProblem, envFileIn, inRepository, isDatabaseSetting, isEnvFile, repositoryProblem, runProblem, testCounts, withoutDatabaseSettings } from './lib.mjs'
 import { mkdirSync } from 'node:fs'
 
 test('an env file is one that can hold real settings, never an example', () => {
   for (const name of ['.env', '.env.local', '.env.production.local', 'apps/web/.env.test', '.envrc']) assert.equal(isEnvFile(name), true, name)
   for (const name of ['.env.example', '.env.local.sample', '.env.template', 'env.ts', '.environment', 'README.md']) assert.equal(isEnvFile(name), false, name)
+  // A pattern that would match one counts.
   assert.equal(envFileIn('**/.env*'), '.env')
+  assert.equal(envFileIn('cat .env.*'), '.env.*')
   // Code that reads a setting is not a file.
   assert.equal(envFileIn('grep -rn "process.env.DATABASE_URL" src'), null)
 })
 
-test('a command that reaches for credentials is refused, with names and never values', () => {
+test('a database setting is known by its name or its address, whatever the database', () => {
+  for (const name of ['DATABASE_URL', 'DB_HOST', 'DB_NAME', 'APP_DB', 'PGHOST', 'PGDATABASE', 'PG_URL', 'POSTGRES_PASSWORD', 'MONGO_URL', 'MONGODB_URI', 'REDIS_HOST', 'NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'FIREBASE_API_KEY', 'KV_REST_API_TOKEN', 'mysql_host']) {
+    assert.equal(isDatabaseSetting(name), true, name)
+  }
+  // What a project commits so its own tests run is not one.
+  for (const name of ['JWT_SECRET', 'SESSION_SECRET', 'NEXTAUTH_URL', 'STRIPE_SECRET_KEY', 'APP_NAME', 'PORT', 'DEBUG', 'ADBLOCK', 'PGP_KEY_ID']) assert.equal(isDatabaseSetting(name, 'x'), false, name)
+  assert.equal(isDatabaseSetting('CACHE', 'redis://cache.internal:6379'), true)
+  assert.equal(isDatabaseSetting('SEARCH', 'https://elastic:pw@search.example.com:9200'), true)
+  assert.equal(isDatabaseSetting('API', 'https://api.example.com'), false)
+  for (const address of ['postgres://localhost/dev', 'postgresql+psycopg2://u@h/db', 'jdbc:postgresql://h/db', 'sqlite:///data/dev.db', 'mongodb+srv://u:p@c.example.net/app']) {
+    assert.notEqual(databaseAddressIn(address), null, address)
+  }
+})
+
+test('a command that reaches for a database is refused, with names and never values', () => {
   // How attacks once ran against a real database: the URL taken from the repository's env file.
-  assert.equal(credentialProblem("export $(grep '^DATABASE_URL=' /Users/a/app/.env.local | xargs) && npx vitest run a4.test.ts"), 'reads an env file (.env.local)')
-  assert.equal(credentialProblem('node --env-file=.env --test a.test.mjs'), 'reads an env file (.env)')
-  const inline = credentialProblem('DATABASE_URL=postgresql://app:hunter2@db.example.com:5432/app npx vitest run a.test.ts')
-  assert.equal(inline, 'sets DATABASE_URL, which reads like a credential')
-  assert.equal(credentialProblem('STRIPE_SECRET_KEY=sk_live_x npm test'), 'sets STRIPE_SECRET_KEY, which reads like a credential')
+  assert.equal(databaseProblem("export $(grep '^DATABASE_URL=' /Users/a/app/.env.local | xargs) && npx vitest run a4.test.ts"), 'reads an env file (.env.local)')
+  assert.equal(databaseProblem('node --env-file=.env --test a.test.mjs'), 'reads an env file (.env)')
+  const inline = databaseProblem('DATABASE_URL=postgresql://app:hunter2@db.example.com:5432/app npx vitest run a.test.ts')
+  assert.equal(inline, 'sets DATABASE_URL, which says where a database is or how to sign in to it')
+  assert.equal(databaseProblem('PGHOST=localhost PGDATABASE=app npx vitest run a.test.ts'), 'sets PGHOST, which says where a database is or how to sign in to it')
   // A database on this machine is still a database nobody set up for attacks.
-  const named = credentialProblem('PG=postgres://localhost:5432/dev npx vitest run a.test.ts')
+  const named = databaseProblem('STORE=postgres://localhost:5432/dev npx vitest run a.test.ts')
   assert.equal(named, 'names a database, or a service with a sign-in (postgres://…)')
-  assert.equal(credentialProblem('curl https://admin:hunter2@example.com/x'), 'names a database, or a service with a sign-in (https://…)')
+  assert.equal(databaseProblem('curl https://admin:hunter2@example.com/x'), 'names a database, or a service with a sign-in (https://…)')
   for (const reason of [inline, named]) assert.doesNotMatch(reason, /hunter2|example\.com|localhost/)
 
   for (const fine of [
     'npx vitest run test/attacks/a7-approver-other-team.test.ts',
-    'NODE_ENV=test TZ=UTC npx jest test/attacks/a7.test.ts -t "A7: session reuse"',
+    'NODE_ENV=test TZ=UTC npx jest test/attacks/a7.test.ts',
+    'JWT_SECRET=test SESSION_SECRET=x npx vitest run test/attacks/a7.test.ts',
     'node --test test/attacks/a7.test.mjs',
-    'cat .env.example && grep -rn "process.env.DATABASE_URL" src',
     'BASE_URL=http://localhost:3000 npx playwright test attacks/a7.spec.ts',
-  ]) assert.equal(credentialProblem(fine), null, fine)
+  ]) assert.equal(databaseProblem(fine), null, fine)
 })
 
 test('a command or a test stays in the copy: nothing in the repository itself but Imagineer’s folder', t => {
@@ -183,37 +199,59 @@ test('a command or a test stays in the copy: nothing in the repository itself bu
   mkdirSync(join(repo, '.claude/imagineer/runs/1'), { recursive: true })
   mkdirSync(copy)
   assert.equal(inRepository(join(repo, 'src/auth.ts'), repo), true)
+  assert.equal(inRepository(repo, repo), true)
   assert.equal(inRepository(join(repo, '.claude/imagineer/runs/1/attacks.json'), repo), false)
   assert.equal(inRepository(join(copy, 'src/auth.ts'), repo), false)
   assert.equal(inRepository(join(root, 'app-two/src/auth.ts'), repo), false)
-  // Imagineer's own files, when the repository holds them.
-  assert.equal(inRepository(join(repo, 'plugin/x.mjs'), repo, [join(repo, 'plugin')]), false)
 
-  assert.equal(repositoryProblem(`cat ${repo}/service-account.json`, repo), 'reaches into the repository itself, not the copy')
-  assert.equal(repositoryProblem(`readFileSync("${repo}/secrets.json", "utf8")`, repo), 'reaches into the repository itself, not the copy')
-  assert.equal(repositoryProblem(`node attack.mjs run --out ${repo}/.claude/imagineer/runs/1 --run "npx vitest run a.test.ts"`, repo), null)
-  assert.equal(repositoryProblem(`cd ${copy} && npx vitest run src/a.test.ts`, repo), null)
-  assert.equal(runCommandProblem(`npx vitest run --root ${repo}`, { source: repo }), 'reaches into the repository itself, not the copy')
-  assert.equal(runCommandProblem('npx vitest run a.test.ts', { source: repo }), null)
+  const reaches = 'reaches into the repository itself, not the copy'
+  for (const text of [
+    `cat ${repo}/service-account.json`,
+    `readFileSync("${repo}/secrets.json", "utf8")`,
+    `cat "${root}"/app/secrets.json`,
+    `NODE_PATH=/usr/lib:${repo}/node_modules npx vitest`,
+    `open('file://${repo}/dev.db')`,
+    `npx vitest run --root ../app`,
+  ]) assert.equal(repositoryProblem(text, repo, { cwd: copy }), reaches, text)
+  for (const text of [`node attack.mjs run --out ${repo}/.claude/imagineer/runs/1`, `cd ${copy} && npx vitest run ./src/a.test.ts`, 'npx vitest run ../imagineer-copy/a.test.ts']) {
+    assert.equal(repositoryProblem(text, repo, { cwd: copy }), null, text)
+  }
 })
 
-test('an env file keeps its plain settings and loses what holds a credential or points at a database', () => {
-  const { text, leftOut } = withoutCredentials(
+test('a proof or an attack is refused for what its command or its test reaches for, and for nothing an attack may say', () => {
+  const source = '/Users/a/app'
+  assert.equal(runProblem({ command: 'DATABASE_URL=postgresql://x npx vitest run a.test.ts', source }), 'the command sets DATABASE_URL, which says where a database is or how to sign in to it')
+  assert.equal(runProblem({ command: `npx vitest run --root ${source}`, source }), 'the command reaches into the repository itself, not the copy')
+  const run = test => runProblem({ command: 'npx vitest run a.test.ts', test, source })
+  // An address found in a compose file or an example, written into the test.
+  assert.equal(run("process.env.DATABASE_URL = 'postgres://postgres:postgres@localhost:5432/app_dev'"), 'the test names a database (postgres://…)')
+  assert.equal(run(`config({ path: '${source}/config/local.json' })`), 'the test reaches into the repository itself, not the copy')
+  // Attacks worth trying: an env file the app must not serve, a wrong sign-in to the app under test.
+  assert.equal(run("expect((await fetch('/.env')).status).toBe(404)"), null)
+  assert.equal(run("await fetch('http://admin:wrong@localhost:3000/admin')"), null)
+})
+
+test('an env file keeps every setting but its database settings', () => {
+  const { text, leftOut } = withoutDatabaseSettings(
     [
       '# App',
       'APP_NAME=Lunch',
+      'JWT_SECRET=test-secret',
       'export DATABASE_URL="postgresql://app:hunter2@db.example.com/app"',
       'CACHE=redis://cache.internal:6379',
-      "PRIVATE_KEY='-----BEGIN KEY-----",
+      'DB_HOST=localhost',
+      "FIREBASE_PRIVATE_KEY='-----BEGIN KEY-----",
       'MIIEvQIBADANBg',
       "-----END KEY-----'",
       'PORT=3000',
       'NEXT_PUBLIC_API=https://api.example.com',
-      'stripe_secret_key = sk_live_x',
+      'pgpassword = hunter2',
     ].join('\n'),
   )
-  assert.equal(text, ['# App', 'APP_NAME=Lunch', 'PORT=3000', 'NEXT_PUBLIC_API=https://api.example.com'].join('\n'))
-  assert.deepEqual(leftOut, ['DATABASE_URL', 'CACHE', 'PRIVATE_KEY', 'stripe_secret_key'])
+  assert.equal(text, ['# App', 'APP_NAME=Lunch', 'JWT_SECRET=test-secret', 'PORT=3000', 'NEXT_PUBLIC_API=https://api.example.com'].join('\n'))
+  assert.deepEqual(leftOut, ['DATABASE_URL', 'CACHE', 'DB_HOST', 'FIREBASE_PRIVATE_KEY', 'pgpassword'])
+  // Windows line endings hide nothing, and stay on what is kept.
+  assert.deepEqual(withoutDatabaseSettings('A=1\r\nDATABASE_URL=postgres://u:p@h/db\r\nB=2\r\n'), { text: 'A=1\r\nB=2\r\n', leftOut: ['DATABASE_URL'] })
 })
 
 test('a test run says how many tests passed and were skipped, whichever runner printed it', () => {
@@ -221,10 +259,15 @@ test('a test run says how many tests passed and were skipped, whichever runner p
   assert.deepEqual(testCounts(' Test Files  1 skipped (1)\n      Tests  2 skipped (2)\n'), { passed: 0, skipped: 2 })
   assert.deepEqual(testCounts('\u001b[2m      Tests \u001b[22m \u001b[32m1 passed\u001b[39m | \u001b[33m2 skipped\u001b[39m (3)'), { passed: 1, skipped: 2 })
   assert.deepEqual(testCounts('Tests:       1 skipped, 2 passed, 3 total'), { passed: 2, skipped: 1 })
+  // The app's own output may start a line with the same word.
+  assert.deepEqual(testCounts('Tests connection to the store\n      Tests  3 passed (3)\n'), { passed: 3, skipped: 0 })
   assert.deepEqual(testCounts('ℹ tests 2\nℹ pass 0\nℹ fail 0\nℹ skipped 2\nℹ todo 0'), { passed: 0, skipped: 2 })
   assert.deepEqual(testCounts('# tests 1\n# pass 1\n# skipped 0'), { passed: 1, skipped: 0 })
   assert.deepEqual(testCounts('  2 passing (12ms)\n  1 pending'), { passed: 2, skipped: 1 })
   assert.deepEqual(testCounts(' 3 pass\n 1 skip\n 0 fail'), { passed: 3, skipped: 1 })
   assert.deepEqual(testCounts('  1 skipped\n  2 passed (3.1s)'), { passed: 2, skipped: 1 })
+  // A runner told to pass when it finds nothing.
+  assert.deepEqual(testCounts('No tests found, exiting with code 0'), { passed: 0, skipped: 0 })
+  assert.deepEqual(testCounts('No test files found, exiting with code 0'), { passed: 0, skipped: 0 })
   assert.equal(testCounts('ok\n'), null)
 })
