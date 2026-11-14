@@ -13,12 +13,12 @@
 // checks, fallow, security and stryker reuse an earlier run's result when it measured the same
 // commit with the same Imagineer and tool versions, and say so; --fresh measures again.
 
-import { mkdtempSync, rmSync, writeFileSync, existsSync, copyFileSync, readdirSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync, existsSync, copyFileSync, lstatSync, readFileSync, readdirSync } from 'node:fs'
 import { availableParallelism, tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { detect } from './detect.mjs'
-import { arg, PINNED, projectEnv, readJson, readJsonIf, run, runGroup, strykerFailure, tail, writeJson } from './lib.mjs'
+import { arg, isEnvFile, listFiles, PINNED, projectEnv, readJson, readJsonIf, run, runGroup, strykerFailure, tail, withoutCredentials, writeJson } from './lib.mjs'
 
 const INSTALL = {
   npm: lock => (lock ? ['npm', 'ci', '--no-audit', '--no-fund'] : ['npm', 'install', '--no-audit', '--no-fund']),
@@ -99,6 +99,29 @@ export function removeLeftCopies(out) {
   return removed
 }
 
+/**
+ * A commit can carry env files, and the project's own tests load them. In the copy, the settings in
+ * them that hold credentials or point at a database are left out, so no test reaches a real database
+ * or service through them. A link is removed whole, never written through. Returns each file with the
+ * names left out, never their values.
+ */
+export function cleanEnvFiles(root) {
+  const cleaned = []
+  for (const file of listFiles(root).filter(isEnvFile)) {
+    const path = join(root, file)
+    if (lstatSync(path).isSymbolicLink()) {
+      rmSync(path, { force: true })
+      cleaned.push({ file, removed: true, leftOut: [] })
+      continue
+    }
+    const { text, leftOut } = withoutCredentials(readFileSync(path, 'utf8'))
+    if (!leftOut.length) continue
+    writeFileSync(path, text)
+    cleaned.push({ file, leftOut })
+  }
+  return cleaned
+}
+
 function prepare(repo, out) {
   const left = removeLeftCopies(out)
   if (left.length) console.log(`Removed the throwaway ${left.length === 1 ? 'copy' : 'copies'} that run ${left.join(', ')} left behind.`)
@@ -113,6 +136,7 @@ function prepare(repo, out) {
   const path = mkdtempSync(join(tmpdir(), 'imagineer-'))
   const archive = run(['sh', '-c', `git -C "$1" archive HEAD | tar -x -C "$2"`, 'sh', repo, path])
   if (!archive.ok) throw new Error(`Could not copy the repository: ${tail(archive.stderr)}`)
+  const envFilesCleaned = cleanEnvFiles(path)
 
   const install = facts.isNodeProject
     ? run(INSTALL[facts.manager](facts.lockfile), { cwd: path, timeoutMs: 15 * 60_000, project: true })
@@ -127,10 +151,15 @@ function prepare(repo, out) {
     install: { ok: install.ok, seconds: install.seconds, output: install.ok ? '' : tail(install.stderr || install.stdout) },
     // The project's code runs without the user's environment: the names left out, never their values.
     envLeftOut: projectEnv().dropped,
+    // The same for the env files the commit carries: each file, and the names left out of it in the copy.
+    envFilesCleaned,
     // What a later run on the same commit, with the same versions, may reuse from this one.
     key: measurementKey(head.stdout.trim(), facts),
   })
   console.log(`Copied ${head.stdout.trim()}${dirty ? ' (uncommitted changes not included)' : ''} to ${path}; install ${install.ok ? 'passed' : 'failed'}.`)
+  for (const { file, removed, leftOut } of envFilesCleaned) {
+    console.log(removed ? `${file} is committed as a link: removed from the copy.` : `${file} is committed: in the copy it runs without ${leftOut.join(', ')}.`)
+  }
 }
 
 function checks(out) {

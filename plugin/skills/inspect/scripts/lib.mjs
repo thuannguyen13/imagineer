@@ -2,8 +2,9 @@
 // run in any repository without installing anything.
 
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from 'node:fs'
-import { join, dirname, relative } from 'node:path'
+import { appendFileSync, existsSync, readFileSync, realpathSync, writeFileSync, mkdirSync, readdirSync, statSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { basename, join, dirname, relative, resolve, sep } from 'node:path'
 
 /** Tool versions Inspect uses when the repository has none of its own. */
 export const PINNED = { fallow: '3.40.0', stryker: '9.6.1' }
@@ -38,6 +39,144 @@ export function projectEnv(source = process.env) {
     else if (name !== 'NODE_TEST_CONTEXT') dropped.push(name)
   }
   return { env: { ...env, CI: '1' }, dropped: dropped.sort() }
+}
+
+// What an agent may never reach for to make a test run: the settings files that hold real credentials,
+// a credential set by hand, a database, or the repository itself. An agent that finds a test skipped
+// for want of a database goes looking for one; these say no at each place it could bring one in.
+
+/** A file that can hold real settings: `.env`, `.env.local`, `.env.production.local`, `.envrc`. Example files hold none. */
+export const isEnvFile = path => {
+  const name = basename(String(path))
+  return /^\.env(rc|(\.[\w-]+)*)$/.test(name) && !/\.(example|sample|template|dist|defaults)$/.test(name)
+}
+
+// An env file named in a command, a path or a file pattern (`.env*` too). `process.env.NAME` is not one.
+const ENV_FILE_IN_TEXT = /(?:^|[\s/'"=<>(:,])(\.env(?:rc|(?:\.[\w-]+)*))(?=$|[\s'")|;&<>,:*])/g
+
+/** The env file a text names, or null. */
+export function envFileIn(text) {
+  for (const [, name] of String(text ?? '').matchAll(ENV_FILE_IN_TEXT)) if (isEnvFile(name)) return name
+  return null
+}
+
+const DATASTORE = /^(postgres(ql)?|mysql|mariadb|mongodb(\+srv)?|rediss?|amqps?|mssql|sqlserver|libsql|cockroachdb|clickhouse)$/i
+
+/** Why a value points at a database, or at a service with a sign-in: its scheme, never the value. Null otherwise. */
+function connectionIn(text) {
+  for (const [, scheme, signIn] of String(text ?? '').matchAll(/\b([a-z][a-z0-9+.-]*):\/\/([^\s'"@/]*@)?/gi)) {
+    if (DATASTORE.test(scheme) || signIn) return scheme.toLowerCase()
+  }
+  return null
+}
+
+/**
+ * Why a command reaches for credentials, in plain words, or null: it reads an env file, sets a
+ * variable that reads like a credential, or names a database or a service with a sign-in. Says
+ * names and schemes only, never a value.
+ */
+export function credentialProblem(command) {
+  const text = String(command ?? '')
+  const file = envFileIn(text)
+  if (file) return `reads an env file (${file})`
+  for (const [, name] of text.matchAll(/(?:^|[\s;&|('"`])(?:export\s+)?([A-Z_][A-Z0-9_]*)=/g)) {
+    if (SECRET_LIKE.test(name)) return `sets ${name}, which reads like a credential`
+  }
+  const scheme = connectionIn(text)
+  if (scheme) return `names a database, or a service with a sign-in (${scheme}://…)`
+  return null
+}
+
+/** A path as the file system knows it, links followed, whether or not it exists yet. */
+function real(path) {
+  const full = resolve(path)
+  try {
+    return realpathSync(full)
+  } catch {
+    const parent = dirname(full)
+    return parent === full ? full : join(real(parent), basename(full))
+  }
+}
+
+/** Whether a path is in the repository itself, outside Imagineer's own folder there (and outside `allowed`). */
+export function inRepository(path, repo, allowed = []) {
+  const target = real(path)
+  const root = real(repo)
+  const under = dir => target === dir || target.startsWith(dir + sep)
+  return under(root) && !under(join(root, '.claude', 'imagineer')) && !allowed.some(dir => under(real(dir)))
+}
+
+/** Why a text (a command, a test file) reaches into the repository itself, or null. Everything runs in the copy. */
+export function repositoryProblem(text, repo, allowed = []) {
+  if (!repo) return null
+  for (const token of String(text ?? '').split(/[\s'"=;&|()<>`,]+/)) {
+    const path = token.replace(/^(~|\$HOME|\$\{HOME\})(?=\/|$)/, homedir())
+    if (path.startsWith('/') && inRepository(path, repo, allowed)) return 'reaches into the repository itself, not the copy'
+  }
+  return null
+}
+
+/** Why a command for a proof or an attack must not run, or null. */
+export const runCommandProblem = (command, { source = null } = {}) => credentialProblem(command) ?? repositoryProblem(command, source)
+
+/**
+ * An env file's text without the settings that hold credentials or point at a database: those lines
+ * are left out (a quoted value over several lines too), the rest is kept as it is. Returns the names
+ * left out, never their values.
+ */
+export function withoutCredentials(text) {
+  const kept = []
+  const leftOut = []
+  const closes = (rest, quote) => new RegExp(`(^|[^\\\\])${quote}`).test(rest)
+  let open = null
+  for (const line of String(text).split('\n')) {
+    if (open) {
+      if (closes(line, open)) open = null
+      continue
+    }
+    const [, name, value] = line.match(/^\s*(?:export\s+)?([A-Za-z_][\w.-]*)\s*=\s*(.*)$/) ?? []
+    if (!name || !(SECRET_LIKE.test(name) || connectionIn(value))) {
+      kept.push(line)
+      continue
+    }
+    leftOut.push(name)
+    if (/^["'`]/.test(value) && !closes(value.slice(1), value[0])) open = value[0]
+  }
+  return { text: kept.join('\n'), leftOut }
+}
+
+/** Records something Imagineer refused, for its self-check (`denials.jsonl`, in Imagineer's folder in the repository). */
+export function recordDenial(repo, entry) {
+  try {
+    const dir = join(repo, '.claude', 'imagineer')
+    mkdirSync(dir, { recursive: true })
+    appendFileSync(join(dir, 'denials.jsonl'), JSON.stringify({ at: new Date().toISOString(), ...entry }) + '\n')
+  } catch {}
+}
+
+const stripAnsi = text => String(text ?? '').replace(/\u001b\[[0-9;]*m/g, '')
+
+/**
+ * How many tests a run says passed and were skipped, read from the summary of the usual runners
+ * (Vitest, Jest, node:test, Mocha, Playwright, Bun), or null when the output has no such summary.
+ */
+export function testCounts(output) {
+  const text = stripAnsi(output)
+  const count = (from, pattern) => Number(from.match(pattern)?.[1] ?? 0)
+  const first = pattern => (pattern.test(text) ? count(text, pattern) : null)
+  // Vitest: "Tests  3 passed | 1 skipped (4)". Jest: "Tests:  1 skipped, 2 passed, 3 total".
+  const line = text.match(/^\s*Tests:?\s+(.+)$/m)?.[1]
+  if (line) return { passed: count(line, /(\d+) passed/), skipped: count(line, /(\d+) skipped/) + count(line, /(\d+) todo/) }
+  // node:test: "ℹ pass 3", "ℹ skipped 1" (or "# pass 3").
+  const pass = first(/^(?:ℹ|#) pass (\d+)$/m)
+  if (pass !== null) return { passed: pass, skipped: count(text, /^(?:ℹ|#) skipped (\d+)$/m) + count(text, /^(?:ℹ|#) todo (\d+)$/m) }
+  // Mocha: "3 passing", "1 pending".
+  const passing = first(/^\s*(\d+) passing\b/m)
+  if (passing !== null) return { passed: passing, skipped: count(text, /^\s*(\d+) pending\b/m) }
+  // Playwright: "3 passed (2.1s)", "1 skipped". Bun: "3 pass", "1 skip".
+  const passed = first(/^\s*(\d+) pass(?:ed)?\b/m)
+  const skipped = first(/^\s*(\d+) skip(?:ped)?\b/m)
+  return passed === null && skipped === null ? null : { passed: passed ?? 0, skipped: skipped ?? 0 }
 }
 
 /**
@@ -75,7 +214,7 @@ export const tail = (text, lines = 20) => text.trim().split('\n').slice(-lines).
  * whole output (the failing tests' names come long before the last lines).
  */
 export function strykerFailure(log) {
-  const text = String(log ?? '').replace(/\u001b\[[0-9;]*m/g, '')
+  const text = stripAnsi(log)
   const names = pattern =>
     [...new Set([...text.matchAll(pattern)].map(m => m[1].replace(/\s+\d+(\.\d+)?m?s$/, '').trim()))].filter(Boolean)
   // A file's FAIL line names it; the × lines name single tests when no FAIL line was printed.

@@ -12,6 +12,8 @@ The Lead's prompt gives you: the copy's path (`$C`), the run folder (`$O`), the 
 
 **Where you may write:** only under `$O/attacks/`. Never edit the app's code, its existing tests, or anything in the repository. The copy is changed only by `attack.mjs`.
 
+**The app's code runs only through `attack.mjs run`**, which runs it in the copy with no credentials; never run its tests or scripts yourself. When an attack needs a database or a service that is not there, do not look for one or start one: record that part as not attacked (below), ending with "(needs a database)".
+
 **Each attack is one test** that asserts the app *holds*: it refuses, keeps data apart, saves once. It passes when the app held and fails when your attack broke through.
 
 1. Read the app's code, docs and existing tests in `$C` to find what to attack. Most consequential first:
@@ -19,6 +21,7 @@ The Lead's prompt gives you: the copy's path (`$C`), the run folder (`$O`), the 
    - **data:** production and development data mixed up; a partial save after a failure; a double submit creating two records; a value the app accepts that it must not store.
 2. Write each test at `$O/attacks/<path>`, where `<path>` follows the repository's test layout (for example `test/attacks/a7-approver-other-team.test.ts`), using its test framework. Title it with the attack ID and what was tried in plain words.
 3. Run it: `node $S/attack.mjs run --out $O --round <n> --id A7 --category permissions --title "<what was tried>" --file <path> --run "<command that runs only that test, from $C>"`. When the attack tests a behaviour the user already answered, add `--about <question ID>`.
+   If it answers "not attacked", the test was skipped or did not run, and the attack is listed as not attacked yet, never as held. Fix the test and run it again under the same ID if the skip was the test's own doing; otherwise leave it.
 4. When an attack "broke through", read the output. If the test itself was wrong (wrong import, wrong setup, an assertion about something the app never promised), fix the test and run it again under the same ID, or set it aside: `node $S/attack.mjs void --out $O --id A7 --reason "<why the test was wrong>"`. Never set aside a real break.
 
 Write at most 6 attacks per round. Then record each part of the app worth attacking that this round did **not** reach, so it is never read as safe: `node $S/attack.mjs untested --out $O --round <n> --category permissions|data --what "<the part, in plain words>"` (for example "exporting another team's report"). A later round that reaches it leaves it out of its own list.

@@ -4,16 +4,18 @@
 //   dev        writes code, never tests; may commit, never push or call GitHub
 //   qa         writes tests only; never commits, pushes or calls GitHub
 //   architect  writes only under .claude/imagineer/; never commits, pushes or calls GitHub
-//   attacker   writes only under .claude/imagineer/; never commits, pushes or calls GitHub
+//   attacker   writes only under .claude/imagineer/; never commits, pushes or calls GitHub;
+//              never reads an env file, sets a credential or names a database in a command
 //
 // Plugin agents ignore their own `hooks` frontmatter, so this runs for every
 // matching tool call in the session and acts only when `agent_type` names one
 // of these agents. Everyone else, the main session included, passes untouched.
 
-import { appendFileSync, mkdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { readFileSync } from 'node:fs'
+import { credentialProblem, envFileIn, recordDenial } from '../skills/inspect/scripts/lib.mjs'
 
 const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit'])
+const READ_TOOLS = new Set(['Read', 'Grep', 'Glob'])
 const GIT_WRITES = new Set(['commit', 'push', 'merge', 'rebase', 'cherry-pick', 'revert', 'am', 'pull', 'reset', 'checkout', 'switch'])
 const GIT_VALUE_OPTIONS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path'])
 
@@ -98,12 +100,35 @@ export function blockedWrite(name, path) {
   return null
 }
 
+/**
+ * Why a tool call reaches for credentials, or null. The attacker only: an attack that needs a
+ * database that is not there is recorded as not attacked, never run against one the attacker found.
+ * (That the app's code runs in the copy and nowhere else is attack.mjs's to enforce: this hook
+ * cannot tell which folder a command runs in.)
+ */
+export function offLimits(payload) {
+  if (role(payload.agent_type) !== 'attacker') return null
+  const input = payload.tool_input ?? {}
+  if (payload.tool_name === 'Bash') {
+    const reason = credentialProblem(input.command)
+    return reason ? `This command ${reason}.` : null
+  }
+  if (!READ_TOOLS.has(payload.tool_name)) return null
+  // Read names a file; Grep and Glob a folder and a pattern of file names.
+  const file = envFileIn(input.file_path) ?? envFileIn(input.path) ?? envFileIn(payload.tool_name === 'Glob' ? input.pattern : input.glob)
+  return file ? `${file} is an env file.` : null
+}
+
+const OFF_LIMITS = 'The attacker never looks for credentials. If an attack needs a database or a service that is not there, record it as not attacked (attack.mjs untested).'
+
 const ROLES = new Set(['dev', 'qa', 'architect', 'attacker'])
 
 export function decide(payload) {
   const name = role(payload.agent_type)
   if (!ROLES.has(name)) return null
   const input = payload.tool_input ?? {}
+  const outside = offLimits(payload)
+  if (outside) return `${outside} ${OFF_LIMITS}`
   if (payload.tool_name === 'Bash') {
     const reason = blockedCommand(name, input.command ?? '')
     return reason ? `This command ${reason}. ${name === 'dev' ? 'Dev commits; the Lead pushes and opens the pull request.' : 'The Lead owns commits, pushes and GitHub.'}` : null
@@ -126,11 +151,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const reason = decide(payload)
   if (reason) {
     // Keep a record for Imagineer's self-check: an agent stepping outside its role is a sign Imagineer went wrong.
-    try {
-      const dir = join(payload.cwd ?? process.cwd(), '.claude', 'imagineer')
-      mkdirSync(dir, { recursive: true })
-      appendFileSync(join(dir, 'denials.jsonl'), JSON.stringify({ at: new Date().toISOString(), agent: role(payload.agent_type), tool: payload.tool_name, reason }) + '\n')
-    } catch {}
+    const outside = offLimits(payload)
+    recordDenial(payload.cwd ?? process.cwd(), { agent: role(payload.agent_type), tool: payload.tool_name, ...(outside ? { kind: 'credentials', reason: outside } : { reason }) })
     process.stdout.write(
       JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } }),
     )

@@ -69,3 +69,61 @@ test('as a hook it prints a deny decision and exits 0', t => {
   const allowed = spawnSync('node', [script], { input: JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'ls' } }), encoding: 'utf8' })
   assert.equal(allowed.stdout, '')
 })
+
+import { mkdirSync, readFileSync } from 'node:fs'
+
+const attacker = (tool, input) => decide({ agent_type: 'imagineer:attacker', tool_name: tool, tool_input: input })
+
+test('the attacker never reads an env file, in the repository or in the copy', () => {
+  assert.match(attacker('Read', { file_path: '/repo/.env.local' }), /\.env\.local is an env file/)
+  assert.match(attacker('Read', { file_path: '/tmp/imagineer-x/.env' }), /is an env file/)
+  assert.match(attacker('Glob', { pattern: '**/.env*', path: '/tmp/imagineer-x' }), /is an env file/)
+  assert.match(attacker('Grep', { pattern: 'DATABASE_URL', glob: '.env.production.local' }), /is an env file/)
+  assert.match(attacker('Read', { file_path: '/repo/.env.local' }), /record it as not attacked/)
+
+  assert.equal(attacker('Read', { file_path: '/tmp/imagineer-x/src/auth.ts' }), null)
+  assert.equal(attacker('Read', { file_path: '/tmp/imagineer-x/.env.example' }), null)
+  assert.equal(attacker('Grep', { pattern: 'process.env.DATABASE_URL', path: '/tmp/imagineer-x' }), null)
+  assert.equal(attacker('Glob', { pattern: '**/*.test.ts' }), null)
+})
+
+test('the attacker never brings a credential or a database into a command', () => {
+  const bash = command => attacker('Bash', { command })
+  // How attacks once ran against a real database, and the same through attack.mjs.
+  assert.match(bash("export $(grep '^DATABASE_URL=' /repo/.env.local | xargs) && npx vitest run a4.test.ts"), /reads an env file \(\.env\.local\)/)
+  assert.match(bash('cd /tmp/imagineer-x && DATABASE_URL=postgresql://app:pw@127.0.0.1:5432/app npx vitest run a.test.ts'), /sets DATABASE_URL/)
+  assert.match(bash('node attack.mjs run --out /repo/.claude/imagineer/runs/1 --id A7 --run "DATABASE_URL=postgresql://x npx vitest run a.test.ts"'), /sets DATABASE_URL/)
+  assert.match(bash('docker run -d -e POSTGRES_PASSWORD=x -p 127.0.0.1:55432:5432 postgres:17'), /sets POSTGRES_PASSWORD/)
+  assert.match(bash('psql postgres://localhost/dev -c "select 1"'), /names a database/)
+
+  // What attackers do all day: work in the copy, read the repository's history, run Imagineer's scripts.
+  for (const fine of [
+    'cd /tmp/imagineer-x && npx vitest run test/attacks/a7.test.ts',
+    'cd /repo; S=/plugins/imagineer/skills/inspect/scripts; node $S/attack.mjs void --out .claude/imagineer/runs/3 --id A7 --reason "wrong import"',
+    'git -C /repo log --oneline -40',
+    'node attack.mjs run --out /repo/.claude/imagineer/runs/1 --round 1 --id A7 --category data --title "double submit" --file test/a7.test.ts --run "npx vitest run test/a7.test.ts"',
+    'node attack.mjs untested --out /repo/.claude/imagineer/runs/1 --round 1 --category data --what "saving twice (needs a database)"',
+  ]) assert.equal(bash(fine), null, fine)
+})
+
+test('only the attacker is kept from env files and credentials', () => {
+  for (const agent of [undefined, 'general-purpose', 'imagineer:dev', 'imagineer:qa']) {
+    assert.equal(decide({ agent_type: agent, tool_name: 'Read', tool_input: { file_path: '/repo/.env.local' } }), null, String(agent))
+    assert.equal(decide({ agent_type: agent, tool_name: 'Bash', tool_input: { command: 'DATABASE_URL=postgres://localhost/dev npm test' } }), null, String(agent))
+  }
+})
+
+test('as a hook, a reach for credentials is refused and recorded as one', t => {
+  const cwd = mkdtempSync(join(tmpdir(), 'imagineer-guard-'))
+  t.after(() => rmSync(cwd, { recursive: true, force: true }))
+  const script = join(dirname(fileURLToPath(import.meta.url)), 'role-guard.mjs')
+  const hook = (tool_name, tool_input) => spawnSync('node', [script], { input: JSON.stringify({ cwd, agent_type: 'imagineer:attacker', tool_name, tool_input }), encoding: 'utf8', cwd })
+  assert.equal(JSON.parse(hook('Read', { file_path: join(cwd, '.env.local') }).stdout).hookSpecificOutput.permissionDecision, 'deny')
+  assert.equal(JSON.parse(hook('Bash', { command: 'git push' }).stdout).hookSpecificOutput.permissionDecision, 'deny')
+  assert.equal(hook('Read', { file_path: join(cwd, 'src/a.ts') }).stdout, '')
+  const denials = readFileSync(join(cwd, '.claude/imagineer/denials.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line))
+  assert.deepEqual(denials.map(d => [d.agent, d.tool, d.kind, d.reason]), [
+    ['attacker', 'Read', 'credentials', '.env.local is an env file.'],
+    ['attacker', 'Bash', undefined, 'This command runs git push. The Lead owns commits, pushes and GitHub.'],
+  ])
+})

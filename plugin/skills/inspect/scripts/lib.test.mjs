@@ -141,3 +141,90 @@ test("a failure only the estimate recorded, or recorded as the user's skip, read
   write('stryker.json', { ok: false, declined: 'it would take about 45 minutes' })
   assert.equal(testStrengthResult(dir).declined, 'it would take about 45 minutes')
 })
+
+import { credentialProblem, envFileIn, inRepository, isEnvFile, repositoryProblem, runCommandProblem, testCounts, withoutCredentials } from './lib.mjs'
+import { mkdirSync } from 'node:fs'
+
+test('an env file is one that can hold real settings, never an example', () => {
+  for (const name of ['.env', '.env.local', '.env.production.local', 'apps/web/.env.test', '.envrc']) assert.equal(isEnvFile(name), true, name)
+  for (const name of ['.env.example', '.env.local.sample', '.env.template', 'env.ts', '.environment', 'README.md']) assert.equal(isEnvFile(name), false, name)
+  assert.equal(envFileIn('**/.env*'), '.env')
+  // Code that reads a setting is not a file.
+  assert.equal(envFileIn('grep -rn "process.env.DATABASE_URL" src'), null)
+})
+
+test('a command that reaches for credentials is refused, with names and never values', () => {
+  // How attacks once ran against a real database: the URL taken from the repository's env file.
+  assert.equal(credentialProblem("export $(grep '^DATABASE_URL=' /Users/a/app/.env.local | xargs) && npx vitest run a4.test.ts"), 'reads an env file (.env.local)')
+  assert.equal(credentialProblem('node --env-file=.env --test a.test.mjs'), 'reads an env file (.env)')
+  const inline = credentialProblem('DATABASE_URL=postgresql://app:hunter2@db.example.com:5432/app npx vitest run a.test.ts')
+  assert.equal(inline, 'sets DATABASE_URL, which reads like a credential')
+  assert.equal(credentialProblem('STRIPE_SECRET_KEY=sk_live_x npm test'), 'sets STRIPE_SECRET_KEY, which reads like a credential')
+  // A database on this machine is still a database nobody set up for attacks.
+  const named = credentialProblem('PG=postgres://localhost:5432/dev npx vitest run a.test.ts')
+  assert.equal(named, 'names a database, or a service with a sign-in (postgres://…)')
+  assert.equal(credentialProblem('curl https://admin:hunter2@example.com/x'), 'names a database, or a service with a sign-in (https://…)')
+  for (const reason of [inline, named]) assert.doesNotMatch(reason, /hunter2|example\.com|localhost/)
+
+  for (const fine of [
+    'npx vitest run test/attacks/a7-approver-other-team.test.ts',
+    'NODE_ENV=test TZ=UTC npx jest test/attacks/a7.test.ts -t "A7: session reuse"',
+    'node --test test/attacks/a7.test.mjs',
+    'cat .env.example && grep -rn "process.env.DATABASE_URL" src',
+    'BASE_URL=http://localhost:3000 npx playwright test attacks/a7.spec.ts',
+  ]) assert.equal(credentialProblem(fine), null, fine)
+})
+
+test('a command or a test stays in the copy: nothing in the repository itself but Imagineer’s folder', t => {
+  const root = mkdtempSync(join(tmpdir(), 'imagineer-where-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const repo = join(root, 'app')
+  const copy = join(root, 'imagineer-copy')
+  mkdirSync(join(repo, '.claude/imagineer/runs/1'), { recursive: true })
+  mkdirSync(copy)
+  assert.equal(inRepository(join(repo, 'src/auth.ts'), repo), true)
+  assert.equal(inRepository(join(repo, '.claude/imagineer/runs/1/attacks.json'), repo), false)
+  assert.equal(inRepository(join(copy, 'src/auth.ts'), repo), false)
+  assert.equal(inRepository(join(root, 'app-two/src/auth.ts'), repo), false)
+  // Imagineer's own files, when the repository holds them.
+  assert.equal(inRepository(join(repo, 'plugin/x.mjs'), repo, [join(repo, 'plugin')]), false)
+
+  assert.equal(repositoryProblem(`cat ${repo}/service-account.json`, repo), 'reaches into the repository itself, not the copy')
+  assert.equal(repositoryProblem(`readFileSync("${repo}/secrets.json", "utf8")`, repo), 'reaches into the repository itself, not the copy')
+  assert.equal(repositoryProblem(`node attack.mjs run --out ${repo}/.claude/imagineer/runs/1 --run "npx vitest run a.test.ts"`, repo), null)
+  assert.equal(repositoryProblem(`cd ${copy} && npx vitest run src/a.test.ts`, repo), null)
+  assert.equal(runCommandProblem(`npx vitest run --root ${repo}`, { source: repo }), 'reaches into the repository itself, not the copy')
+  assert.equal(runCommandProblem('npx vitest run a.test.ts', { source: repo }), null)
+})
+
+test('an env file keeps its plain settings and loses what holds a credential or points at a database', () => {
+  const { text, leftOut } = withoutCredentials(
+    [
+      '# App',
+      'APP_NAME=Lunch',
+      'export DATABASE_URL="postgresql://app:hunter2@db.example.com/app"',
+      'CACHE=redis://cache.internal:6379',
+      "PRIVATE_KEY='-----BEGIN KEY-----",
+      'MIIEvQIBADANBg',
+      "-----END KEY-----'",
+      'PORT=3000',
+      'NEXT_PUBLIC_API=https://api.example.com',
+      'stripe_secret_key = sk_live_x',
+    ].join('\n'),
+  )
+  assert.equal(text, ['# App', 'APP_NAME=Lunch', 'PORT=3000', 'NEXT_PUBLIC_API=https://api.example.com'].join('\n'))
+  assert.deepEqual(leftOut, ['DATABASE_URL', 'CACHE', 'PRIVATE_KEY', 'stripe_secret_key'])
+})
+
+test('a test run says how many tests passed and were skipped, whichever runner printed it', () => {
+  assert.deepEqual(testCounts(' Test Files  1 passed (1)\n      Tests  3 passed (3)\n'), { passed: 3, skipped: 0 })
+  assert.deepEqual(testCounts(' Test Files  1 skipped (1)\n      Tests  2 skipped (2)\n'), { passed: 0, skipped: 2 })
+  assert.deepEqual(testCounts('\u001b[2m      Tests \u001b[22m \u001b[32m1 passed\u001b[39m | \u001b[33m2 skipped\u001b[39m (3)'), { passed: 1, skipped: 2 })
+  assert.deepEqual(testCounts('Tests:       1 skipped, 2 passed, 3 total'), { passed: 2, skipped: 1 })
+  assert.deepEqual(testCounts('ℹ tests 2\nℹ pass 0\nℹ fail 0\nℹ skipped 2\nℹ todo 0'), { passed: 0, skipped: 2 })
+  assert.deepEqual(testCounts('# tests 1\n# pass 1\n# skipped 0'), { passed: 1, skipped: 0 })
+  assert.deepEqual(testCounts('  2 passing (12ms)\n  1 pending'), { passed: 2, skipped: 1 })
+  assert.deepEqual(testCounts(' 3 pass\n 1 skip\n 0 fail'), { passed: 3, skipped: 1 })
+  assert.deepEqual(testCounts('  1 skipped\n  2 passed (3.1s)'), { passed: 2, skipped: 1 })
+  assert.equal(testCounts('ok\n'), null)
+})

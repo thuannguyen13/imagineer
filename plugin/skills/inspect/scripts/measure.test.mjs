@@ -88,3 +88,31 @@ test("a test strength check that failed is never recorded as the user's skip", t
   assert.equal(measure('stryker', '--out', fresh, '--decline', 'it would take about 45 minutes').status, 0)
   assert.equal(JSON.parse(readFileSync(join(fresh, 'stryker.json'), 'utf8')).declined, 'it would take about 45 minutes')
 })
+
+import { symlinkSync } from 'node:fs'
+import { cleanEnvFiles } from './measure.mjs'
+
+test("env files a commit carries run in the copy without their credentials; a link is removed, never written through", t => {
+  const root = mkdtempSync(join(tmpdir(), 'imagineer-env-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const copy = join(root, 'copy')
+  mkdirSync(join(copy, 'apps/web'), { recursive: true })
+  writeFileSync(join(copy, '.env'), 'APP_NAME=Lunch\nDATABASE_URL=postgresql://app:hunter2@db.example.com/app\nSTRIPE_SECRET_KEY=sk_live_x\n')
+  writeFileSync(join(copy, '.env.example'), 'DATABASE_URL=\n')
+  writeFileSync(join(copy, 'apps/web/.env.development'), 'PORT=3000\n')
+  writeFileSync(join(root, 'outside.env'), 'API_TOKEN=real\n')
+  symlinkSync(join(root, 'outside.env'), join(copy, '.env.local'))
+
+  const cleaned = cleanEnvFiles(copy)
+  assert.deepEqual(
+    cleaned.sort((a, b) => a.file.localeCompare(b.file)),
+    [
+      { file: '.env', leftOut: ['DATABASE_URL', 'STRIPE_SECRET_KEY'] },
+      { file: '.env.local', removed: true, leftOut: [] },
+    ],
+  )
+  assert.equal(readFileSync(join(copy, '.env'), 'utf8'), 'APP_NAME=Lunch\n')
+  assert.equal(readFileSync(join(copy, '.env.example'), 'utf8'), 'DATABASE_URL=\n')
+  assert.equal(existsSync(join(copy, '.env.local')), false)
+  assert.equal(readFileSync(join(root, 'outside.env'), 'utf8'), 'API_TOKEN=real\n')
+})

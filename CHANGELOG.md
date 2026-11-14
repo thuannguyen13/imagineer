@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.1 — 2026-11-14
+
+### Changes you need to know
+
+- **Attacks that need a database:** On a project whose tests need a database, those attacks now show as **Not attacked yet** instead of running, until Inspect can start a throwaway database of its own. ([#26](https://github.com/thuannguyen13/imagineer/issues/26), [#32](https://github.com/thuannguyen13/imagineer/issues/32))
+
+### Bug Fixes
+
+- **Attacks reached a real database:** Inspect's attacker could take a database address from your local env file and attack that database; it is now refused env files, credentials and database addresses, and any attempt is flagged at the end of the run. ([#26](https://github.com/thuannguyen13/imagineer/issues/26))
+- **Skipped attacks counted as held:** An attack whose test was skipped, most often for want of a database, was counted as the app holding; it is now listed as **Not attacked yet**. ([#26](https://github.com/thuannguyen13/imagineer/issues/26))
+- **Committed env files:** Credentials in env files committed to your project reached its tests in Inspect's throwaway copy; the copy now runs without them, and Inspect names the files. ([#26](https://github.com/thuannguyen13/imagineer/issues/26))
+
 ## 0.4.0 — 2026-11-08
 
 ### Changes you need to know

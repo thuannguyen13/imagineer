@@ -11,7 +11,8 @@ A step is done only with evidence: a test, a bench run or a real-project run, na
 
 ## Safety
 
-- [ ] [#26](https://github.com/thuannguyen13/imagineer/issues/26): the attacker read the database URL from the project's local env file and attacked the user's own local database. Attacks must never reach a database the user did not set up for them.
+- [x] [#26](https://github.com/thuannguyen13/imagineer/issues/26): the attacker read the database URL from the project's local env file and attacked the user's own local database. Attacks must never reach a database the user did not set up for them. Refused at the attack and proof scripts and at the role guard, env files cleaned in the copy, a skipped attack never held (branch `fix/attacks-never-reach-real-database`, 2026-11-14: `attack.test.mjs`, `role-guard.test.mjs`, `lib.test.mjs`, and a replay of the sales portal's and ask-nanci's past attacker sessions through the guard, where every refusal was a reach for a database or an env file). Not closed by this: an agent that evades on purpose, and a test the attacker runs itself picks up what the user's shell exports; both need the project's code run in a sandbox.
+- [ ] Attacks on a project whose tests need a database show as not attacked until Inspect starts its own throwaway database ([#32](https://github.com/thuannguyen13/imagineer/issues/32)). On the sales portal this is most attacks.
 - [ ] [#27](https://github.com/thuannguyen13/imagineer/issues/27): the attacker stops at its turn limit mid-round, without a report.
 
 ## Foundations: read the project, measure the right code

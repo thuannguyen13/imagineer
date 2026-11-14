@@ -49,6 +49,25 @@ test('role-guard refusals, tools that did not run and a stuck build are flagged'
   assert.deepEqual(kinds.sort(), ['rule-broken:dev:Write', 'stuck:approvals', 'tool-trouble:fallow'])
 })
 
+test('a reach for credentials is one flag per agent, whichever tool it came through', t => {
+  const line = (agent, tool, reason) => JSON.stringify({ agent, tool, kind: 'credentials', reason })
+  const root = repo(t, {
+    '.claude/imagineer/denials.jsonl': [
+      line('attacker', 'Read', '.env.local is an env file.'),
+      line('attacker', 'attack.mjs', 'the command sets DATABASE_URL, which reads like a credential'),
+      line('lead', 'prove.mjs', 'the command reads an env file (.env)'),
+      JSON.stringify({ agent: 'attacker', tool: 'Bash', reason: 'This command runs git push.' }),
+    ].join('\n'),
+  })
+  const flags = selfCheck(root)
+  assert.deepEqual(flags.map(f => `${f.kind}:${f.rule}`).sort(), ['rule-broken:attacker:Bash', 'rule-broken:attacker:credentials', 'rule-broken:lead:credentials'])
+  assert.equal(
+    flags.find(f => f.rule === 'attacker:credentials').said,
+    'The attacker agent reached 2 times for credentials or outside the copy, and was refused (first: .env.local is an env file).',
+  )
+  assert.match(flags.find(f => f.rule === 'lead:credentials').said, /^Inspect reached once for credentials/)
+})
+
 test('questions answered mostly in the user’s own words, or asked twice, are flagged', t => {
   const q = (id, own, expectation = `Question ${id} about something distinct`) => ({ id, status: 'answered', ownWords: own, expectation })
   const root = repo(t, {
