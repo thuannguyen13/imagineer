@@ -672,3 +672,22 @@ test('a finish condition that cannot be measured says why, with no picture', asy
   expect(await ui.find({ type: 'Text', text: /▱/ })).toBeUndefined()
   await ui.unmount()
 })
+
+test('after a reload, the pane still finds the results: it reads them from the session\'s folder, not a working directory the reload did not bind', async ($, on) => {
+  // Only absolute paths in the session's folder answer, as after a hot reload of the module.
+  const files: Record<string, string> = { '/work/app/.claude/imagineer/results.json': JSON.stringify(SAMPLE) }
+  mock.clock(on)
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('fs.exists', (_, e) => ({ value: e.path in files }))
+  on('fs.stat', (_, e) => {
+    if (!(e.path in files)) throw new Error('not found')
+    return { value: { kind: 'file', size: files[e.path]!.length, mtimeMs: 1, isLink: false } }
+  })
+  on('fs.read', (_, e) => {
+    if (!(e.path in files)) throw new Error('not found')
+    return { value: files[e.path]! }
+  })
+  on('ui.open', () => ({ value: { isPlaced: false, reason: 'no-surface' } }))
+  const result = await $.command.run(typed('imagineer:status'))
+  expect(result.text).toContain('Imagineer: ✕ At risk')
+})

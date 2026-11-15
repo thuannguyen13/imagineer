@@ -73,19 +73,38 @@ let lastBase: Summary = { kind: 'none' }
 let lastShown = ''
 let stopWatching: (() => void) | null = null
 
-const readIf = async ($: EngineInterface, path: string): Promise<string | null> =>
-  (await $.fs.exists(path)) ? $.fs.read(path) : null
+/**
+ * A path in the session's folder, made absolute. The engine reads a relative path against the
+ * working directory it binds when the session starts; a hot reload of this module (its files changed
+ * during the session) does not bind it again, and the pane then found no results although they were
+ * there. Asking the session for its folder each time holds after a reload too.
+ */
+async function at($: EngineInterface, path: string): Promise<string> {
+  if (path.startsWith('/')) return path
+  try {
+    const dir = await $.session.cwd()
+    return dir ? `${dir.replace(/\/+$/, '')}/${path}` : path
+  } catch {
+    return path
+  }
+}
+
+const readIf = async ($: EngineInterface, path: string): Promise<string | null> => {
+  const full = await at($, path)
+  return (await $.fs.exists(full)) ? $.fs.read(full) : null
+}
 
 /** The commit the repository's HEAD is at, read from git's own files (no git process). */
 async function currentCommit($: EngineInterface): Promise<string | null> {
   try {
-    if (!(await $.fs.exists('.git'))) return null
-    let gitDir = '.git'
-    if ((await $.fs.stat('.git')).kind === 'file') {
+    const dotGit = await at($, '.git')
+    if (!(await $.fs.exists(dotGit))) return null
+    let gitDir = dotGit
+    if ((await $.fs.stat(dotGit)).kind === 'file') {
       // A worktree: .git names the real folder.
-      const pointer = (await $.fs.read('.git')).match(/^gitdir:\s*(.+)$/m)
+      const pointer = (await $.fs.read(dotGit)).match(/^gitdir:\s*(.+)$/m)
       if (!pointer) return null
-      gitDir = pointer[1]!.trim()
+      gitDir = await at($, pointer[1]!.trim())
     }
     const head = parseHead(await $.fs.read(`${gitDir}/HEAD`))
     if (!head) return null
@@ -105,13 +124,14 @@ async function currentCommit($: EngineInterface): Promise<string | null> {
 
 /** Reads the results file again when it changed, adds what changed since, and stores it. */
 async function refresh($: EngineInterface): Promise<Summary> {
-  if (!(await $.fs.exists(RESULTS_PATH))) {
+  const results = await at($, RESULTS_PATH)
+  if (!(await $.fs.exists(results))) {
     lastMtime = null
     lastBase = { kind: 'none' }
   } else {
-    const { mtimeMs } = await $.fs.stat(RESULTS_PATH)
+    const { mtimeMs } = await $.fs.stat(results)
     if (mtimeMs !== lastMtime) {
-      lastBase = readResults(await $.fs.read(RESULTS_PATH))
+      lastBase = readResults(await $.fs.read(results))
       lastMtime = mtimeMs
     }
   }
@@ -210,6 +230,8 @@ export const register: Register = (on, options) => {
   }
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+    // A pane left open across a reload of this module keeps following the file.
+    watch($)
     const { Box, Button, Text } = $.ui.resolve(e)
     const summary = await read($, summaryAtom)
     if (summary.kind === 'none' && (await read($, startingAtom))) {
