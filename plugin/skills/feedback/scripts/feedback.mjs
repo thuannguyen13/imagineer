@@ -14,7 +14,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, write
 import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { testStrengthResult } from '../../inspect/scripts/lib.mjs'
+import { isMain, testStrengthResult } from '../../inspect/scripts/lib.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO_URL = 'https://github.com/thuannguyen13/imagineer'
@@ -63,11 +63,21 @@ export function selfCheck(repo) {
 
   // An agent tried to step outside its role, and the role guard refused it.
   const denials = readLines(join(base, 'denials.jsonl'))
+  // Reaching for a database (an env file, a database setting, the repository itself) is its own flag,
+  // whichever tool it came through: it is how an attack once ran against a real database.
+  const reaching = denials.filter(d => d.kind === 'database')
+  for (const agent of new Set(reaching.map(d => d.agent))) {
+    const mine = reaching.filter(d => d.agent === agent)
+    const n = mine.length
+    const who = agent === 'lead' ? 'Inspect' : `The ${agent} agent`
+    flags.push(flag('rule-broken', 'agent', `${agent}:database`, `${who} reached ${n === 1 ? 'once' : `${n} times`} for a database or outside the copy, and was refused (first: ${String(mine[0].reason).replace(/\.$/, '')}).`))
+  }
   const byRole = new Map()
-  for (const d of denials) byRole.set(`${d.agent}:${d.tool}`, (byRole.get(`${d.agent}:${d.tool}`) ?? 0) + 1)
+  for (const d of denials.filter(d => d.kind !== 'database')) byRole.set(`${d.agent}:${d.tool}`, (byRole.get(`${d.agent}:${d.tool}`) ?? 0) + 1)
   for (const [key, n] of byRole) {
     const [agent, tool] = key.split(':')
-    flags.push(flag('rule-broken', 'agent', key, `The ${agent} agent tried ${n === 1 ? 'once' : `${n} times`} to use ${tool} outside its role; the role guard refused it.`))
+    const who = agent === 'lead' ? 'Inspect' : `The ${agent} agent`
+    flags.push(flag('rule-broken', 'agent', key, `${who} tried ${n === 1 ? 'once' : `${n} times`} to use ${tool} in a way its role does not allow, and was refused.`))
   }
 
   // Tools that did not run in the latest Inspect run.
@@ -155,7 +165,7 @@ export function issueFor(record) {
   return { title, body, url }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   const [step] = process.argv.slice(2)
   try {
     if (step === 'check') {

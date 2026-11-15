@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.1 — 2026-11-14
+
+### Changes you need to know
+
+- **Grade pane opens when you ask:** Inspect no longer opens the grade pane on its own. Open it with **Details** above the prompt or `/imagineer:status`, or turn on **Open the pane when Inspect or Build runs** in `/config` to have it open with each run.
+- **Attacks that need a database:** On a project whose tests need a database, those attacks now show as **Not attacked yet** instead of running, until Inspect can start a throwaway database of its own. ([#26](https://github.com/thuannguyen13/imagineer/issues/26), [#32](https://github.com/thuannguyen13/imagineer/issues/32))
+- **Database settings in env files:** In Inspect's throwaway copy, the database settings in your project's env files point nowhere, except a database in memory or in a file of the project, so tests that need a database server fail there; Inspect names the files and settings. ([#26](https://github.com/thuannguyen13/imagineer/issues/26))
+
+### Bug Fixes
+
+- **Attacks reached a real database:** Inspect's attacker could take a database address from your local env file and attack that database; it now runs your app's code only in the throwaway copy and reads nothing outside it, and any attempt is flagged at the end of the run. ([#26](https://github.com/thuannguyen13/imagineer/issues/26))
+- **Skipped attacks counted as held:** An attack whose test was skipped, most often for want of a database, was counted as the app holding; it is now listed as **Not attacked yet**, and a round with such an attack no longer counts toward finishing. ([#26](https://github.com/thuannguyen13/imagineer/issues/26))
+- **Install folders with a space or a link:** When the folder Claude Code keeps plugins in had a space, a non-English letter or a link in its path, Imagineer's scripts did nothing and its role guard let everything through; both now work there. ([#26](https://github.com/thuannguyen13/imagineer/issues/26))
+
 ## 0.4.0 — 2026-11-08
 
 ### Changes you need to know

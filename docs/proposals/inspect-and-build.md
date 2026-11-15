@@ -33,7 +33,7 @@ When a command runs, Claude Code fires a `command.run` event before the skill do
 | Command | The mod | The skill reaches Claude |
 |---|---|---|
 | `/imagineer:status` | Answers it: opens the grade pane | No: no turn, no cost |
-| `/imagineer:inspect`, `/imagineer:build` | Watches it: opens the pane and the band, then passes the command on | Yes |
+| `/imagineer:inspect`, `/imagineer:build` | Watches it: shows the band, then passes the command on. Opens the pane too only when the user turned on the plugin setting **Open the pane when Inspect or Build runs** (off by default) | Yes |
 
 ## Principles
 
@@ -42,7 +42,8 @@ When a command runs, Claude Code fires a `command.run` event before the skill do
 - **The user decides intent.** Agents never guess what the user meant when they can ask.
 - **Read the project; never assume it.** Imagineer works on any project in its stacks, whatever its layout, framework, package manager or CI. Every run starts from a scan of the project's structure, and each later step plans from what the scan found, never from a fixed folder, file name or tool. Where the scan cannot tell, Imagineer asks the user once and keeps the answer for that project. A default is used only when it is shown to the user as a default (like the 80% thresholds); it is never applied silently. *Planned:* the scan records a layout and every step reads it ([#29](https://github.com/thuannguyen13/imagineer/issues/29)).
 - **Leave no trace unless asked.** Inspect does not add files, dependencies or config to the user's repo, and never writes in its `.git`. Its own files live under `.claude/imagineer/`, kept out of git by a `.gitignore` inside that folder.
-- **The project's code runs without the user's credentials.** Inspect and Build run the project's install, tests and attacks with only what tools need from the environment, so a test cannot reach a real database or service with the user's keys. Network access is not blocked: that would need a container, a heavier dependency than the risk calls for today.
+- **The project's code runs without the user's credentials, and never against a database nobody set up for it.** Inspect and Build run the project's install, tests and attacks with only what tools need from the environment. A proof or an attack starts a test runner with no shell, in the run's own throwaway copy, and is refused when its command or its test names a database, an env file or the repository itself. The attacker runs only Imagineer's attack script and reads only the copy, its run folder and Imagineer's scripts. Env files in the copy keep their settings, with their database settings pointed nowhere. A test that did not run is neither a pass nor a break. Until Inspect starts a throwaway database of its own ([#32](https://github.com/thuannguyen13/imagineer/issues/32)), attacks that need one show as not attacked ([#26](https://github.com/thuannguyen13/imagineer/issues/26)).
+  - *Not closed, and not closable by reading text:* a test that builds a path to the repository as it runs, code that falls back to a database of its own when a setting is absent, or a database on this machine that asks for no sign-in, reached by host and port. All need the project's code run with the file system and the network closed.
 
 ## `/inspect`
 
