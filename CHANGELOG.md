@@ -44,6 +44,7 @@
 
 ### Bug Fixes
 
+- **Empty grade pane after Imagineer updated during a session:** When Imagineer's files changed while Claude Code was open, the pane and `/imagineer:status` said there were no results although a run had just written them; they now find them, and an open pane keeps following the run. ([#42](https://github.com/thuannguyen13/imagineer/issues/42))
 - **Your own agents held to Imagineer's rules:** An agent of yours, or of another plugin, named like one of Imagineer's (`attacker`, `dev`, `qa`) was held to Imagineer's limits; only Imagineer's own agents are now. ([#38](https://github.com/thuannguyen13/imagineer/issues/38))
 - **Code quality marked down for security findings:** Possible security weaknesses also lowered Code quality, without saying why; they now count under Security and permissions only.
 - **Yarn 2 and later:** Installing these projects in Inspect's copy failed because of an option those versions removed. ([#29](https://github.com/thuannguyen13/imagineer/issues/29))
