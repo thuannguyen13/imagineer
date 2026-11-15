@@ -1,2 +1,5 @@
 # Imagineer run files, if a session in this repository ever writes them
 .claude/imagineer/
+
+# Written by Claude Code's plugin check for editors; points at types only it generates
+plugin/tsconfig.json
