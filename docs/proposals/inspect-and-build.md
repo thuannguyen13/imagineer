@@ -395,7 +395,7 @@ Imagineer learns from its own runs, but never changes itself without review. Eve
 
 ### Health (proposed 2026-11-14)
 
-*Proposed; the owner has not decided it.* The parts below learn from a problem after someone reports it. Health asks the earlier question: is Imagineer itself still doing its job, before a release and over time? Research, evidence and a trial of Claude Code's own plugin test runner: [self-health.md](../research/self-health.md).
+*Proposed 2026-11-14; the owner approved starting the regression suite the same day ([decisions](../../plan/decisions.md)). The rest is proposed.* The parts below learn from a problem after someone reports it. Health asks the earlier question: is Imagineer itself still doing its job, before a release and over time? Research, evidence and a trial of Claude Code's own plugin test runner: [self-health.md](../research/self-health.md).
 
 **Why.** So far the serious problems were found by the owner reading a run's log and by independent reviews, never by the self-check, the tests or the bench: attacks that ran against a real database ([#26](https://github.com/thuannguyen13/imagineer/issues/26)), a false 100% test strength, and about forty defects in the fix for #26 that its own tests passed. Imagineer's checks see only what Imagineer writes down about itself.
 
@@ -408,7 +408,7 @@ Imagineer learns from its own runs, but never changes itself without review. Eve
 
 Claude Code's plugin test runner (`claude plugin eval`) started Inspect in a trial, but its sandbox has no working `git` and no network on the owner's machine, so it is not where the suite runs today. It may suit small checks later.
 
-**For the owner to decide:** a budget per release for the suite (about $15 to $25 for the scenarios above, by the cost of real runs so far), and whether a release waits for it; which models it runs on, pinned; where it runs; whether vitals can be shared as feedback records are, by the user's own hand.
+**Decided for the suite (2026-11-14):** it runs on the Recommended models, on the owner's machine, and a release waits for it; about $15 to $25 for the scenarios above, by the cost of real runs so far. **Still for the owner to decide:** whether vitals can be shared as feedback records are, by the user's own hand.
 
 ### Self-check
 

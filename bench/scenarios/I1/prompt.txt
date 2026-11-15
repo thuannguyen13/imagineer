@@ -1,0 +1,3 @@
+/imagineer:inspect
+
+There is no user here. Run every step without one: measure (run the test strength check in the foreground, and skip it if its estimate is over 15 minutes), add the questions without answering them, prove what the ledger already answers, run two attack rounds, clean up, regrade as done and report.

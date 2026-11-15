@@ -9,6 +9,16 @@ A step is done only with evidence: a test, a bench run or a real-project run, na
 - [x] Build turned off; a test strength check that could not run says so and is flagged; the version in the pane; README and changelog for users (branch `release/0.4.0`, 2026-11-08).
 - [ ] Pull request merged into `main`, tagged `v0.4.0`.
 
+## Health: is Imagineer itself working
+
+Decided 2026-11-14 ([decisions.md](decisions.md)); design: [Health](../docs/proposals/inspect-and-build.md#health-proposed-2026-11-14), research: [self-health.md](../docs/research/self-health.md).
+
+- [ ] The suite's runner and its first two scenarios: I1, the clean project, and I2, the tripwire env file (`bench/inspect.mjs`, branch `bench/inspect-suite`).
+- [ ] The other scenarios: a permission hole, no tests, tests that skip without a database, a setting with a fallback in the code, another layout.
+- [ ] Vitals written by every run, and the scorecard across runs.
+- [ ] The wider self-check.
+- [ ] Review as a rule, with its end, in CONTRIBUTING.md.
+
 ## Safety
 
 - [ ] [#26](https://github.com/thuannguyen13/imagineer/issues/26): the attacker read the database URL from the project's local env file and attacked the user's own local database. Attacks must never reach a database the user did not set up for them.
