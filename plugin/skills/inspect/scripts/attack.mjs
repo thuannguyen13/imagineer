@@ -16,9 +16,10 @@
 //
 // Attack tests are written first to <run folder>/attacks/<path>.
 
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
-import { basename, dirname, join } from 'node:path'
-import { arg, inside, isMain, isUnder, readJson, readJsonIf, recordDenial, run, runFolder, runnerCall, runProblem, tail, testCounts, writeJson } from './lib.mjs'
+import { join } from 'node:path'
+import { arg, didNotRun, isMain, readJsonIf, runFolder, tail, testInCopy, writeJson } from './lib.mjs'
+
+export { didNotRun }
 
 export const CATEGORIES = ['permissions', 'data']
 
@@ -42,18 +43,6 @@ export function recordUntested(ledger, { round, category, what }) {
   const list = (ledger.untested[String(round)] ??= [])
   if (!list.some(u => u.category === category && u.what === what)) list.push({ category, what })
   return ledger
-}
-
-/**
- * Why a test run that ended well still says nothing about the app, or null: no test passed, some
- * were skipped, or the run printed no summary to tell by. A skipped test cannot be told from one a
- * name filter left out, so the command must run the attack's own test and nothing else.
- */
-export function didNotRun(output) {
-  const counts = testCounts(output)
-  if (!counts) return 'the run printed no summary of tests passed and skipped'
-  if (counts.passed === 0) return counts.skipped ? 'its test was skipped' : 'no test ran'
-  return counts.skipped ? `${counts.skipped} of the tests in that run ${counts.skipped === 1 ? 'was' : 'were'} skipped` : null
 }
 
 /**
@@ -93,44 +82,34 @@ export function rounds(attacks, notRun = []) {
 
 function attack({ out, round, id, category, title, file, command, about = null }) {
   if (!CATEGORIES.includes(category)) throw new Error(`Category must be one of ${CATEGORIES.join(', ')}.`)
-  // The run's own folder, never one written to look like it: its copy.json says where the app's code runs.
-  const { path: runPath, repo } = runFolder(out)
-  const copy = readJson(join(runPath, 'copy.json'))
-  if (!basename(copy.path ?? '').startsWith('imagineer-') || isUnder(copy.path, repo)) throw new Error(`${out}/copy.json does not name a throwaway copy.`)
-  // The test stays in the attacks folder and lands in the copy, at a path of its own.
-  const source = inside(join(runPath, 'attacks'), file, "the run's attacks folder")
-  const target = inside(copy.path, file, 'the copy')
-  if (existsSync(target)) throw new Error(`The copy already has a file at ${file}: give the attack test a name of its own.`)
-  const problem = runProblem({ command, test: readFileSync(source, 'utf8'), source: repo, cwd: copy.path, testDir: dirname(target) })
-  if (problem) {
-    recordDenial(repo, { agent: 'attacker', tool: 'attack.mjs', kind: 'database', reason: problem })
+  let test
+  try {
+    test = testInCopy({ out, folder: 'attacks', file, command, agent: 'attacker', tool: 'attack.mjs' })
+  } catch (error) {
+    if (!error.refused) throw error
     throw new Error(
-      `Refused: ${problem}. Attacks run in the copy, never against a database nobody set up for them. If this attack needs a database or a service that is not there, ` +
+      `Refused: ${error.message}. Attacks run in the copy, never against a database nobody set up for them. If this attack needs a database or a service that is not there, ` +
         `record it instead: attack.mjs untested --out ${out} --round ${round} --category ${category} --what "<the part, in plain words> (needs a database)".`,
     )
   }
-  mkdirSync(dirname(target), { recursive: true })
-  copyFileSync(source, target)
-  // The test runner itself, with no shell around it.
-  const { env, argv } = runnerCall(command)
-  const result = run(argv, { cwd: copy.path, timeoutMs: 5 * 60_000, project: true, env })
+  test.place()
+  const result = test.start()
   // The attack test leaves the copy as it came: a test that broke through fails on purpose,
   // and would fail every later measurement of the copy.
-  rmSync(target, { force: true })
+  test.remove()
 
-  const output = result.stdout + '\n' + result.stderr
-  // A run that ended well with its test skipped proved nothing: never "held".
-  const why = result.ok ? didNotRun(output) : null
-  const entry = { id, round, category, title, about, file, run: command, result: result.ok ? 'held' : 'broke', output: result.ok && !why ? '' : tail(output, 15), void: null }
-  writeJson(ledgerPath(runPath), recordAttack(loadAttacks(runPath), entry, why))
+  // A run that could not start, did not end, or ended well with its test skipped proved nothing: never "held", never a break.
+  const why = result.failed ?? (result.ok ? didNotRun(result.output) : null)
+  const entry = { id, round, category, title, about, file, run: command, result: result.ok ? 'held' : 'broke', output: result.ok && !why ? '' : tail(result.output, 15), void: null }
+  writeJson(ledgerPath(test.runPath), recordAttack(loadAttacks(test.runPath), entry, why))
   if (why) {
-    console.log(`${id} (${category}): not attacked, because ${why}, most often for want of a database or a setting, or because the command ran more than the attack's own test. It is listed as not attacked yet and does not count as held. ${title}`)
-    console.log(tail(output, 40))
+    console.log(`${id} (${category}): not attacked, because ${why}. It is listed as not attacked yet and does not count as held. ${title}`)
+    console.log(tail(result.output, 40))
     return
   }
   console.log(`${id} (${category}): ${result.ok ? 'the app held' : 'the attack broke through'}. ${title}`)
   // The attacker sees the app's code run nowhere else, so enough of the output to tell a wrong test from a real break.
-  if (!result.ok) console.log(tail(output, 40))
+  if (!result.ok) console.log(tail(result.output, 40))
 }
 
 if (isMain(import.meta.url)) {

@@ -333,3 +333,43 @@ test('the repository is recognised with a space in its path, however the path is
   assert.equal(runProblem({ command: 'npx vitest run test/a7.test.ts', test: `import { x } from '../../../My Projects/app/src/x.ts'`, source: repo, cwd: copy, testDir: join(copy, 'test/attacks') }), `the test ${reaches}`)
   assert.equal(runProblem({ command: 'npx vitest run test/a7.test.ts', test: "import { x } from '../src/x.ts'", source: repo, cwd: copy, testDir: join(copy, 'test') }), null)
 })
+
+import { judgeRun } from './lib.mjs'
+
+test('a refusal is a reach for a database only when it was one; a wrong shape of command is not', () => {
+  const source = '/Users/a/app'
+  assert.deepEqual(judgeRun({ command: 'cd packages/api && npx vitest run a.test.ts', source }), { reason: 'the command is more than a test runner and its words: no pipes, &&, redirects or $', reach: false })
+  assert.equal(judgeRun({ command: 'npx prisma generate', source }).reach, false)
+  assert.equal(judgeRun({ command: `cd ${source} && npx vitest run`, source }).reach, true)
+  assert.equal(judgeRun({ command: 'DATABASE_URL=postgres://x npx vitest run a.test.ts', source }).reach, true)
+  assert.equal(judgeRun({ command: 'npx vitest run a.test.ts', test: "const url = 'postgres://localhost/dev'", source }).reach, true)
+})
+
+test('a package of a workspace is named with the package manager’s own flag, since there is no cd', () => {
+  for (const fine of ['pnpm --filter api test', 'pnpm --filter api exec vitest run test/a7.test.ts', 'pnpm -C packages/api test', 'yarn workspace api test', 'yarn workspace api vitest run a7.test.ts', 'npm -w api test', 'npm test -w api -- a7.test.ts', 'npm --workspace=api run test:unit', 'npx vitest@3 run test/a7.test.ts', 'npx vitest --root packages/api run a7.test.ts']) {
+    assert.equal(runnerCall(fine).problem, undefined, fine)
+  }
+  for (const other of ['pnpm --filter api db:reset', 'yarn workspace api prisma migrate reset', 'npx prisma@5 migrate reset', 'pnpm --filter api exec psql']) {
+    assert.match(runnerCall(other).problem, /does not start a test runner/, other)
+  }
+})
+
+test('a database in memory or in a file of the copy is the test’s own: it stays, in an env file and in a command', () => {
+  for (const value of ['file:./test.db', 'file:test.db', './data/test.sqlite', ':memory:', 'file::memory:?cache=shared', '"file:./dev.db"']) {
+    assert.equal(isDatabaseSetting('DATABASE_URL', value), false, value)
+  }
+  for (const value of ['', 'localhost', 'file:/Users/a/app/dev.db', 'file:../../app/dev.db', '~/dev.db', 'postgres://localhost/dev', 'sqlite:///data/dev.db']) {
+    assert.equal(isDatabaseSetting('DATABASE_URL', value), true, value)
+  }
+  assert.deepEqual(withoutDatabaseSettings('DATABASE_URL=file:./test.db\nDB_HOST=localhost\n'), { text: 'DATABASE_URL=file:./test.db\n', leftOut: ['DB_HOST'] })
+  assert.equal(databaseProblem('DATABASE_URL=file:./test.db npx vitest run a.test.ts'), null)
+})
+
+test('a repository one folder below the root does not turn every address and import into a reach', () => {
+  // A container's /app: nothing of that name is on this machine, so only the text is read.
+  for (const text of ["import { POST } from '@/app/api/expenses/route'", "await page.goto('/app/login')", "import x from 'src/app/page'", "fetch(`${base}/app/api`)"]) {
+    assert.equal(repositoryProblem(text, '/app'), null, text)
+  }
+  assert.equal(repositoryProblem("process.chdir('/app')", '/app'), 'reaches into the repository itself, not the copy')
+  assert.equal(runProblem({ command: 'npx vitest run --root /app', source: '/app' }), 'the command reaches into the repository itself, not the copy')
+})

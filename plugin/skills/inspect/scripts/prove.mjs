@@ -9,9 +9,9 @@
 // into the copy at the same path, runs it, records the result on the question,
 // and explains (dismisses) each line whose every break the test caught.
 
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { arg, inside, isMain, readJson, readJsonIf, recordDenial, run, runnerCall, runProblem, tail, writeJson } from './lib.mjs'
+import { readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { arg, didNotRun, isMain, readJsonIf, tail, testInCopy, writeJson } from './lib.mjs'
 import { LEDGER, loadLedger } from './questions.mjs'
 
 /** Character offset of a 1-based { line, column } in a text. */
@@ -45,29 +45,28 @@ export function targetMutants(mutation, about, equivalent = {}) {
 }
 
 function prove({ repo, out, id, file, command }) {
-  const copy = readJson(join(out, 'copy.json'))
-  const mutation = readJsonIf(join(out, 'mutation.json'))
   const ledger = loadLedger(repo)
   const question = ledger.questions.find(q => q.id === id)
   if (!question) throw new Error(`No question ${id}.`)
-  // The test stays in the run's tests folder and lands in the copy, at a path of its own.
-  const source = inside(join(out, 'tests'), file, "the run's tests folder")
-  const target = inside(copy.path, file, 'the copy')
-  if (existsSync(target)) throw new Error(`The copy already has a file at ${file}: give the proof test a name of its own.`)
-  // A proof runs in the copy, never against a database nobody set up for it, as an attack does.
-  const problem = runProblem({ command, test: readFileSync(source, 'utf8'), source: copy.source ?? repo, cwd: copy.path, testDir: dirname(target) })
-  if (problem) {
-    recordDenial(repo, { agent: 'lead', tool: 'prove.mjs', kind: 'database', reason: problem })
-    throw new Error(`Refused: ${problem}. Proofs run in the copy; an answer whose test needs a database that is not there cannot be proven yet.`)
+  // A proof runs as an attack does: a test runner, in the run's own copy, never against a database nobody set up for it.
+  let proof
+  try {
+    proof = testInCopy({ out, folder: 'tests', file, command, agent: 'lead', tool: 'prove.mjs' })
+  } catch (error) {
+    if (!error.refused) throw error
+    throw new Error(`Refused: ${error.message}. Proofs run in the copy; an answer whose test needs a database that is not there cannot be proven yet.`)
   }
-  mkdirSync(dirname(target), { recursive: true })
-  copyFileSync(source, target)
-  // The test runner itself, with no shell around it.
-  const { env, argv } = runnerCall(command)
-  const sh = () => run(argv, { cwd: copy.path, timeoutMs: 5 * 60_000, project: true, env })
-
-  const green = sh(command)
-  const test = { file, run: command, commit: copy.commit, green: green.ok, red: null, output: green.ok ? '' : tail(green.stdout + '\n' + green.stderr, 15) }
+  const { copy } = proof
+  const mutation = readJsonIf(join(proof.runPath, 'mutation.json'))
+  proof.place()
+  const green = proof.start()
+  // A run that could not start, did not end, or passed with its test skipped says nothing about the code: nothing is recorded.
+  const idle = green.failed ?? (green.ok ? didNotRun(green.output) : null)
+  if (idle) {
+    proof.remove()
+    throw new Error(`${id}: the proof's test did not run, because ${idle}. Nothing is recorded: the answer is not proven, and the code is not shown to differ.\n${tail(green.output, 15)}`)
+  }
+  const test = { file, run: command, commit: copy.commit, green: green.ok, red: null, output: green.ok ? '' : tail(green.output, 15) }
 
   if (green.ok) {
     const targets = targetMutants(mutation, question.about, ledger.equivalent)
@@ -77,7 +76,8 @@ function prove({ repo, out, id, file, command }) {
       const full = join(copy.path, path)
       const original = readFileSync(full, 'utf8')
       writeFileSync(full, applyMutant(original, mutant))
-      const broken = sh(command)
+      // A break that makes the test hang is caught, as the test strength check counts it.
+      const broken = proof.start()
       writeFileSync(full, original)
       const entry = caughtByKey.get(key) ?? { caught: 0, total: 0 }
       entry.total += 1
@@ -93,7 +93,7 @@ function prove({ repo, out, id, file, command }) {
   }
 
   // The proof leaves the copy as it came, so later measurements see only the repository's own tests.
-  rmSync(target, { force: true })
+  proof.remove()
   question.test = test
   writeJson(join(repo, LEDGER), ledger)
 

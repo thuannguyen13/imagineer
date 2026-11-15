@@ -2,7 +2,7 @@
 // run in any repository without installing anything.
 
 import { spawn, spawnSync } from 'node:child_process'
-import { appendFileSync, existsSync, readFileSync, realpathSync, writeFileSync, mkdirSync, readdirSync, statSync } from 'node:fs'
+import { appendFileSync, copyFileSync, existsSync, readFileSync, realpathSync, rmSync, writeFileSync, mkdirSync, readdirSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, isAbsolute, join, dirname, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -83,8 +83,18 @@ export function databaseAddressIn(text, { signIn = true } = {}) {
   return null
 }
 
-/** Whether a setting says where a database is or how to sign in to it, by its name or its value. */
-export const isDatabaseSetting = (name, value = '') => DATABASE_NAME.test(name) || databaseAddressIn(value) !== null
+/** A database that lives in memory, or in a file under the folder the tests run in: nobody's but the test's own. */
+function isOwnDatabase(value) {
+  const text = String(value ?? '').trim().replace(/^["']|["']$/g, '')
+  if (/(^|:):memory:|mode=memory/.test(text)) return true
+  return !text.includes('..') && /^(file:)?(\.\/)?[\w-][\w.-]*(\/[\w.-]+)*\.(db|sqlite3?)(\?.*)?$/.test(text)
+}
+
+/**
+ * Whether a setting says where a database is or how to sign in to it, by its name or its value.
+ * A database in memory or in a file of the copy is the test's own, and stays.
+ */
+export const isDatabaseSetting = (name, value = '') => (DATABASE_NAME.test(name) && !isOwnDatabase(value)) || databaseAddressIn(value) !== null
 
 /**
  * Why a text of settings and words reaches for a database, in plain words, or null: it reads an
@@ -94,8 +104,8 @@ export function databaseProblem(command) {
   const text = String(command ?? '')
   const file = envFileIn(text)
   if (file) return `reads an env file (${file})`
-  for (const [, name] of text.matchAll(/(?:^|[\s;&|('"`])(?:export\s+)?([A-Za-z_]\w*)=/g)) {
-    if (DATABASE_NAME.test(name)) return `sets ${name}, which says where a database is or how to sign in to it`
+  for (const [, name, value] of text.matchAll(/(?:^|[\s;&|('"`])(?:export\s+)?([A-Za-z_]\w*)=(\S*)/g)) {
+    if (DATABASE_NAME.test(name) && !isOwnDatabase(value)) return `sets ${name}, which says where a database is or how to sign in to it`
   }
   const scheme = databaseAddressIn(text)
   if (scheme) return `names a database, or a service with a sign-in (${scheme}://…)`
@@ -148,15 +158,26 @@ export function plainCall(command) {
 const RUNNERS = new Set(['vitest', 'jest', 'mocha', 'ava', 'tap', 'playwright', 'cypress', 'uvu', 'jasmine', 'tsx'])
 const MANAGERS = new Set(['npm', 'npx', 'pnpm', 'yarn', 'bun', 'bunx'])
 
-/** Whether words start a test runner: the runner itself, through a package manager, or the project's own test script. */
+/**
+ * Whether words start a test runner: the runner itself (`vitest`, `vitest@3`), through a package
+ * manager, or the project's own test script, in the package a workspace flag names.
+ */
 function startsTestRunner([program, ...rest]) {
   const name = basename(program ?? '')
-  const runner = (word, args) => RUNNERS.has(basename(word ?? '')) && (basename(word) !== 'tsx' || args.includes('--test'))
+  const runner = (word, args) => {
+    const tool = basename(word ?? '').replace(/(?!^)@[\w.^~*-]+$/, '')
+    return RUNNERS.has(tool) && (tool !== 'tsx' || args.includes('--test'))
+  }
   if (name === 'node') return rest.includes('--test') && !rest.some(a => /^(-e|--eval|-p|--print)(=|$)/.test(a))
   if (runner(program, rest)) return true
   if (!MANAGERS.has(name)) return false
-  // `npx -y vitest`, `pnpm exec jest`, `npm test -- file`, `yarn run test:unit`: never `npx -c "<any command>"`.
-  const args = rest.filter(a => !/^(-y|--yes|--no-install|--silent|-s|exec|dlx|x|--)$/.test(a))
+  // `npx -y vitest`, `pnpm --filter api exec jest`, `yarn workspace api test`, `npm test -- file`: never `npx -c "<any command>"`.
+  const args = []
+  for (let i = 0; i < rest.length; i += 1) {
+    const word = rest[i]
+    if (/^(--filter|-F|-w|--workspace|-C|--dir|--prefix|--cwd)$/.test(word) || (name === 'yarn' && word === 'workspace')) i += 1
+    else if (!/^(-y|--yes|--no-install|--silent|-s|exec|dlx|x|--|(--filter|--workspace|--dir|--prefix|--cwd)=.*)$/.test(word)) args.push(word)
+  }
   if (args[0] === 'run') return /^test/.test(args[1] ?? '')
   if (name !== 'npx' && name !== 'bunx' && /^t(est[\w:-]*)?$/.test(args[0] ?? '')) return true
   return runner(args[0], args)
@@ -225,10 +246,17 @@ export function repositoryProblem(text, repo, { cwd = null } = {}) {
   // Without its quotes, so a path quoted in parts ("/Users/me"/app) reads as the shell joins it.
   const joined = raw.replace(/["']/g, '')
   for (const root of new Set([resolve(repo), real(repo)])) {
+    // A repository one folder below the root (/app, in a container) shares its path with addresses and
+    // imports (`fetch('/app/login')`): there, only a path that is really in it counts.
+    const short = root.split(sep).filter(Boolean).length <= 1
     for (let at = fold(joined).indexOf(fold(root)); at !== -1; at = fold(joined).indexOf(fold(root), at + 1)) {
+      // Where a path starts, never inside one (@/app/api, src/app).
+      if (at > 0 && !/[\s=:(,`<>;|&[{]/.test(joined[at - 1])) continue
       const rest = joined.slice(at + root.length)
       // A longer name beside it (app-two) is another folder; Imagineer's own folder in it is fine.
-      if (!/^[\w.-]/.test(rest) && !/^\/\.claude\/imagineer(?![\w.-])/.test(rest)) return REACHES
+      if (/^[\w.-]/.test(rest) || /^\/\.claude\/imagineer(?![\w.-])/.test(rest)) continue
+      const path = root + rest.match(/^[^\s`;|&<>,)\]}]*/)[0]
+      if (!short || real(path) === real(root) || existsSync(path) || (real(dirname(path)) !== real(root) && existsSync(dirname(path)))) return REACHES
     }
   }
   // A path in quotes is one path, spaces and all (an import, a file to open); outside quotes, words are.
@@ -239,24 +267,27 @@ export function repositoryProblem(text, repo, { cwd = null } = {}) {
 }
 
 /**
- * Why a proof or an attack must not run as asked, or null. Its command starts a test runner in the
- * copy (`cwd`) and may not reach for a database or the repository (`source`); its test, which sits
- * in `testDir` of the copy, may not name a database or the repository either. A test may still say
- * `.env` or sign in to the app under test: those are attacks worth trying.
+ * Why a proof or an attack must not run as asked, as `{ reason, reach }`, or null. Its command
+ * starts a test runner in the copy (`cwd`) and may not reach for a database or the repository
+ * (`source`); its test, which sits in `testDir` of the copy, may not name a database or the
+ * repository either. A test may still say `.env` or sign in to the app under test: those are
+ * attacks worth trying. `reach` is false when only the command's shape is wrong.
  */
-export function runProblem({ command, test = '', source = null, cwd = null, testDir = null }) {
+export function judgeRun({ command, test = '', source = null, cwd = null, testDir = null }) {
   // What it reaches for first: that is the reason worth telling, and worth flagging.
   const inCommand = databaseProblem(command)
-  if (inCommand) return `the command ${inCommand}`
+  if (inCommand) return { reason: `the command ${inCommand}`, reach: true }
   const call = runnerCall(command)
-  if (call.problem) return `the command ${call.problem}`
+  if (call.problem) return { reason: `the command ${call.problem}`, reach: Boolean(repositoryProblem(command, source, { cwd })) }
   const words = [...call.argv, ...Object.values(call.env)]
-  if (source && words.some(word => [word, ...word.split(/[=:,]/)].some(piece => pathReaches(piece, source, cwd)))) return `the command ${REACHES}`
+  if (source && words.some(word => [word, ...word.split(/[=:,]/)].some(piece => pathReaches(piece, source, cwd)))) return { reason: `the command ${REACHES}`, reach: true }
   const scheme = databaseAddressIn(test, { signIn: false })
-  if (scheme) return `the test names a database (${scheme}://…)`
+  if (scheme) return { reason: `the test names a database (${scheme}://…)`, reach: true }
   const inTest = repositoryProblem(test, source, { cwd: testDir })
-  return inTest ? `the test ${inTest}` : null
+  return inTest ? { reason: `the test ${inTest}`, reach: true } : null
 }
+
+export const runProblem = input => judgeRun(input)?.reason ?? null
 
 /** A run's folder, `<repository>/.claude/imagineer/runs/<n>`, as `{ path, repo }`. Throws for any other folder, one nested in a run included. */
 export function runFolder(out) {
@@ -278,6 +309,61 @@ export function inside(folder, file, what) {
  * a letter outside English. (Comparing `import.meta.url` with `file://` + the path fails on each.)
  */
 export const isMain = metaUrl => Boolean(process.argv[1]) && real(fileURLToPath(metaUrl)) === real(process.argv[1])
+
+/**
+ * Sets a proof's or an attack's test up to run in the run's own throwaway copy, the one way the
+ * app's code is run for either. Checks, and throws on, everything that would run it elsewhere or
+ * against a database: the run's folder (`out`) and its copy, the test's path (`file`, under the
+ * run's `folder` and in the copy, at a path the copy does not have), the command and the test's
+ * text (a refusal is recorded for the self-check, as a reach for a database when it was one).
+ * Returns `place`, `start` and `remove`; a test an interrupted run left in the copy is removed first.
+ */
+export function testInCopy({ out, folder, file, command, agent, tool }) {
+  const { path: runPath, repo } = runFolder(out)
+  const copy = readJson(join(runPath, 'copy.json'))
+  if (!basename(copy.path ?? '').startsWith('imagineer-') || isUnder(copy.path, repo)) throw new Error(`${out}/copy.json does not name a throwaway copy.`)
+  const source = inside(join(runPath, folder), file, `the run's ${folder} folder`)
+  const target = inside(copy.path, file, 'the copy')
+  // Listed by this script alone, in the run's folder: what it put in the copy and has not taken out.
+  const placed = join(runPath, 'placed.json')
+  for (const left of readJsonIf(placed) ?? []) {
+    try {
+      rmSync(inside(copy.path, left, 'the copy'), { force: true })
+    } catch {}
+  }
+  writeJson(placed, [])
+  if (existsSync(target)) throw new Error(`The copy already has a file at ${file}: give the test a name of its own.`)
+  const verdict = judgeRun({ command, test: readFileSync(source, 'utf8'), source: repo, cwd: copy.path, testDir: dirname(target) })
+  if (verdict) {
+    recordDenial(repo, { agent, tool, ...(verdict.reach ? { kind: 'database' } : {}), reason: verdict.reason })
+    throw Object.assign(new Error(verdict.reason), { refused: true })
+  }
+  const { env, argv } = runnerCall(command)
+  return {
+    runPath,
+    repo,
+    copy,
+    place() {
+      writeJson(placed, [file])
+      mkdirSync(dirname(target), { recursive: true })
+      copyFileSync(source, target)
+    },
+    remove() {
+      rmSync(target, { force: true })
+      writeJson(placed, [])
+    },
+    /** Runs the test runner itself, with no shell around it. `failed` says why a run says nothing about the app: it could not start, or did not end. */
+    start() {
+      const result = run(argv, { cwd: copy.path, timeoutMs: 5 * 60_000, project: true, env })
+      const failed = result.timedOut
+        ? 'the test run did not end within 5 minutes'
+        : result.code === null && result.error
+          ? `the test runner could not start (${argv[0]} was not found: start it through npx or the package manager)`
+          : null
+      return { ...result, failed, output: result.stdout + '\n' + result.stderr }
+    },
+  }
+}
 
 /**
  * An env file's text without its database settings: those lines are left out (a quoted value over
@@ -353,6 +439,18 @@ export function testCounts(output) {
   if (passed !== null || skipped !== null) return { passed: passed ?? 0, skipped: skipped ?? 0 }
   // A runner told to pass when it finds nothing: "No tests found, exiting with code 0".
   return /\bno tests?(?: files?)?(?: were)? found\b/i.test(text) ? { passed: 0, skipped: 0 } : null
+}
+
+/**
+ * Why a test run that ended well still says nothing about the app, or null: no test passed, some
+ * were skipped, or the run printed no summary to tell by. A skipped test cannot be told from one a
+ * name filter left out, so the command must run the test's own file and nothing else.
+ */
+export function didNotRun(output) {
+  const counts = testCounts(output)
+  if (!counts) return 'the run printed no summary of tests passed and skipped'
+  if (counts.passed === 0) return counts.skipped ? 'its test was skipped' : 'no test ran'
+  return counts.skipped ? `${counts.skipped} of the tests in that run ${counts.skipped === 1 ? 'was' : 'were'} skipped` : null
 }
 
 /**

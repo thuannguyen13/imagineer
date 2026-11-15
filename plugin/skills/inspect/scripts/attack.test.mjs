@@ -165,3 +165,27 @@ test('attack.mjs works when it is started through a link', t => {
   assert.match(linked.stdout, /"cleanInARow"/, linked.stderr)
   assert.match(attack('A1', 'a1.test.mjs', 'node --test test/a1.test.mjs').stdout, /the app held/)
 })
+
+test('attack.mjs: a runner that cannot start is not a break, and a test an interrupted run left behind does not stop the next', t => {
+  const { repo, copy, out, attack, ledger } = run(t, { 'a8.test.mjs': "test('A8', () => {})" })
+  // A bare runner name that is not installed: nothing ran, so nothing broke.
+  const missing = attack('A8', 'a8.test.mjs', 'vitest run test/a8.test.mjs')
+  assert.equal(missing.status, 0, missing.stderr)
+  assert.match(missing.stdout, /A8 \(data\): not attacked, because the test runner could not start \(vitest was not found/)
+  assert.deepEqual(ledger().attacks, [])
+  assert.deepEqual(ledger().notRun.map(a => a.id), ['A8'])
+  // A shape of command that is refused is not a reach for a database.
+  assert.equal(attack('A8', 'a8.test.mjs', 'cd test && node --test a8.test.mjs').status, 1)
+  const denials = readFileSync(join(repo, '.claude/imagineer/denials.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line))
+  assert.deepEqual(denials.map(d => d.kind), [undefined])
+
+  // An earlier run was stopped between putting its test in the copy and taking it out.
+  mkdirSync(join(copy, 'test'), { recursive: true })
+  writeFileSync(join(copy, 'test/a8.test.mjs'), 'left behind')
+  writeFileSync(join(out, 'placed.json'), JSON.stringify(['test/a8.test.mjs']))
+  const again = attack('A8', 'a8.test.mjs', 'node --test test/a8.test.mjs')
+  assert.match(again.stdout, /A8 \(data\): the app held/, again.stderr)
+  assert.equal(existsSync(join(copy, 'test/a8.test.mjs')), false)
+  assert.deepEqual(JSON.parse(readFileSync(join(out, 'placed.json'), 'utf8')), [])
+  assert.deepEqual([ledger().attacks.map(a => a.id), ledger().notRun], [['A8'], []])
+})

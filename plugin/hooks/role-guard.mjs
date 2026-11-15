@@ -159,12 +159,13 @@ function attackerMayRead(path, cwd) {
 export function blockedAttackerRead(toolName, input, cwd = null) {
   // Read names a file; Grep and Glob a folder (the session's own when none is given) and a pattern of file names.
   const pattern = toolName === 'Glob' ? input.pattern : input.glob
-  const file = envFileIn(input.file_path) ?? envFileIn(input.path) ?? envFileIn(pattern)
+  const file = envFileIn(input.file_path) ?? envFileIn(input.path) ?? envFileIn(pattern) ?? (/(^|\/)\.[\w-]*[*?[{]/.test(pattern ?? '') ? pattern : null)
   if (file) return { envFile: true, reason: `${file} is an env file, which the attacker never reads` }
   // Every place the call names must be one the attacker reads: the folder, and a pattern that starts at the root.
   const rooted = [toolName === 'Glob' ? input.pattern : null, input.glob].filter(p => p?.startsWith('/')).map(p => p.split(/[*?[{]/)[0])
-  const places = [input.file_path ?? input.path ?? (rooted.length ? null : (cwd ?? '.')), ...rooted].filter(Boolean)
-  if (places.every(place => attackerMayRead(place, cwd))) return null
+  // An empty path is no path: the tool then searches the session's own folder.
+  const places = [input.file_path || input.path || (rooted.length ? null : cwd || '.'), ...rooted].filter(Boolean)
+  if (places.length && places.every(place => attackerMayRead(place, cwd))) return null
   return { envFile: false, reason: "is outside the throwaway copy, the run folder and Imagineer's scripts, where the attacker reads. Give the copy's path" }
 }
 

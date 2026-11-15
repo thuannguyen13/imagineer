@@ -188,6 +188,13 @@ test('a search may not name a place outside through its pattern, whatever folder
   assert.equal(attacker('Grep', { pattern: `${repo}/src`, path: copy }), null) // what it searches for is not where it searches
   assert.match(attacker('Glob', { pattern: '{.env,.env.local}', path: copy }), /is an env file/)
   assert.match(attacker('Read', { file_path: join(copy, '.dev.vars') }), /is an env file/)
+  // An empty folder is no folder: the search would run in the session's own, the repository.
+  assert.match(attacker('Grep', { pattern: 'postgres', path: '' }), outside)
+  assert.match(attacker('Glob', { pattern: '**/*', path: '' }), outside)
+  assert.match(attacker('Read', { file_path: '' }), outside)
+  // A pattern of hidden files could match an env file whatever it spells.
+  assert.match(attacker('Glob', { pattern: '.e*', path: copy }), /never reads/)
+  assert.equal(attacker('Glob', { pattern: '.github/workflows/*.yml', path: copy }), null)
 })
 
 test('the guard holds when the plugin is started through a link, and says nothing of where it is installed', t => {

@@ -88,3 +88,13 @@ test('a test that fails on the code as it is shows the code does not match the a
   assert.match(result.stdout, /does not do what the answer says/)
   assert.equal(ledger().questions[0].test.green, false)
 })
+
+test('a proof whose test was skipped, or whose runner cannot start, records nothing: neither proven nor contradicted', t => {
+  const { root, prove, ledger } = setup(header + "test('only the owner submits a draft', { skip: !process.env.DATABASE_URL }, () => {\n  assert.equal(canSubmit('bob', { owner: 'alice', status: 'draft' }), false)\n})\n")
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const result = prove()
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /Q1: the proof's test did not run, because its test was skipped\. Nothing is recorded/)
+  assert.equal(ledger().questions[0].test, undefined)
+  assert.equal(existsSync(join(root, 'imagineer-copy/test/q1.test.mjs')), false)
+})
