@@ -14,5 +14,13 @@
     "risk",
     "verification"
   ],
-  "types": "./types/index.d.ts"
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "openPaneOnRun": {
+      "type": "boolean",
+      "title": "Open the pane when Inspect or Build runs",
+      "description": "On: /imagineer:inspect and /imagineer:build open the grade pane beside the chat. Off: the band above the prompt shows the run, and its Details button or /imagineer:status opens the pane.",
+      "default": false
+    }
+  }
 }

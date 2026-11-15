@@ -449,7 +449,7 @@ const RUNNING = {
   questions: { waiting: 0, resolved: 0 },
 }
 
-test('a first inspect opens the pane at once, saying it is starting', async ($, on) => {
+test('a first inspect opens the pane at once, saying it is starting, when the user turned that on', { options: { openPaneOnRun: true } }, async ($, on) => {
   files(on, {})
   let opened = 0
   on('ui.open', () => {
@@ -467,7 +467,27 @@ test('a first inspect opens the pane at once, saying it is starting', async ($, 
   await ui.unmount()
 })
 
-test('inspect does not open the pane unasked on the main screen, where it would cover the transcript', async ($, on) => {
+test('inspect and build leave the pane closed unless the user turned on opening it', async ($, on) => {
+  files(on, { [RESULTS]: JSON.stringify(SAMPLE) })
+  let opened = 0
+  on('ui.open', () => {
+    opened += 1
+    return { value: { isPlaced: true } }
+  })
+  on('command.run', () => ({ text: 'skill ran' }))
+
+  await $.command.run(typed('imagineer:inspect'))
+  await $.command.run(typed('imagineer:build'))
+  expect(opened).toBe(0)
+
+  // The band still shows the run, and its Details button opens the pane when asked.
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  await band.press({ key: 'details' })
+  expect(opened).toBe(1)
+  await band.unmount()
+})
+
+test('inspect does not open the pane unasked on the main screen, where it would cover the transcript', { options: { openPaneOnRun: true } }, async ($, on) => {
   files(on, {})
   let opened = 0
   on('ui.open', () => {
