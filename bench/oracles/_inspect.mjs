@@ -12,6 +12,7 @@ export function pluginUnderTest(e) {
 
 /** The session ended on its own, without an error, and Inspect regraded as done. */
 export function reachedTheEnd(e) {
+  if (e.meta?.stoppedAtLimit) return check('the run reached its end', false, `the harness stopped it at its limit of ${e.meta.stoppedAtLimit}: raise --minutes; this says nothing about Inspect`)
   if (!e.result) return check('the run reached its end', false, 'the session left no result: it was stopped or ran out of time')
   if (e.result.is_error) return check('the run reached its end', false, `the session ended with an error (${e.result.subtype})`)
   const status = e.results?.run?.status

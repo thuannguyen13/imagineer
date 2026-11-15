@@ -47,7 +47,7 @@ node bench/inspect.mjs I2 --plugin <plugin folder> --out <evidence folder>
 - I2's env file is written by the script, with an address that leads to a listener of its own.
 - The session runs as you, with your other plugins and settings: only Imagineer is swapped.
 
-Each run is a real session: about $6 to $10 and 20 to 40 minutes. Record each in `results/`, with the vitals the script prints.
+Each run is a real session: about $3 and 15 to 75 minutes in the first runs (test strength is most of the time, when it runs). Record each in `results/`, with the vitals the script prints.
 
 ## Scoring sheet
 

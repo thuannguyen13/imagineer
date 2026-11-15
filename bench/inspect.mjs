@@ -3,7 +3,7 @@
 // the scenario's hidden check. One run is a real Claude session and costs real money.
 //
 //   node bench/inspect.mjs <scenario> --plugin <plugin folder> --out <evidence folder>
-//                          [--work <empty folder>] [--model claude-opus-5-5] [--budget 10] [--minutes 75]
+//                          [--work <empty folder>] [--model claude-opus-5-5] [--budget 10] [--minutes 90]
 //   node bench/inspect.mjs <scenario> --check <evidence folder>      judge kept evidence again, at no cost
 //   node bench/inspect.mjs <scenario> --plugin … --out … --dry        prepare the project and stop
 //
@@ -111,10 +111,12 @@ export function evidence(out) {
 export function vitals(e) {
   const live = (e.attacks?.attacks ?? []).filter(a => !a.void)
   return {
-    ended: e.result ? (e.result.is_error ? `with an error (${e.result.subtype})` : 'normally') : 'no result: stopped or timed out',
-    minutes: e.result ? Math.round(e.result.duration_ms / 6000) / 10 : null,
+    ended: e.meta?.stoppedAtLimit ? `stopped by the harness at ${e.meta.stoppedAtLimit}` : e.result ? (e.result.is_error ? `with an error (${e.result.subtype})` : 'normally') : 'no result',
+    // A session reports a result each time its main turn ends, and again after background work: the cost is
+    // the last one's running total, the turns their sum, the time the wall clock's.
+    minutes: e.meta?.endedAt ? Math.round((new Date(e.meta.endedAt) - new Date(e.meta.startedAt)) / 6000) / 10 : null,
     costUsd: e.result?.total_cost_usd ?? null,
-    turns: e.result?.num_turns ?? null,
+    turns: e.transcript.filter(x => x.type === 'result').reduce((n, x) => n + (x.num_turns ?? 0), 0) || null,
     agents: e.agentTranscripts.length,
     grade: e.results?.overall?.state ?? null,
     attacks: { held: live.filter(a => a.result === 'held').length, broke: live.filter(a => a.result === 'broke').length, notRun: (e.attacks?.notRun ?? []).length, setAside: (e.attacks?.attacks ?? []).filter(a => a.void).length },
@@ -169,10 +171,17 @@ async function main() {
   )
   child.stdout.pipe(createWriteStream(join(out, 'transcript.jsonl')))
   child.stderr.pipe(createWriteStream(join(out, 'stderr.log')))
-  const limit = setTimeout(() => child.kill('SIGTERM'), Number(arg('minutes') ?? 75) * 60_000)
-  await new Promise(done => child.on('close', done))
+  // The harness's own limit is recorded: a run it stopped is not a run that ended.
+  const minutes = Number(arg('minutes') ?? 90)
+  let stopped = false
+  const limit = setTimeout(() => {
+    stopped = true
+    child.kill('SIGTERM')
+  }, minutes * 60_000)
+  const exitCode = await new Promise(done => child.on('close', done))
   clearTimeout(limit)
   wire?.close()
+  writeFileSync(join(out, 'meta.json'), JSON.stringify({ ...meta, endedAt: new Date().toISOString(), exitCode, stoppedAtLimit: stopped ? `${minutes} minutes` : null }, null, 2) + '\n')
 
   // What the run left: Imagineer's own files (not the large reports), the repository's state, the agents' transcripts.
   const kept = join(target, '.claude', 'imagineer')
