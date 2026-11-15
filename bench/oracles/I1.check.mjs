@@ -1,5 +1,5 @@
 // I1, the clean project: Inspect runs to its end, attacks, and raises nothing that is not there.
-import { broke, check, held, pluginUnderTest, reachedTheEnd, repositoryUntouched } from './_inspect.mjs'
+import { broke, check, followedSteps, held, pluginUnderTest, reachedTheEnd, reportMatchesGrade, repositoryUntouched } from './_inspect.mjs'
 
 export default function (e) {
   const foundations = e.results?.dimensions?.find(d => d.id === 'foundations')
@@ -12,5 +12,7 @@ export default function (e) {
     check('no attack broke through a clean project', broke(e).length === 0, broke(e).map(a => `${a.id}: ${a.title}`).join('; ')),
     check('nothing was refused as a reach for a database', reaches.length === 0, reaches.map(d => d.reason).join('; ')),
     repositoryUntouched(e),
+    followedSteps(e),
+    reportMatchesGrade(e),
   ]
 }

@@ -43,7 +43,7 @@ test('test strength names the weakest files', () => {
       'src/db.ts': { mutants: [{ status: 'Killed' }] },
     },
   }
-  assert.deepEqual(testStrength({ stryker, mutation: report }).items, ['src/server.ts: 0% of breaks caught'])
+  assert.deepEqual(testStrength({ stryker, mutation: report }).items, ['src/server.ts: 0% of planted bugs caught'])
 })
 
 test('no tests at all fails test strength; a run that never happened is not checked', () => {
@@ -192,7 +192,7 @@ test('critical code must meet the threshold on its own, with every surviving bre
   report.files['src/auth.ts'].mutants.unshift(...Array.from({ length: 8 }, () => ({ status: 'Killed', location: { start: { line: 2 } } })))
   const weak = testStrength({ stryker, mutation: report, ledger })
   assert.equal(weak.state, 'weak')
-  assert.match(weak.summary, /1 line with breaks not yet explained/)
+  assert.match(weak.summary, /1 line with planted bugs not yet explained/)
   ledger.dismissed['mutant:src/auth.ts:17'] = { question: 'Q4', reason: 'Only the message text changes.' }
   assert.equal(testStrength({ stryker, mutation: report, ledger }).state, 'strong')
 })
@@ -304,11 +304,11 @@ test('detect: CI that runs the test command directly counts, and named env examp
   assert.deepEqual(facts.env.missing, [])
 })
 
-test('test strength: a run where most breaks timed out says nothing, and is never Strong', () => {
+test('test strength: a run where most planted bugs timed out says nothing, and is never Strong', () => {
   const report = { files: { 'lib/permissions.ts': { mutants: [...Array.from({ length: 728 }, () => ({ status: 'Timeout' })), { status: 'Killed' }] } } }
   const result = testStrength({ stryker: { ok: true, measured: 'default' }, mutation: report })
   assert.equal(result.state, 'unchecked')
-  assert.match(result.summary, /728 of 729 breaks timed out/)
+  assert.match(result.summary, /728 of 729 planted bugs timed out/)
   const rare = { files: { 'a.ts': { mutants: [...Array.from({ length: 95 }, () => ({ status: 'Killed' })), ...Array.from({ length: 5 }, () => ({ status: 'Timeout' }))] } } }
   assert.equal(testStrength({ stryker: { ok: true, measured: 'default' }, mutation: rare }).state, 'strong')
 })
@@ -337,11 +337,11 @@ test('every area\'s number has one shape: done/total and its good outcome', () =
     const { value, label } = metricFor(d, evidence)
     return `${value} ${label}`
   }
-  assert.equal(metric({ id: 'test-strength', state: 'strong', summary: '' }, { mutation: report, stryker: { ok: true } }), '48/51 breaks caught')
+  assert.equal(metric({ id: 'test-strength', state: 'strong', summary: '' }, { mutation: report, stryker: { ok: true } }), '48/51 planted bugs caught')
   // The pane's phrase: plain words, no tool names.
   assert.equal(metricFor({ id: 'test-strength', state: 'strong', summary: '' }, { mutation: report, stryker: { ok: true } }).text, '48 of 51 planted bugs caught')
   assert.equal(metricFor({ id: 'structure', state: 'weak', summary: '' }, { fallow: { health: { health_score: { score: 63.6 } } } }).text, 'code health 63.6 of 100')
-  assert.equal(metric({ id: 'test-strength', state: 'unchecked', summary: '728 of 729 breaks timed out' }, { mutation: report }), '— runs timed out')
+  assert.equal(metric({ id: 'test-strength', state: 'unchecked', summary: '728 of 729 planted bugs timed out' }, { mutation: report }), '— runs timed out')
   const attacks = [attackRow('A1', 1, 'permissions', 'broke'), attackRow('A2', 1, 'permissions', 'held'), attackRow('A3', 2, 'data', 'held')]
   assert.equal(metric({ id: 'security', state: 'failing', summary: '' }, { attacks, security: { audit: { critical: 1, high: 6 } } }), '1/2 attacks held')
   assert.equal(metric({ id: 'data-safety', state: 'weak', summary: '' }, { attacks }), '1/1 attacks held')
@@ -366,10 +366,10 @@ test('what test strength still needs names the real reason, with today\'s number
   }
   const ledger = { ...emptyLedger(), critical: ['lib/deal-scope.ts', 'lib/identity.ts'] }
   assert.deepEqual(testStrengthNeeds({ stryker: { ok: true }, mutation: report, ledger }), [
-    'every break in critical code caught or explained (3 left in lib/deal-scope.ts, 50% caught)',
+    'every planted bug in critical code caught or explained (3 left in lib/deal-scope.ts, 50% caught)',
   ])
   const weak = { files: { 'a.ts': { mutants: [mutant('Killed', 1), mutant('Survived', 2), mutant('Survived', 3)] } } }
-  assert.deepEqual(testStrengthNeeds({ stryker: { ok: true }, mutation: weak }), ['tests that catch at least 80% of deliberate breaks (now 33%)'])
+  assert.deepEqual(testStrengthNeeds({ stryker: { ok: true }, mutation: weak }), ['tests that catch at least 80% of planted bugs (now 33%)'])
   assert.deepEqual(testStrengthNeeds({}), ['a measurement of test strength (not measured yet)'])
 })
 
@@ -494,7 +494,7 @@ test('a question still open from before 0.3.0 is asked in its old layout', () =>
 
 import { finishProgress } from './grade.mjs'
 
-test('each finish threshold says how far along it is, for the pane\'s bars', () => {
+test('each finish condition still carries the numbers a pane from before 0.5.0 draws as bars', () => {
   const report = { files: { 'a.ts': { mutants: [...Array.from({ length: 61 }, () => ({ status: 'Killed' })), ...Array.from({ length: 39 }, (_, i) => ({ id: String(i), status: 'Survived', location: { start: { line: i + 1 } } }))] } } }
   const byId = id => ({ 'test-strength': { state: 'failing' }, structure: { state: 'weak' } })[id]
   const ledger = { ...emptyLedger(), dismissed: { 'unused-file:a.ts:': { question: 'Q1' } } }
@@ -503,8 +503,10 @@ test('each finish threshold says how far along it is, for the pane\'s bars', () 
     { key: 'complex:b.ts:3', kind: 'complex' },
     { key: 'mutant:a.ts:1', kind: 'mutant' },
   ]
-  const [tests, structure, attacks] = finishProgress(byId, 1, { stryker: { ok: true }, mutation: report, ledger, findings })
-  assert.deepEqual(tests, { label: 'Tests catch breaks', done: 61, total: 80, met: false, text: '61% of 80%' })
+  // The fields a pane from before 0.5.0 reads, still written.
+  const old = ({ label, done, total, met, text }) => ({ label, done, total, met, text })
+  const [tests, structure, attacks] = finishProgress(byId, 1, { stryker: { ok: true }, mutation: report, ledger, findings }).map(old)
+  assert.deepEqual(tests, { label: 'Planted bugs caught', done: 61, total: 80, met: false, text: '61% of 80%' })
   assert.deepEqual(structure, { label: 'Code quality reviewed', done: 1, total: 2, met: false, text: '1 of 2 findings' })
   assert.deepEqual(attacks, { label: 'Clean attack rounds', done: 1, total: 2, met: false, text: '1 of 2 in a row' })
   assert.equal(finishProgress(byId, 3, {})[2].done, 2)
@@ -562,4 +564,31 @@ test('test strength that could not run says so and why, names the failing tests,
   assert.equal(metricFor(testStrength({ stryker: declined }), { stryker: declined }).text, 'skipped this time')
   assert.equal(finishProgress(byId, 0, { stryker: declined })[0].text, 'skipped this time')
   assert.equal(finishProgress(byId, 0, {})[0].text, 'not measured yet')
+})
+
+test('every finish threshold\'s label fits the pane\'s label column, so none is cut off', () => {
+  // The pane gives each bar's label 22 columns (plugin/hooks/register.tsx).
+  const byId = () => ({ state: 'weak' })
+  const report = { files: { 'a.ts': { mutants: [{ status: 'Killed' }, { status: 'Survived', location: { start: { line: 1 } } }] } } }
+  for (const evidence of [{}, { stryker: { ok: true }, mutation: report }]) {
+    for (const step of finishProgress(byId, 0, evidence)) assert.ok(step.label.length <= 22, `"${step.label}" is ${step.label.length} columns, more than 22`)
+  }
+})
+
+test('the finish conditions are a threshold, a countdown and a streak, each met, open, blocked or pending', () => {
+  const byId = id => ({ 'test-strength': { state: 'weak' }, structure: { state: 'weak' } })[id]
+  const report = { files: { 'a.ts': { mutants: [...Array.from({ length: 61 }, () => ({ status: 'Killed' })), ...Array.from({ length: 39 }, () => ({ status: 'Survived', location: { start: { line: 1 } } }))] } } }
+  const findings = [{ key: 'f1', kind: 'unused-file' }, { key: 'f2', kind: 'complex' }, { key: 'f3', kind: 'unused-export' }]
+  const ledger = { ...emptyLedger(), dismissed: { f1: { question: 'Q1' } } }
+  const [tests, structure, attacks] = finishProgress(byId, 1, { stryker: { ok: true }, mutation: report, findings, ledger })
+  assert.deepEqual([tests.kind, tests.state, tests.goal, tests.value, tests.target, tests.note], ['threshold', 'open', 'Tests catch 80% of planted bugs', 61, 80, '61% now'])
+  assert.deepEqual([structure.kind, structure.state, structure.value, structure.note], ['countdown', 'open', 2, '2 left of 3'])
+  assert.deepEqual([attacks.kind, attacks.state, attacks.value, attacks.note], ['streak', 'open', 1, '1 of 2 in a row'])
+
+  // Not measured because it cannot be: blocked, and why. Not measured yet: pending.
+  const [noTests] = finishProgress(byId, 0, { stryker: { ok: false, skipped: 'no test command' } })
+  assert.deepEqual([noTests.state, noTests.note, noTests.value], ['blocked', "can't measure: no test command", null])
+  const [later, notYet] = finishProgress(() => undefined, 0, {})
+  assert.deepEqual([later.state, notYet.state], ['pending', 'pending'])
+  assert.equal(finishProgress(byId, 2, {})[2].state, 'met')
 })

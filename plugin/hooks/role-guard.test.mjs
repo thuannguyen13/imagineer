@@ -12,21 +12,7 @@ import { decide, segments } from './role-guard.mjs'
 const write = (agent, file) => decide({ agent_type: `imagineer:${agent}`, tool_name: 'Write', tool_input: { file_path: file } })
 const bash = (agent, command) => decide({ agent_type: `imagineer:${agent}`, tool_name: 'Bash', tool_input: { command } })
 
-test('Dev writes code but never tests', () => {
-  assert.equal(write('dev', '/repo/src/approvals.ts'), null)
-  assert.match(write('dev', '/repo/test/approval.test.ts'), /Dev never writes or edits tests/)
-  assert.match(write('dev', '/repo/src/approvals.spec.ts'), /test file/)
-  assert.match(write('dev', '/repo/src/__tests__/a.js'), /test file/)
-})
-
-test('QA writes tests only', () => {
-  assert.equal(write('qa', '/repo/test/approval.test.ts'), null)
-  assert.match(write('qa', '/repo/src/approvals.ts'), /QA writes only tests/)
-})
-
-test('the Architect and the attacker write only under .claude/imagineer/', () => {
-  assert.equal(write('architect', '/repo/.claude/imagineer/build/approvals/spec.md'), null)
-  assert.match(write('architect', '/repo/src/approvals.ts'), /outside \.claude\/imagineer\//)
+test('the attacker writes only its attack tests, in its run\'s attacks folder', () => {
   assert.equal(write('attacker', '/repo/.claude/imagineer/runs/3/attacks/test/a1.test.ts'), null)
   assert.match(write('attacker', '/repo/test/a1.test.ts'), /outside/)
   // A run's own records say where the copy is and what the attacks found: the scripts write those.
@@ -35,30 +21,18 @@ test('the Architect and the attacker write only under .claude/imagineer/', () =>
   assert.match(write('attacker', '/repo/.claude/imagineer/runs/3/attacks/../copy.json'), /outside/)
 })
 
-test('Dev may commit but never push; the others never commit', () => {
-  assert.equal(bash('dev', 'npm test && git add -A && git commit -m "Add approvals"'), null)
-  assert.match(bash('dev', 'git push origin HEAD'), /runs git push/)
-  assert.match(bash('qa', 'git commit -m tests'), /runs git commit/)
-  assert.match(bash('architect', 'git -C /repo commit -m x'), /runs git commit/)
-  assert.match(bash('dev', 'gh pr create'), /calls GitHub/)
-  assert.match(bash('qa', 'echo hi; git reset --hard'), /runs git reset/)
-  assert.match(bash('dev', 'FOO=1 env git push'), /git push/)
-})
-
-test('reading git and running tests is allowed for Build\'s agents', () => {
-  for (const agent of ['dev', 'qa', 'architect']) {
-    assert.equal(bash(agent, 'git diff main...HEAD -- src && git log --oneline -3 && node --test'), null)
-  }
-})
-
-test('quoted text is not mistaken for a command', () => {
-  assert.equal(bash('qa', 'node -e "console.log(\'git push\')"'), null)
+test('quoted text is kept whole when a command is split', () => {
   assert.deepEqual(segments('a "b; c" && d'), [['a', 'b; c'], ['d']])
 })
 
-test('the main session and other agents pass untouched', () => {
+test('only Imagineer\'s own agents are held: the main session, other agents and same-named agents from elsewhere pass untouched (#38)', () => {
   assert.equal(decide({ tool_name: 'Bash', tool_input: { command: 'git push' } }), null)
   assert.equal(decide({ agent_type: 'general-purpose', tool_name: 'Write', tool_input: { file_path: '/repo/test/a.test.ts' } }), null)
+  for (const agent of ['attacker', 'verifier', 'my-plugin:attacker', 'dev', 'imagineer:dev', 'imagineer:qa']) {
+    assert.equal(decide({ agent_type: agent, tool_name: 'Write', tool_input: { file_path: '/repo/src/a.ts' } }), null, agent)
+    assert.equal(decide({ agent_type: agent, tool_name: 'Bash', tool_input: { command: 'cat .env.local && git push' } }), null, agent)
+  }
+  assert.match(decide({ agent_type: 'imagineer:attacker', tool_name: 'Write', tool_input: { file_path: '/repo/src/a.ts' } }), /outside/)
 })
 
 test('as a hook it prints a deny decision and exits 0', t => {
@@ -66,7 +40,7 @@ test('as a hook it prints a deny decision and exits 0', t => {
   // Run from a scratch folder: a refusal is logged under the session's folder, never this repository.
   const cwd = mkdtempSync(join(tmpdir(), 'imagineer-guard-'))
   t.after(() => rmSync(cwd, { recursive: true, force: true }))
-  const payload = JSON.stringify({ cwd, agent_type: 'imagineer:qa', tool_name: 'Edit', tool_input: { file_path: '/repo/src/a.ts' } })
+  const payload = JSON.stringify({ cwd, agent_type: 'imagineer:verifier', tool_name: 'Edit', tool_input: { file_path: '/repo/src/a.ts' } })
   const result = spawnSync('node', [script], { input: payload, encoding: 'utf8', cwd })
   assert.equal(result.status, 0)
   assert.equal(JSON.parse(result.stdout).hookSpecificOutput.permissionDecision, 'deny')
@@ -159,7 +133,7 @@ test("the attacker reads the copy, its run folder and Imagineer's scripts, and n
 })
 
 test('only the attacker is held to this; everyone else reads and runs as before', () => {
-  for (const agent of [undefined, 'general-purpose', 'imagineer:dev', 'imagineer:qa']) {
+  for (const agent of [undefined, 'general-purpose', 'attacker', 'other:attacker']) {
     assert.equal(decide({ cwd: '/repo', agent_type: agent, tool_name: 'Read', tool_input: { file_path: '/repo/.env.local' } }), null, String(agent))
     assert.equal(decide({ cwd: '/repo', agent_type: agent, tool_name: 'Bash', tool_input: { command: 'DATABASE_URL=postgres://localhost/dev npm test' } }), null, String(agent))
   }
@@ -204,4 +178,26 @@ test('the guard holds when the plugin is started through a link, and says nothin
   // A refused command that names an env file or a database is flagged as a reach for one; any other is an ordinary refusal.
   assert.deepEqual(denials.map(d => d.kind), ['database', 'database', undefined])
   assert.doesNotMatch(denials.map(d => d.reason).join(' '), new RegExp(dirname(ATTACK)))
+})
+
+const QUESTIONS = join(dirname(ATTACK), 'questions.mjs')
+
+test('the verifier records its ruling and looks around the copy, and does nothing else', t => {
+  const { repo, copy, out } = session(t)
+  const verifier = (tool, input) => decide({ cwd: repo, agent_type: 'imagineer:verifier', tool_name: tool, tool_input: input })
+  const bash = command => verifier('Bash', { command })
+  assert.equal(bash(`node ${QUESTIONS} verdict --repo ${repo} --out ${out} --key attack:A7 --verdict real --reason "Carol approves team B's expense" --evidence src/approvals.ts:12`), null)
+  assert.equal(bash(`node ${ATTACK} search --out ${out} --pattern 'requireRole'`), null)
+  assert.equal(bash(`node ${ATTACK} files --out ${out}`), null)
+  for (const command of [
+    `node ${ATTACK} run --out ${out} --round 1 --id A9 --category data --title x --file t.test.ts --run 'npx vitest run t.test.ts'`,
+    `node ${ATTACK} void --out ${out} --id A7 --reason "wrong"`,
+    `node ${QUESTIONS} answer --repo ${repo} --id Q1 --status decided --reason x`,
+    'npx vitest run',
+    'cat .env.local',
+  ]) assert.match(bash(command), /something other than recording a verdict/, command)
+  assert.match(bash(`node ${QUESTIONS} verdict --repo ${repo} && rm -rf ${repo}`), /more than one plain call/)
+  assert.match(verifier('Write', { file_path: join(out, 'attacks/test/a1.test.ts') }), /writes nothing/)
+  assert.equal(verifier('Read', { file_path: join(copy, 'src/auth.ts') }), null)
+  assert.match(verifier('Read', { file_path: join(repo, '.env.local') }), /outside the throwaway copy/)
 })

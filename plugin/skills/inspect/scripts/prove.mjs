@@ -88,7 +88,7 @@ function prove({ repo, out, id, file, command }) {
     const totals = [...caughtByKey.values()]
     test.red = { killed: totals.reduce((n, e) => n + e.caught, 0), total: totals.reduce((n, e) => n + e.total, 0), missed }
     for (const [key, entry] of caughtByKey) {
-      if (entry.caught === entry.total) ledger.dismissed[key] = { question: id, reason: `Test ${file} catches every break on this line.` }
+      if (entry.caught === entry.total) ledger.dismissed[key] = { question: id, reason: `Test ${file} catches every planted bug on this line.` }
     }
   }
 
@@ -98,9 +98,9 @@ function prove({ repo, out, id, file, command }) {
   writeJson(join(repo, LEDGER), ledger)
 
   if (!green.ok) console.log(`${id}: the test fails on the code as it is, so the code does not do what the answer says.\n${test.output}`)
-  else if (!test.red.total) console.log(`${id}: the test passes, but there was no recorded break to prove it can fail. Point the question's "about" at the lines it protects.`)
+  else if (!test.red.total) console.log(`${id}: the test passes, but there was no planted bug recorded to prove it can fail. Point the question's "about" at the lines it protects.`)
   else {
-    console.log(`${id}: passes on the code as it is, and fails on ${test.red.killed} of ${test.red.total} breaks behind the answer.`)
+    console.log(`${id}: passes on the code as it is, and fails on ${test.red.killed} of ${test.red.total} planted bugs behind the answer.`)
     for (const m of test.red.missed) console.log(`  not caught: ${m.mutant} (line ${m.line}): ${m.change}`)
   }
 }

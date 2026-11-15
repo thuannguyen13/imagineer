@@ -1,0 +1,6 @@
+test:
+  image: node:24
+  script:
+    - corepack enable
+    - yarn install --immutable
+    - yarn test:unit

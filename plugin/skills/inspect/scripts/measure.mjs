@@ -6,7 +6,6 @@
 //   node measure.mjs checks   --out <run folder>
 //   node measure.mjs fallow   --out <run folder>
 //   node measure.mjs stryker  --out <run folder> [--estimate] [--mutate <glob>,<glob>] [--decline "<why not this time>"]
-//   node measure.mjs audit    --out <run folder> --base <ref>     Fallow on what changed since <ref>
 //   node measure.mjs security --out <run folder>
 //   node measure.mjs cleanup  --out <run folder>
 //
@@ -18,30 +17,155 @@ import { availableParallelism, tmpdir } from 'node:os'
 import { basename, dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { detect } from './detect.mjs'
+import { NOT_MUTATED } from './layout.mjs'
+import { plantedInstructions } from './planted.mjs'
+import { appSeeds } from './seeds.mjs'
+import { trackedFiles } from './layout.mjs'
 import { arg, isEnvFile, isEnvLike, isMain, PINNED, projectEnv, readJson, readJsonIf, run, runGroup, strykerFailure, tail, withDatabasePointedNowhere, writeJson } from './lib.mjs'
 
-const INSTALL = {
-  npm: lock => (lock ? ['npm', 'ci', '--no-audit', '--no-fund'] : ['npm', 'install', '--no-audit', '--no-fund']),
-  pnpm: () => ['pnpm', 'install', '--frozen-lockfile'],
-  yarn: () => ['yarn', 'install', '--frozen-lockfile'],
-  bun: () => ['bun', 'install', '--frozen-lockfile'],
+/** The install command: exactly the lockfile when there is one. Yarn 2 and later replaced `--frozen-lockfile` with `--immutable`. */
+export function installCommand({ name, lockfile, modern }) {
+  if (name === 'npm') return lockfile ? ['npm', 'ci', '--no-audit', '--no-fund'] : ['npm', 'install', '--no-audit', '--no-fund']
+  if (name === 'yarn') return lockfile ? ['yarn', 'install', modern ? '--immutable' : '--frozen-lockfile'] : ['yarn', 'install']
+  return lockfile ? [name, 'install', '--frozen-lockfile'] : [name, 'install']
+}
+
+/** Where each step runs in the copy: the app's folder, and the folder installing happens from. Runs from before the layout scan use the root. */
+export function places(copyPath, facts) {
+  const at = dir => (dir && dir !== '.' ? join(copyPath, dir) : copyPath)
+  const layout = facts.layout
+  return { app: layout?.app?.dir ?? '.', appPath: at(layout?.app?.dir), installPath: at(layout?.installRoot) }
+}
+
+const LOADERS = [
+  ['tsx', '--import tsx'],
+  ['jiti', '--import jiti/register'],
+]
+const ONE_FILE = { vitest: 'npx vitest run {file}', jest: 'npx jest {file}', mocha: 'npx mocha {file}', ava: 'npx ava {file}', tap: 'npx tap {file}', uvu: 'npx uvu {file}' }
+
+/**
+ * How to run one test in the copy, for the attacker and for proofs, so neither spends its turns
+ * finding out: `{ runner, command, example, loader, note }`, where `command` has `{file}` for the
+ * test's path from the copy's top. With no runner, Node's own, with a TypeScript loader the project
+ * already has (never one installed). Read from the layout and the installed packages.
+ */
+export function testSetupFor(layout, appPath) {
+  const app = layout.app?.dir ?? '.'
+  const has = name => existsSync(join(appPath, 'node_modules', name, 'package.json'))
+  const loader = LOADERS.find(([name]) => has(name)) ?? null
+  const runner = layout.runner && !['playwright', 'cypress'].includes(layout.runner) ? layout.runner : null
+  const node = `node ${layout.typescript && loader ? `${loader[1]} ` : ''}--test {file}`
+  const command = app !== '.' ? null : runner === 'node --test' ? node : runner ? ONE_FILE[runner] ?? null : node
+  const note =
+    app !== '.'
+      ? `The app is in ${app}/: run its tests from there with the package manager's folder option (pnpm --filter, npm -w).`
+      : !runner && layout.typescript && !loader
+        ? 'No test runner and no TypeScript loader: write tests in plain JavaScript (.mjs), run with node --test.'
+        : !runner
+          ? `No test runner: Node's own, with ${loader ? loader[0] : 'no loader'}.`
+          : ''
+  return { runner: runner ?? 'node --test', command, example: layout.tests?.example ?? null, loader: loader?.[0] ?? null, note }
+}
+
+/** A tool's report with its paths from the app's folder, made paths from the repository's top, as every other step names files. */
+export function fromRepositoryTop(value, app) {
+  if (!app || app === '.') return value
+  const prefix = path => (typeof path === 'string' && path !== '' && !path.startsWith('/') ? `${app}/${path}`.replace(/\/\.$/, '') : path)
+  const walk = item => {
+    if (Array.isArray(item)) return item.map(walk)
+    if (!item || typeof item !== 'object') return item
+    return Object.fromEntries(Object.entries(item).map(([key, inner]) => [key, ['path', 'file'].includes(key) ? prefix(inner) : walk(inner)]))
+  }
+  return walk(value)
+}
+
+/** Stryker's report names files by their path in the folder it ran in. */
+export function mutationFromRepositoryTop(report, app) {
+  if (!report?.files || !app || app === '.') return report
+  return { ...report, files: Object.fromEntries(Object.entries(report.files).map(([path, file]) => [`${app}/${path}`, file])) }
+}
+
+/**
+ * Known vulnerabilities counted from a package manager's audit output: npm and pnpm write one summary,
+ * Yarn 1 one summary line among others, Yarn 2 and later and Bun one entry per advisory.
+ */
+export function auditCounts(tool, stdout) {
+  const counts = { critical: 0, high: 0, moderate: 0 }
+  const add = severity => {
+    if (severity in counts) counts[severity] += 1
+  }
+  if (tool === 'npm' || tool === 'pnpm') {
+    const v = JSON.parse(stdout).metadata?.vulnerabilities
+    if (!v) throw new Error('no summary')
+    return { critical: v.critical ?? 0, high: v.high ?? 0, moderate: v.moderate ?? 0 }
+  }
+  const lines = stdout.split('\n').filter(line => line.trim().startsWith('{')).map(line => JSON.parse(line))
+  if (tool === 'yarn') {
+    const v = lines.find(line => line.type === 'auditSummary')?.data?.vulnerabilities
+    if (!v) throw new Error('no summary')
+    return { critical: v.critical ?? 0, high: v.high ?? 0, moderate: v.moderate ?? 0 }
+  }
+  if (tool === 'yarn-modern') {
+    for (const line of lines) add(String(line.children?.Severity ?? '').toLowerCase())
+    return counts
+  }
+  if (tool === 'bun') {
+    const report = JSON.parse(stdout.slice(stdout.indexOf('{')) || '{}')
+    for (const advisories of Object.values(report)) for (const a of [].concat(advisories)) add(String(a?.severity ?? '').toLowerCase())
+    return counts
+  }
+  throw new Error(`no audit for ${tool}`)
+}
+
+const SEVERITY_ORDER = ['critical', 'high', 'moderate', 'low', 'info']
+
+/**
+ * The packages an audit names, worst first, each with its worst severity: `[{ name, severity }]`.
+ * npm names vulnerable packages; pnpm and Yarn 1 name each advisory's package; Yarn 2+ and Bun name
+ * the package each entry is about.
+ */
+export function auditPackages(tool, stdout) {
+  const worst = new Map()
+  const add = (name, severity) => {
+    const s = String(severity ?? '').toLowerCase()
+    if (!name || !SEVERITY_ORDER.includes(s)) return
+    if (!worst.has(name) || SEVERITY_ORDER.indexOf(s) < SEVERITY_ORDER.indexOf(worst.get(name))) worst.set(name, s)
+  }
+  try {
+    if (tool === 'npm') for (const [name, v] of Object.entries(JSON.parse(stdout).vulnerabilities ?? {})) add(name, v.severity)
+    else if (tool === 'pnpm') for (const a of Object.values(JSON.parse(stdout).advisories ?? {})) add(a.module_name, a.severity)
+    else if (tool === 'bun') for (const [name, list] of Object.entries(JSON.parse(stdout.slice(stdout.indexOf('{')) || '{}'))) for (const a of [].concat(list)) add(name, a?.severity)
+    else {
+      for (const line of stdout.split('\n').filter(l => l.trim().startsWith('{')).map(l => JSON.parse(l))) {
+        if (tool === 'yarn' && line.type === 'auditAdvisory') add(line.data?.advisory?.module_name, line.data?.advisory?.severity)
+        if (tool === 'yarn-modern') add(line.value, line.children?.Severity)
+      }
+    }
+  } catch {
+    return []
+  }
+  return [...worst].map(([name, severity]) => ({ name, severity })).sort((a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity) || a.name.localeCompare(b.name))
+}
+
+const AUDIT = {
+  npm: { argv: ['npm', 'audit', '--json', '--omit=dev'], label: 'npm audit --omit=dev' },
+  pnpm: { argv: ['pnpm', 'audit', '--json', '--prod'], label: 'pnpm audit --prod' },
+  yarn: { argv: ['yarn', 'audit', '--json', '--groups', 'dependencies'], label: 'yarn audit --groups dependencies' },
+  'yarn-modern': { argv: ['yarn', 'npm', 'audit', '--json', '--environment', 'production', '--recursive'], label: 'yarn npm audit --environment production' },
+  // Bun's audit has no way to leave out dev tools: they are counted too.
+  bun: { argv: ['bun', 'audit', '--json'], label: 'bun audit (dev tools included)' },
 }
 
 const RUNNER = { npm: ['npm', 'run'], pnpm: ['pnpm', 'run'], yarn: ['yarn', 'run'], bun: ['bun', 'run'] }
-
-const ADD = {
-  npm: pkg => ['npm', 'install', '--no-save', '--no-audit', '--no-fund', pkg],
-  pnpm: pkg => ['pnpm', 'add', '-D', pkg],
-  yarn: pkg => ['yarn', 'add', '-D', pkg],
-  bun: pkg => ['bun', 'add', '-d', pkg],
-}
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 
 /** What a measurement depends on besides the code: the commit, Imagineer's version and the tools used. */
 export function measurementKey(commit, facts) {
   const manifest = readJsonIf(join(HERE, '../../../.claude-plugin/plugin.json'))
-  return JSON.stringify({ commit, imagineer: manifest?.version ?? 'unknown', pinned: PINNED, tools: facts.tools })
+  // The same commit measured as another app, or over other folders, is another measurement.
+  const layout = facts.layout ? { app: facts.layout.app?.dir ?? null, mutate: facts.layout.sources?.mutate ?? null, scripts: Object.fromEntries(Object.entries(facts.layout.scripts ?? {}).map(([k, v]) => [k, v?.name ?? null])) } : null
+  return JSON.stringify({ commit, imagineer: manifest?.version ?? 'unknown', pinned: PINNED, tools: facts.tools, layout })
 }
 
 // The files each step writes, which a reuse copies.
@@ -133,29 +257,50 @@ export function cleanEnvFiles(root) {
 }
 
 function prepare(repo, out) {
+  // Prepared again in the same run (after the user said which folder is their app): the earlier copy goes.
+  const earlier = readJsonIf(join(out, 'copy.json'))?.path
+  if (earlier && basename(earlier).startsWith('imagineer-') && existsSync(earlier)) rmSync(earlier, { recursive: true, force: true })
   const left = removeLeftCopies(out)
   if (left.length) console.log(`Removed the throwaway ${left.length === 1 ? 'copy' : 'copies'} that run ${left.join(', ')} left behind.`)
-  const facts = detect(repo)
-  writeJson(join(out, 'detect.json'), facts)
-
   const head = run(['git', '-C', repo, 'rev-parse', '--short', 'HEAD'])
   if (!head.ok) throw new Error(`Not a git repository with a commit: ${repo}`)
   const dirty = run(['git', '-C', repo, 'status', '--porcelain']).stdout.trim() !== ''
+
+  // The layout first: when it cannot tell which folder is the app, nothing is copied until the user says.
+  const first = detect(repo)
+  if (first.layout.ask) {
+    writeJson(join(out, 'detect.json'), first)
+    console.log(
+      `Ask the user: ${first.layout.ask.question}\n${first.layout.ask.candidates.map(c => `- ${c.dir}${c.name ? ` (${c.name})` : ''}: ${c.sourceFiles} source files, ${c.testFiles} test files`).join('\n')}\nKeep the answer with \`settings.mjs layout --app <folder>\`, then prepare again.`,
+    )
+    process.exit(3)
+  }
 
   // The committed state only: what was measured is exactly a commit.
   const path = mkdtempSync(join(tmpdir(), 'imagineer-'))
   const archive = run(['sh', '-c', `git -C "$1" archive HEAD | tar -x -C "$2"`, 'sh', repo, path])
   if (!archive.ok) throw new Error(`Could not copy the repository: ${tail(archive.stderr)}`)
   const envFilesCleaned = cleanEnvFiles(path)
+  // Read again from the copy: exactly the commit, whatever the working tree holds.
+  const facts = detect(repo, { root: path })
+  writeJson(join(out, 'detect.json'), facts)
+  // Where blind questions can start: errors handled silently, rules stated in comments. Never graded.
+  writeJson(join(out, 'seeds.json'), appSeeds(trackedFiles(repo), path, facts.layout.app?.dir ?? '.'))
 
+  const { installPath } = places(path, facts)
   const install = facts.isNodeProject
-    ? run(INSTALL[facts.manager](facts.lockfile), { cwd: path, timeoutMs: 15 * 60_000, project: true })
+    ? run(installCommand(facts.layout.manager), { cwd: installPath, timeoutMs: 15 * 60_000, project: true })
     : { ok: false, seconds: 0, stderr: 'No package.json.' }
   // Again after the install: its scripts can write an env file (a copy of the example, most often).
   for (const entry of facts.isNodeProject ? cleanEnvFiles(path) : []) {
     const earlier = envFilesCleaned.find(e => e.file === entry.file)
     if (earlier) earlier.replaced.push(...entry.replaced)
     else envFilesCleaned.push(entry)
+  }
+  // How to run one test here, now that the packages are installed: given to the attacker and to proofs.
+  if (facts.isNodeProject) {
+    facts.layout.testSetup = testSetupFor(facts.layout, places(path, facts).appPath)
+    writeJson(join(out, 'detect.json'), facts)
   }
   writeJson(join(out, 'copy.json'), {
     path,
@@ -173,20 +318,27 @@ function prepare(repo, out) {
     key: measurementKey(head.stdout.trim(), facts),
   })
   console.log(`Copied ${head.stdout.trim()}${dirty ? ' (uncommitted changes not included)' : ''} to ${path}; install ${install.ok ? 'passed' : 'failed'}.`)
+  console.log(`Layout:\n${facts.layout.summary.map(line => `- ${line}`).join('\n')}`)
+  for (const line of facts.layout.defaults) console.log(`Default used: ${line}.`)
   for (const { file, removed, replaced } of envFilesCleaned.filter(e => !e.example)) {
     console.log(removed ? `${file} is a link: removed from the copy.` : `${file}: in the copy, ${replaced.join(', ')} ${replaced.length === 1 ? 'points' : 'point'} nowhere, so no test reaches that database.`)
   }
 }
 
+/** The script for a purpose, `{ name, dir }`: from the layout, or by its usual name in a run from before it. */
+const scriptFor = (facts, purpose) => facts.layout?.scripts?.[purpose] ?? (facts.scripts?.[purpose] ? { name: purpose, dir: '.' } : null)
+
 function checks(out) {
   const { copy, repoFacts } = state(out)
   const runner = RUNNER[repoFacts.manager]
-  const step = (script, name) => {
-    if (!repoFacts.scripts[name]) return { present: false }
-    const result = run([...runner, script], { cwd: copy.path, project: true, timeoutMs: 20 * 60_000 })
-    return { present: true, ok: result.ok, seconds: result.seconds, output: tail(result.stdout + '\n' + result.stderr) }
+  const step = purpose => {
+    const script = scriptFor(repoFacts, purpose)
+    if (!script) return { present: false }
+    const cwd = script.dir && script.dir !== '.' ? join(copy.path, script.dir) : copy.path
+    const result = run([...runner, script.name], { cwd, project: true, timeoutMs: 20 * 60_000 })
+    return { present: true, script: script.name, dir: script.dir ?? '.', ok: result.ok, seconds: result.seconds, output: tail(result.stdout + '\n' + result.stderr) }
   }
-  const result = { typecheck: step('typecheck', 'typecheck'), test: step('test', 'test') }
+  const result = { typecheck: step('typecheck'), test: step('test') }
   writeJson(join(out, 'checks.json'), result)
   console.log(`Typecheck: ${describe(result.typecheck)}. Tests: ${describe(result.test)}.`)
 }
@@ -195,13 +347,14 @@ const describe = step => (!step.present ? 'none' : step.ok ? `passed in ${step.s
 
 function fallow(out) {
   const { copy, repoFacts } = state(out)
+  const { app, appPath } = places(copy.path, repoFacts)
   const own = repoFacts.tools.fallow.inRepo && repoFacts.tools.fallow.version !== null
   const command = own ? ['npx', 'fallow'] : ['npx', '-y', `fallow@${PINNED.fallow}`]
-  const health = run([...command, 'health', '--format', 'json', '--quiet'], { cwd: copy.path, project: true })
-  const check = run([...command, 'check', '--format', 'json', '--quiet'], { cwd: copy.path, project: true })
+  const health = run([...command, 'health', '--format', 'json', '--quiet'], { cwd: appPath, project: true })
+  const check = run([...command, 'check', '--format', 'json', '--quiet'], { cwd: appPath, project: true })
   const parse = result => {
     try {
-      return JSON.parse(result.stdout)
+      return fromRepositoryTop(JSON.parse(result.stdout), app)
     } catch {
       return null
     }
@@ -221,6 +374,9 @@ function fallow(out) {
 
 async function stryker(out, isEstimate) {
   const { copy, repoFacts } = state(out)
+  // Stryker runs in the app's folder, with the app's own test script; its report is made to name files from the repository's top.
+  const { app, appPath } = places(copy.path, repoFacts)
+  const testScript = scriptFor(repoFacts, 'test')
   // Each mutant runs the whole test suite, which usually uses every core itself: running
   // many at once slows each past its time limit, and breaks then time out instead of being
   // caught. A quarter of the cores, at most four, keeps runs near their own speed.
@@ -247,18 +403,26 @@ async function stryker(out, isEstimate) {
 
   let config = repoFacts.tools.stryker.config
   if (!own || config === null) {
-    if (!repoFacts.scripts.test) {
-      writeJson(join(out, 'stryker.json'), { ok: false, skipped: 'The repository has no test command, so no test would notice a break.' })
-      console.log('Stryker skipped: no test command.')
+    if (testScript && (testScript.dir ?? '.') !== app) {
+      // Stryker copies the app's folder and runs its tests there; a script elsewhere would test the original files.
+      const failed = { ok: false, error: `The app's own package.json (${app === '.' ? 'at the root' : `in ${app}`}) has no test script; the tests run from ${testScript.dir === '.' ? 'the root' : testScript.dir}, which test strength cannot point at its copy` }
+      if (isEstimate) writeJson(join(out, 'stryker-estimate.json'), failed)
+      writeJson(join(out, 'stryker.json'), failed)
+      console.log(`Test strength could not run: ${failed.error}.`)
       return
     }
-    // Imagineer's defaults: run the repository's own tests for every mutant.
+    // Imagineer's defaults: run the app's own tests for every mutant, planting bugs in the folders the layout found.
+    // With no test command, a command that runs no tests: every planted bug survives, which is the honest
+    // answer, and each line gets its record, so an answer about it can still be proven by a new test.
     config = 'stryker.imagineer.json'
+    const mutate = repoFacts.layout?.sources?.mutate
+    const testCommand = testScript ? `${RUNNER[repoFacts.manager].join(' ')} ${testScript.name}` : 'node -e "process.exit(0)"'
     writeFileSync(
-      join(copy.path, config),
+      join(appPath, config),
       JSON.stringify({
+        ...(mutate?.length ? { mutate: [...mutate, ...NOT_MUTATED] } : {}),
         testRunner: 'command',
-        commandRunner: { command: `${RUNNER[repoFacts.manager].join(' ')} test` },
+        commandRunner: { command: testCommand },
         coverageAnalysis: 'off',
         reporters: ['json', 'clear-text'],
         jsonReporter: { fileName: 'reports/mutation/mutation.json' },
@@ -273,10 +437,10 @@ async function stryker(out, isEstimate) {
   const argv = [...command, config, '--concurrency', String(concurrency), '--reporters', 'json,clear-text']
   const mutate = arg('mutate')
   // Tests are never mutated, whatever the scope names.
-  if (mutate) argv.push('--mutate', [mutate, '!**/*.test.*', '!**/*.spec.*', '!**/__tests__/**', '!**/test/**', '!**/tests/**'].join(','))
+  if (mutate) argv.push('--mutate', [mutate, ...NOT_MUTATED].join(','))
   if (isEstimate) argv.push('--dryRunOnly')
   // Its own process group: stopping this script stops every Stryker worker with it.
-  const result = await runGroup(argv, { cwd: copy.path, project: true, timeoutMs: isEstimate ? 15 * 60_000 : 6 * 60 * 60_000 })
+  const result = await runGroup(argv, { cwd: appPath, project: true, timeoutMs: isEstimate ? 15 * 60_000 : 6 * 60 * 60_000 })
   const log = result.stdout + '\n' + result.stderr
 
   if (isEstimate) {
@@ -297,14 +461,18 @@ async function stryker(out, isEstimate) {
     return
   }
 
-  const report = join(copy.path, 'reports/mutation/mutation.json')
-  if (existsSync(report)) copyFileSync(report, join(out, 'mutation.json'))
+  const report = join(appPath, 'reports/mutation/mutation.json')
+  if (existsSync(report)) writeJson(join(out, 'mutation.json'), mutationFromRepositoryTop(readJson(report), app))
   writeJson(join(out, 'stryker.json'), {
     ok: result.ok && existsSync(report),
     measured: own ? 'repo' : 'default',
     version: own ? repoFacts.tools.stryker.version : PINNED.stryker,
     // What was mutated, so a reuse takes only a run over the same scope.
     mutate: arg('mutate') ?? null,
+    // No test command: no test ran for any planted bug.
+    noTests: !testScript && (!own || repoFacts.tools.stryker.config === null),
+    // The folders the layout found, measured when no scope was given.
+    scope: arg('mutate') ? null : (repoFacts.layout?.sources?.mutate ?? null),
     seconds: result.seconds,
     error: existsSync(report) ? null : tail(log),
   })
@@ -313,26 +481,33 @@ async function stryker(out, isEstimate) {
 
 function security(out) {
   const { copy, repoFacts } = state(out)
+  const { app, appPath, installPath } = places(copy.path, repoFacts)
   const own = repoFacts.tools.fallow.inRepo && repoFacts.tools.fallow.version !== null
   const command = own ? ['npx', 'fallow'] : ['npx', '-y', `fallow@${PINNED.fallow}`]
-  const scan = run([...command, 'security', '--format', 'json', '--quiet'], { cwd: copy.path, project: true })
+  const scan = run([...command, 'security', '--format', 'json', '--quiet'], { cwd: appPath, project: true })
   let candidates = null
   try {
-    candidates = JSON.parse(scan.stdout).security_findings ?? []
+    candidates = fromRepositoryTop(JSON.parse(scan.stdout).security_findings ?? [], app)
   } catch {}
 
-  // Known vulnerabilities in the dependencies the app ships with (not dev tools).
-  let audit = { skipped: `No audit for ${repoFacts.manager} yet.` }
-  if (repoFacts.manager === 'npm' && repoFacts.lockfile) {
-    const result = run(['npm', 'audit', '--json', '--omit=dev'], { cwd: copy.path, project: true, timeoutMs: 3 * 60_000 })
+  // Known vulnerabilities in the dependencies the app ships with (not dev tools), with the project's own package manager.
+  const manager = repoFacts.layout?.manager ?? { name: repoFacts.manager, lockfile: repoFacts.lockfile, modern: false }
+  const tool = manager.name === 'yarn' && manager.modern ? 'yarn-modern' : manager.name
+  let audit = { skipped: `No audit for ${manager.name} yet.` }
+  if (!manager.lockfile) audit = { skipped: 'No lockfile, so the versions an install gets are not known.' }
+  else if (AUDIT[tool]) {
+    // An audit exits non-zero when it finds something: its output is read either way.
+    const result = run(AUDIT[tool].argv, { cwd: installPath, project: true, timeoutMs: 3 * 60_000 })
     try {
-      const counts = JSON.parse(result.stdout).metadata?.vulnerabilities ?? {}
-      audit = { tool: 'npm audit --omit=dev', high: counts.high ?? 0, critical: counts.critical ?? 0, moderate: counts.moderate ?? 0 }
+      audit = { tool: AUDIT[tool].label, ...auditCounts(tool, result.stdout), packages: auditPackages(tool, result.stdout) }
     } catch {
-      audit = { skipped: `npm audit did not answer: ${tail(result.stderr, 3)}` }
+      audit = { skipped: `${AUDIT[tool].label.split(' (')[0]} did not answer: ${tail(result.stderr || result.stdout, 3)}` }
     }
   }
+  // Text that gives orders to AI tools or reviewers: shown to the user, never obeyed.
+  const planted = plantedInstructions(copy.source ?? copy.path, { root: copy.path })
   writeJson(join(out, 'security.json'), {
+    planted,
     candidates:
       candidates === null
         ? null
@@ -340,22 +515,9 @@ function security(out) {
     audit,
   })
   console.log(
-    `Security candidates: ${candidates === null ? 'scan failed' : candidates.length}. Dependency audit: ${audit.skipped ?? `${audit.critical} critical, ${audit.high} high`}.`,
+    `Possible security weaknesses: ${candidates === null ? 'scan failed' : candidates.length}. Dependency audit: ${audit.skipped?.replace(/\.$/, '') ?? `${audit.critical} critical, ${audit.high} high`}.`,
   )
-}
-
-function audit(out, base) {
-  const { copy, repoFacts } = state(out)
-  const own = repoFacts.tools.fallow.inRepo && repoFacts.tools.fallow.version !== null
-  const command = own ? ['npx', 'fallow'] : ['npx', '-y', `fallow@${PINNED.fallow}`]
-  // The copy has no git history; Fallow needs it to compare with the base, so audit the source checkout.
-  const result = run([...command, 'audit', '--base', base, '--format', 'json', '--quiet'], { cwd: copy.source ?? copy.path })
-  let report = null
-  try {
-    report = JSON.parse(result.stdout)
-  } catch {}
-  writeJson(join(out, 'audit.json'), report ? { ok: true, verdict: report.verdict, changedFiles: report.changed_files_count, summary: report.summary } : { ok: false, error: tail(result.stderr || result.stdout) })
-  console.log(report ? `Fallow audit against ${base}: ${report.verdict} (${report.changed_files_count} files changed).` : 'Fallow audit did not run.')
+  if (planted.length) console.log(`Text that gives orders to AI tools or reviewers (not followed; a finding for the user):\n${planted.map(p => `- ${p.path}:${p.line} ${p.why}: ${p.text}`).join('\n')}`)
 }
 
 function cleanup(out) {
@@ -398,9 +560,8 @@ if (isMain(import.meta.url)) {
       else await stryker(out, process.argv.includes('--estimate'))
     }
     else if (step === 'security') security(out)
-    else if (step === 'audit') audit(out, arg('base') ?? 'main')
     else if (step === 'cleanup') cleanup(out)
-    else throw new Error('Steps: prepare, checks, fallow, stryker, security, audit, cleanup')
+    else throw new Error('Steps: prepare, checks, fallow, stryker, security, cleanup')
   } catch (error) {
     console.error(error.message)
     process.exit(1)

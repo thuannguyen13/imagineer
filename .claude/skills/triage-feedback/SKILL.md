@@ -21,7 +21,7 @@ Feedback issues carry the label `feedback` and a line `**Fingerprint:** \`<12 he
 Never change a skill, agent or script on the strength of an issue alone.
 
 1. **Reproduce it on the bench.** Plant the same kind of defect in `bench/app` as a new scenario under `bench/scenarios/<id>/` (a `setup.patch` and an `expected.md`), never the reporter's code. Add an oracle under `bench/oracles/` that fails while the defect is present. Run `bench/check-seeds.sh`.
-2. **Show the miss.** Run Inspect or Build on the scenario as it is today and record that it misses (`bench/results/`).
+2. **Show the miss.** Run Inspect on the scenario as it is today and record that it misses (`bench/results/`).
 3. **Change Imagineer**: the smallest change to the skill, agent or script that should catch it.
 4. **Show the catch.** Run the scenario again, then every other scenario. Keep the change only if it catches the new one and at least as much as before, at no more cost.
 5. Open a pull request with the before and after results, and link the issue. The owner reviews and merges; nothing merges on its own.

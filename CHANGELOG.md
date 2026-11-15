@@ -1,5 +1,53 @@
 # Changelog
 
+## 0.5.0
+
+### Changes you need to know
+
+- **Choose how much a run does:** On your first run, Inspect asks for a size, kept for every project: **Standard** (two attack rounds of four, on a faster, cheaper model), **Quick check** (measures and asks, no attacks, the least Claude usage) or **Thorough** (up to four rounds of six on the strongest model, as every run did before).
+- **Build removed:** `/imagineer:build`, off since 0.4.0, is gone; Imagineer reports what to fix and leaves the changes to you. Unfinished Build runs in `.claude/imagineer/build/` can no longer be resumed, and the folder can be deleted. ([#38](https://github.com/thuannguyen13/imagineer/issues/38))
+- **Test strength measures your app's own code:** Inspect plants bugs in the folders that hold your app's code, read from your project, instead of only `src/` and `lib/`, so a score can differ from an earlier run; the report and the pane name the folders measured. ([#28](https://github.com/thuannguyen13/imagineer/issues/28), [#29](https://github.com/thuannguyen13/imagineer/issues/29))
+- **Inspect asks which folder is your app:** In a monorepo, or a repository holding several projects, Inspect asks once which one to inspect and keeps your answer for that repository. ([#29](https://github.com/thuannguyen13/imagineer/issues/29))
+
+### New Features
+
+- **Projects with no tests:** Test strength now measures a project that has no tests (none of its planted bugs is caught), and your answers can still be proven, with Node's own test runner.
+- **Orders to AI tools found and reported:** Text in your project that tells AI tools or reviewers to skip code, ignore their instructions or call the code already verified secure is listed under Security and permissions and asked about, and Inspect and its attacker never follow it.
+- **Findings checked before you are asked:** A separate verifier checks each possible security weakness and each attack that broke through against your code, citing the lines it read; false alarms are set aside with the reason, and only confirmed ones become your questions.
+- **Changes to your repository during a run are asked first:** While Inspect runs, any change Claude is about to make to your repository's files or git history, outside Imagineer's own folder, asks you before it happens, including adding the proven tests you agreed to.
+- **Every way into your server is counted:** Inspect lists your app's API routes, route handlers and server actions from its code, and Security and permissions names each one no attack has reached yet, instead of trusting the attacker's own account.
+- **Correct what Inspect read:** Tell Inspect during a run which folder is your app, which of its folders hold your own code, or where your docs go, and it keeps that for the repository. ([#29](https://github.com/thuannguyen13/imagineer/issues/29))
+
+### Improvements
+
+- **Less of your Claude usage per run:** The attacker is told how to run a test in your project instead of working it out, a setup that worked is reused by later rounds and proofs, and a later run attacks first what changed since the last one or was never reached.
+- **Questions between attack rounds:** The questions an attack round raises are asked right after it, while you are there, and your answers aim the next round.
+- **Breaks you chose to keep:** An attack that tried what you already answered is tied to your answer: one you chose to keep no longer counts against Data safety or Security and permissions, and one you want fixed is counted once, not twice.
+- **Finishing out of reach said plainly:** When the rounds left in a run can no longer give two clean rounds in a row, Inspect says so and suggests stopping, rather than offering a round that cannot finish.
+- **Vulnerable packages named:** Security and permissions names the packages behind known vulnerabilities, worst first.
+- **A starter README is not docs:** A README left as a framework's starter wrote it no longer counts as documentation about your app.
+- **Your own words decide:** When your answer in your own words already says to fix or keep something, Inspect records that and tells you, without asking again.
+- **Feedback kept by itself:** At the end of a run, signs that Imagineer went wrong are recorded on your machine without you typing anything, and you choose whether to send them.
+- **Finishing shown as conditions, not progress:** The pane lists what Inspect needs to finish, each marked met, not yet, or can't be measured (with the reason): test strength as a bar with the 80% line marked, code quality as findings left to review, and attack rounds as two dots for two clean rounds in a row.
+- **Questions from how your code handles failure and the rules in its comments:** Inspect finds errors your app drops or only logs, and rules written only in comments ("only owners can invite members"), and asks you what should happen, without quoting the code.
+- **Big-picture questions sooner:** Inspect asks what your app is for, who uses it and what matters most while test strength is still measuring, rather than after.
+- **Attack rounds always say what they missed:** The attacker cannot end a round without recording which parts it did not reach, or that it reached them all.
+- **Sharper attacks on permissions:** The attacker checks every action that takes a record's ID, not only viewing it, compares each handler with its neighbours for a missing check, and tries fields and IDs the caller must not choose.
+- **More project layouts:** Inspect works on an app in a subfolder, on pnpm and Yarn workspaces, and on Vue and Svelte components; Astro files are read but not measured for test strength. ([#29](https://github.com/thuannguyen13/imagineer/issues/29))
+- **Scripts under other names:** Typecheck and test scripts such as `type-check`, `check-types`, `test:unit` or `svelte-check` are found and run, instead of counting as missing. ([#29](https://github.com/thuannguyen13/imagineer/issues/29))
+- **Tests under other names:** Tests in `__tests__` folders and Cypress `.cy` files count as tests and are never mutated. ([#29](https://github.com/thuannguyen13/imagineer/issues/29))
+- **Settings read in more ways:** Foundations checks settings your code reads through `import.meta.env`, SvelteKit's `$env` and `Bun.env` against your example env file, not only `process.env`. ([#29](https://github.com/thuannguyen13/imagineer/issues/29))
+- **CI beyond GitHub Actions:** GitLab CI, CircleCI, Bitbucket Pipelines, Azure Pipelines, Jenkins and others count as CI that runs your tests. ([#29](https://github.com/thuannguyen13/imagineer/issues/29))
+- **Docs wherever they are:** Docs in `doc/`, `documentation/` or decision folders, MDX files and agent files such as `AGENTS.md` count as docs, and answers Inspect saves as docs go into your docs folder and the agent file you already use. ([#29](https://github.com/thuannguyen13/imagineer/issues/29))
+- **Dependency audit for pnpm, Yarn and Bun:** Inspect counts known vulnerabilities with your own package manager, not npm only, for Security and permissions; Bun's audit also counts development tools. ([#29](https://github.com/thuannguyen13/imagineer/issues/29))
+- **Committed build output left out:** Built files committed to the repository are no longer measured as your code, and a source folder named `build` is no longer skipped. ([#29](https://github.com/thuannguyen13/imagineer/issues/29))
+
+### Bug Fixes
+
+- **Your own agents held to Imagineer's rules:** An agent of yours, or of another plugin, named like one of Imagineer's (`attacker`, `dev`, `qa`) was held to Imagineer's limits; only Imagineer's own agents are now. ([#38](https://github.com/thuannguyen13/imagineer/issues/38))
+- **Code quality marked down for security findings:** Possible security weaknesses also lowered Code quality, without saying why; they now count under Security and permissions only.
+- **Yarn 2 and later:** Installing these projects in Inspect's copy failed because of an option those versions removed. ([#29](https://github.com/thuannguyen13/imagineer/issues/29))
+
 ## 0.4.1 — 2026-11-15
 
 ### Changes you need to know

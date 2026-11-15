@@ -27,12 +27,29 @@ export type Dimension = {
 }
 
 /** One finish threshold and how far along it is: `done` of `total`, and the numbers in words. */
-export type FinishStep = { label: string; done: number; total: number; met: boolean; text: string }
+/**
+ * One of Inspect's finish conditions. From 0.5.0 each has a kind (a threshold to reach, findings to
+ * count down, or a streak that starts again), a state, its goal in words, today's value and a note.
+ * `label`, `done`, `total` and `text` are what results from before 0.5.0 carry, drawn as bars.
+ */
+export type FinishStep = {
+  label: string
+  done: number
+  total: number
+  met: boolean
+  text: string
+  kind: 'threshold' | 'countdown' | 'streak' | null
+  state: 'met' | 'open' | 'blocked' | 'pending' | null
+  goal: string
+  value: number | null
+  target: number
+  note: string
+}
 
 export type RunStatus = 'running' | 'waiting' | 'done' | 'stopped'
 
 export type Run = {
-  command: 'inspect' | 'build'
+  command: 'inspect'
   status: RunStatus
   round: number
   commit: string
@@ -40,6 +57,8 @@ export type Run = {
   step: string
   /** When the run measured the code, as an ISO time; empty when unknown. */
   at: string
+  /** The layout the run worked from, in one short line (the app, the code test strength measured); empty when unknown. */
+  layout: string
   /** Inspect's finish thresholds, when the run recorded them: met, or what is still missing. */
   /** `by`: whose thresholds they are, the user's own (`you`) or Imagineer's suggestion. */
   bar: { met: boolean; missing: string[]; progress: FinishStep[]; by: 'you' | 'imagineer' } | null

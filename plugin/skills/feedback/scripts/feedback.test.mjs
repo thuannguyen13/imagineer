@@ -38,7 +38,7 @@ test('an answer proven by a test but broken by an attack is a grade contradictio
   assert.equal(flag.fingerprint, fingerprint('grade-contradiction', 'inspect', 'Q8:A7'))
 })
 
-test('role-guard refusals, tools that did not run and a stuck build are flagged', t => {
+test('role-guard refusals and tools that did not run are flagged', t => {
   const root = repo(t, {
     '.claude/imagineer/denials.jsonl': '{"agent":"dev","tool":"Write","reason":"x"}\n{"agent":"dev","tool":"Write","reason":"y"}\n',
     '.claude/imagineer/runs/2/fallow.json': { ok: false },
@@ -46,7 +46,7 @@ test('role-guard refusals, tools that did not run and a stuck build are flagged'
     '.claude/imagineer/build/approvals/state.json': { rounds: [1, 2, 3, 4].map(round => ({ round, bar: { met: false } })) },
   })
   const kinds = selfCheck(root).map(f => `${f.kind}:${f.rule}`)
-  assert.deepEqual(kinds.sort(), ['rule-broken:dev:Write', 'stuck:approvals', 'tool-trouble:fallow'])
+  assert.deepEqual(kinds.sort(), ['rule-broken:dev:Write', 'tool-trouble:fallow'])
 })
 
 test('a reach for a database is one flag per agent, whichever tool it came through', t => {
@@ -93,10 +93,10 @@ test('a shared record is behaviour only, short, and opens a pre-filled issue the
 test('the role guard records each refusal for the self-check', t => {
   const root = repo(t, {})
   const guard = join(HERE, '../../../hooks/role-guard.mjs')
-  const payload = JSON.stringify({ cwd: root, agent_type: 'imagineer:qa', tool_name: 'Write', tool_input: { file_path: `${root}/src/a.ts` } })
+  const payload = JSON.stringify({ cwd: root, agent_type: 'imagineer:verifier', tool_name: 'Write', tool_input: { file_path: `${root}/src/a.ts` } })
   spawnSync('node', [guard], { input: payload, encoding: 'utf8' })
   const [line] = readFileSync(join(root, '.claude/imagineer/denials.jsonl'), 'utf8').trim().split('\n')
-  assert.equal(JSON.parse(line).agent, 'qa')
+  assert.equal(JSON.parse(line).agent, 'verifier')
   assert.equal(selfCheck(root)[0].kind, 'rule-broken')
 })
 

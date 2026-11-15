@@ -1,6 +1,6 @@
 {
   "name": "imagineer",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Make AI-built software trustworthy without trusting the AI. Inspect checks an existing repo: it asks you in plain words what the app should do, proves your answers with tests and tries to break it. A pane shows the grade.",
   "author": {
     "name": "thuannguyen13",
@@ -18,8 +18,8 @@
   "userConfig": {
     "openPaneOnRun": {
       "type": "boolean",
-      "title": "Open the pane when Inspect or Build runs",
-      "description": "On: /imagineer:inspect and /imagineer:build open the grade pane beside the chat. Off: the band above the prompt shows the run, and its Details button or /imagineer:status opens the pane.",
+      "title": "Open the pane when Inspect runs",
+      "description": "On: /imagineer:inspect opens the grade pane beside the chat. Off: the band above the prompt shows the run, and its Details button or /imagineer:status opens the pane.",
       "default": false
     }
   }

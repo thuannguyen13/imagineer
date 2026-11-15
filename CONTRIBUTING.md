@@ -18,7 +18,7 @@ A change to anything under `plugin/` goes into the changelog entry of the next, 
 
 ## The earlier skills
 
-Versions up to 0.1.0 shipped three skills, guard, forge and ground. They were removed in 0.2.0; their useful parts moved into Inspect and Build. To use them, install that release: `/plugin marketplace add thuannguyen13/imagineer#v0.1.0`, then `/plugin install imagineer@imagineer`.
+Versions up to 0.1.0 shipped three skills, guard, forge and ground. They were removed in 0.2.0; their useful parts moved into Inspect. To use them, install that release: `/plugin marketplace add thuannguyen13/imagineer#v0.1.0`, then `/plugin install imagineer@imagineer`.
 
 ## Design principles
 

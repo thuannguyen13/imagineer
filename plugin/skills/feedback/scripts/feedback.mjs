@@ -3,7 +3,8 @@
 // wrong, never the user's code. Records stay on the user's machine until the
 // user chooses to share one.
 //
-//   node feedback.mjs check  --repo <repo>                 flags from the run records, saved for the pane
+//   node feedback.mjs check  --repo <repo> [--record]      flags from the run records, saved for the pane;
+//                                                          --record also keeps each new one as a feedback record (Inspect's retro)
 //   node feedback.mjs record --kind <kind> --area <area> --said "<what Imagineer said or did>"
 //                            --happened "<what actually happened>" [--rule <rule>] [--repo <repo>]
 //   node feedback.mjs list
@@ -19,7 +20,7 @@ import { isMain, testStrengthResult } from '../../inspect/scripts/lib.mjs'
 const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO_URL = 'https://github.com/thuannguyen13/imagineer'
 export const KINDS = ['rule-broken', 'stuck', 'tool-trouble', 'grade-contradiction', 'poor-questions', 'mod-fault', 'cost', 'miss', 'false-alarm', 'praise']
-export const AREAS = ['inspect', 'build', 'grade', 'mod', 'agent']
+export const AREAS = ['inspect', 'grade', 'mod', 'agent']
 
 const home = () => process.env.IMAGINEER_HOME ?? join(homedir(), '.claude', 'imagineer')
 const logPath = () => join(home(), 'feedback.jsonl')
@@ -57,6 +58,15 @@ const isProven = q => q.test?.green === true && q.test.red?.total > 0 && q.test.
 const normalize = text => (text ?? '').toLowerCase().replace(/^my guess \(no docs found\):\s*/, '').replace(/\W+/g, ' ').trim()
 
 /** Signs, from the files Imagineer keeps, that Imagineer itself went wrong. */
+/** Keeps one feedback record on this machine; returns its number. Behaviour only, never the user's code. */
+export function recordFeedback({ kind, area, said, happened = '', repo = null, rule = 'user' }) {
+  const records = readLines(logPath())
+  const record = { id: records.length + 1, at: new Date().toISOString(), kind, area, said, happened, imagineer: version(), repo: repo ? basename(repo) : null, fingerprint: fingerprint(kind, area, rule) }
+  mkdirSync(dirname(logPath()), { recursive: true })
+  appendFileSync(logPath(), JSON.stringify(record) + '\n')
+  return record.id
+}
+
 export function selfCheck(repo) {
   const base = join(repo, '.claude', 'imagineer')
   const flags = []
@@ -135,14 +145,6 @@ export function selfCheck(repo) {
     if (seen.has(key)) flags.push(flag('poor-questions', 'inspect', 'repeated', `${q.id} asks again what ${seen.get(key)} asked.`))
     else seen.set(key, q.id)
   }
-
-  // A Build that ran four rounds without meeting the done thresholds.
-  const buildDir = join(base, 'build')
-  for (const slug of existsSync(buildDir) ? readdirSync(buildDir) : []) {
-    const state = readJsonIf(join(buildDir, slug, 'state.json'))
-    const rounds = state?.rounds ?? []
-    if (rounds.length >= 4 && !rounds.at(-1)?.bar?.met) flags.push(flag('stuck', 'build', slug, `Build "${slug}" ran ${rounds.length} rounds without meeting the done thresholds.`))
-  }
   return flags
 }
 
@@ -174,27 +176,22 @@ if (isMain(import.meta.url)) {
       mkdirSync(join(repo, '.claude', 'imagineer'), { recursive: true })
       writeFileSync(join(repo, '.claude', 'imagineer', 'flags.json'), JSON.stringify({ at: new Date().toISOString(), flags }, null, 2) + '\n')
       console.log(flags.length ? flags.map(f => `${f.kind} (${f.fingerprint}): ${f.said}`).join('\n') : 'No signs that Imagineer went wrong.')
+      if (process.argv.includes('--record')) {
+        // Kept once per kind of problem and repository: a flag the last run raised too is not recorded again.
+        const known = new Set(readLines(logPath()).filter(r => r.repo === basename(repo)).map(r => r.fingerprint))
+        for (const f of flags.filter(f => !known.has(f.fingerprint))) {
+          const id = recordFeedback({ kind: f.kind, area: f.area, said: f.said, happened: "Found by Imagineer's own check after the run.", repo, rule: f.rule })
+          console.log(`Recorded #${id}.`)
+        }
+      }
     } else if (step === 'record') {
       const kind = arg('kind')
       const area = arg('area')
       if (!KINDS.includes(kind)) throw new Error(`--kind is one of ${KINDS.join(', ')}`)
       if (!AREAS.includes(area)) throw new Error(`--area is one of ${AREAS.join(', ')}`)
       if (!arg('said')) throw new Error('--said is required: what Imagineer said or did, as behaviour, never the user\'s code')
-      const records = readLines(logPath())
-      const record = {
-        id: records.length + 1,
-        at: new Date().toISOString(),
-        kind,
-        area,
-        said: arg('said'),
-        happened: arg('happened', ''),
-        imagineer: version(),
-        repo: arg('repo') ? basename(resolve(arg('repo'))) : null,
-        fingerprint: fingerprint(kind, area, arg('rule', 'user')),
-      }
-      mkdirSync(dirname(logPath()), { recursive: true })
-      appendFileSync(logPath(), JSON.stringify(record) + '\n')
-      console.log(`Recorded feedback #${record.id} (${record.fingerprint}) in ${logPath()}.`)
+      const id = recordFeedback({ kind, area, said: arg('said'), happened: arg('happened', ''), repo: arg('repo') ? resolve(arg('repo')) : null, rule: arg('rule', 'user') })
+      console.log(`Recorded feedback #${id} in ${logPath()}.`)
     } else if (step === 'list') {
       for (const r of readLines(logPath())) console.log(`#${r.id} ${r.at.slice(0, 10)} ${r.kind}/${r.area} (${r.fingerprint}): ${r.said}`)
     } else if (step === 'share') {

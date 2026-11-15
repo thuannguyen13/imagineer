@@ -1,0 +1,16 @@
+{
+  "name": "boards",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@sveltejs/kit": "2.8.0",
+    "svelte-check": "4.0.0",
+    "vitest": "3.2.4",
+    "typescript": "5.9.3"
+  }
+}

@@ -34,10 +34,44 @@ test("every link between the skills, their references and the agents points at a
   }
 })
 
-// Build is turned off from 0.4.0: its SKILL.md is kept outside the plugin, in the docs archive.
 test('Inspect and Feedback run their own scripts without a prompt each time, and nothing else', () => {
   for (const name of ['inspect', 'feedback']) {
     const front = readFileSync(join(SKILLS, name, 'SKILL.md'), 'utf8').split('---')[1]
     assert.match(front, /^allowed-tools: Bash\(node \$\{CLAUDE_PLUGIN_ROOT\}\/skills\/\*\)$/m, name)
+  }
+})
+
+/** Every script call written in the skills, their references and the agents: `{ file, command, script, step, flags }`. */
+function scriptCalls() {
+  const calls = []
+  for (const file of files) {
+    for (const [, command] of readFileSync(file, 'utf8').matchAll(/`(node [^`]*?\.mjs\b[^`]*)`/g)) {
+      const path = command.match(/node\s+(\S+\.mjs)/)[1]
+      const script = path
+        .replace(/^\$S\//, join(SKILLS, 'inspect', 'scripts') + '/')
+        .replace(/^\$\{CLAUDE_SKILL_DIR\}\/scripts\//, join(dirname(file), 'scripts') + '/')
+        .replace(/^\$\{CLAUDE_PLUGIN_ROOT\}\//, PLUGIN + '/')
+      // Words inside quotes are the call's values (a test command, a title), not its own options.
+      const own = command.replace(/'[^']*'|"[^"]*"/g, '')
+      const after = own.slice(own.indexOf('.mjs') + 4).trim().split(/\s+/)
+      const step = after[0] && /^[a-z][\w-]*$/.test(after[0]) ? after[0] : null
+      const flags = [...own.matchAll(/(?:^|\s)--([a-z][\w-]*)/g)].map(m => m[1])
+      calls.push({ file: file.slice(PLUGIN.length + 1), command, script, step, flags })
+    }
+  }
+  return calls
+}
+
+test('every script call the skills and agents name exists, with a step and options the script takes', () => {
+  const calls = scriptCalls()
+  assert.ok(calls.length > 30, `only ${calls.length} calls found: the pattern no longer matches the text`)
+  for (const { file, command, script, step, flags } of calls) {
+    if (/\$S\/<|<name>|<x>/.test(command)) continue
+    assert.ok(existsSync(script), `${file}: \`${command}\` names a script that does not exist`)
+    const source = readFileSync(script, 'utf8')
+    if (step) assert.ok(new RegExp(`step === '${step}'|\\[[^\\]]*'${step}'[^\\]]*\\]\\.includes\\(step\\)`).test(source), `${file}: \`${command}\`: ${script.split('/').pop()} has no step "${step}"`)
+    for (const flag of flags) {
+      assert.ok(new RegExp(`arg\\('${flag}'|['"\`]--${flag}\\b`).test(source), `${file}: \`${command}\`: ${script.split('/').pop()} does not read --${flag}`)
+    }
   }
 })

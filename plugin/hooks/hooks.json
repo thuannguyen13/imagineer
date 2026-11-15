@@ -1,10 +1,27 @@
 {
-  "modules": ["./register.tsx"],
+  "modules": [
+    "./register.tsx"
+  ],
   "hooks": {
     "PreToolUse": [
       {
         "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob",
-        "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/role-guard.mjs\"" }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/role-guard.mjs\""
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/attacker-stop.mjs\""
+          }
+        ]
       }
     ]
   }

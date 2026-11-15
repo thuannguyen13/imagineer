@@ -12,6 +12,7 @@ Seeded-defect scenarios that decide whether a skill is **validated** (`docs/deci
 - `scenarios/_forge/plan.md`: the plan forge reviews against (R1–R6).
 - `oracles/`: hidden tests. Each passes on the clean feature and fails on exactly its seeded defect.
 - `results/`: one file per bench run.
+- `layouts/`: small projects laid out as Inspect had not seen before (a pnpm monorepo, a Vue app on Yarn 4 with GitLab CI, an app in a subfolder, committed build output), and one booby-trapped with text that gives orders to AI tools (`planted.test.mjs`). `plugin/skills/inspect/scripts/layout.test.mjs` makes each a repository and checks what Inspect reads about how each is set up.
 
 | Skill | Scenarios |
 |---|---|
@@ -43,7 +44,9 @@ node bench/inspect.mjs I2 --plugin <plugin folder> --out <evidence folder>
 
 - **The plugin under test is a folder**, so any version can be judged: this checkout's `plugin/`, or `git archive <ref> plugin | tar -x -C <folder>`. An installed Imagineer does not stand in for it; the check fails if another copy ran.
 - It prepares the fixture with the scenario's `setup.patch`, types `prompt.txt` into a headless session (`claude -p`, auto permission mode, a spending cap, Opus 5.5 unless `--model` says otherwise), and keeps the evidence: the session's and its agents' transcripts, Imagineer's own files, the repository's state.
-- `bench/oracles/<id>.check.mjs` judges the evidence, never the run's own words. A run that was stopped or errored fails as "did not reach its end", not as a finding. `--check <evidence folder>` judges kept evidence again at no cost; `--dry` prepares the project and stops.
+- `bench/oracles/<id>.check.mjs` judges the evidence, never the run's own words. Two checks read the Lead's own commands in the transcript: that it ran each script on its own, regraded with a step before each measuring step and last as done, and that the grade its report states is the one in the results file. `oracles/checks.test.mjs` proves every check can fail: each passes on a good run and fails on at least one bad one, and empty evidence fails.
+- The vitals count tokens for the Lead and each agent, each reply once (Claude Code writes a reply in several entries, and only the last has its final count), with the share read from the cache.
+- One run says little: the same session can pass once and fail the next. `--runs 3` runs the scenario three times; `--baseline <older plugin folder>` runs that version as many times, alternating, and `<out>/benchmark.json` sets them side by side: how often each check passed, and cost, minutes and turns as mean and spread. A run that was stopped or errored fails as "did not reach its end", not as a finding. `--check <evidence folder>` judges kept evidence again at no cost; `--dry` prepares the project and stops.
 - I2's env file is written by the script, with an address that leads to a listener of its own.
 - The session runs as you, with your other plugins and settings: only Imagineer is swapped.
 
