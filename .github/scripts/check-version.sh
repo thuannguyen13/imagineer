@@ -2,7 +2,7 @@
 # Fails when a change to what users install does not bump the plugin version
 # and add a changelog entry for it.
 #
-#   scripts/check-version.sh [base]    base defaults to origin/main
+#   .github/scripts/check-version.sh [base]    base defaults to origin/main
 set -euo pipefail
 
 base="${1:-origin/main}"

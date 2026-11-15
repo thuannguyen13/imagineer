@@ -123,7 +123,7 @@ The owner confirmed the scope as JavaScript and TypeScript web apps and asked wh
 
 ## 2026-11-08 — Build turned off until Inspect's foundations hold
 
-The owner asked whether shipping Build was premature, since Inspect cannot yet learn enough about a repository for an agent to build on it. Build's done check depends on Inspect's test strength check: on the sales portal that check cannot run, so every Build round would end "mutation testing skipped" until the round limit, and each round would run the whole test suite per planted bug. Build also carries its own layout assumptions (#29). The owner turned Build off for 0.4.0 rather than gating it. Its command and agents are parked in `parked/build/`, outside the plugin; `build.mjs` stays because Inspect's attacker uses its model choice. Build returns when Inspect fully measures several projects with different layouts with no layout assumptions left (#28 part 2, #29).
+The owner asked whether shipping Build was premature, since Inspect cannot yet learn enough about a repository for an agent to build on it. Build's done check depends on Inspect's test strength check: on the sales portal that check cannot run, so every Build round would end "mutation testing skipped" until the round limit, and each round would run the whole test suite per planted bug. Build also carries its own layout assumptions (#29). The owner turned Build off for 0.4.0 rather than gating it. Its command and agents are parked in `docs/archive/build-parked/`, outside the plugin; `build.mjs` stays because Inspect's attacker uses its model choice. Build returns when Inspect fully measures several projects with different layouts with no layout assumptions left (#28 part 2, #29).
 
 ## 2026-11-09 — Feedback is sent from inside Imagineer
 
