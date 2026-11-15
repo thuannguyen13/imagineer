@@ -1,5 +1,15 @@
 # Imagineer
 
+## Where things are
+
+One place for each question. When the owner asks where things stand, answer from the board first, in plain words: what is waiting on them, what is in progress, what comes next.
+
+- **What is going on, and what is next:** the project board, GitHub Project #12 (`gh project item-list 12 --owner thuannguyen13`). Current work, work waiting for the owner's review and ideas for later are issues there. Never keep a plan, a to-do list or a status page in this repository.
+- **What Imagineer is and where it is going:** [docs/proposals/inspect-and-build.md](docs/proposals/inspect-and-build.md).
+- **Why it is the way it is:** [docs/decisions.md](docs/decisions.md), one dated entry per decision.
+- **What users got in each release:** [CHANGELOG.md](CHANGELOG.md).
+- **How to work on it:** [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Git
 
 - Never credit Claude in git. No `Co-Authored-By: Claude …` trailers in commit messages, and no "Generated with Claude Code" (or similar) lines in pull requests, issues or comments.

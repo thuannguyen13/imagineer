@@ -165,7 +165,7 @@ New flags, each from a failure already seen: every attack broke through; no atta
 
 ### 5.4 Review as a rule, and reading transcripts
 
-- A change to anything that guards the user's data or files gets a review by a reviewer that has not seen the work, before it merges. Stop after two rounds in a row with no finding about ordinary behaviour; what remains goes to an issue. The clean bar already asks for an independent reviewer ([decisions](../../plan/decisions.md), 2026-10-28); this makes it a gate and gives it an end.
+- A change to anything that guards the user's data or files gets a review by a reviewer that has not seen the work, before it merges. Stop after two rounds in a row with no finding about ordinary behaviour; what remains goes to an issue. The clean bar already asks for an independent reviewer ([decisions](../decisions.md), 2026-10-28); this makes it a gate and gives it an end.
 - At each release, read a sample of real run transcripts, note the first failure in each, and group them. A new failure type becomes a self-check flag or a scenario.
 
 ### 5.5 What waits

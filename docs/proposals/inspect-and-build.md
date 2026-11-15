@@ -212,6 +212,22 @@ Each step is its own release, measured on the bench app before and after, and ke
 5. **The data safety and foundations additions.**
 6. **Hosted backends.** Read Supabase's row-level security policies and Firebase's security rules, ask about them like any other permission, and attack them against a local copy of the backend (the Supabase CLI's local stack, the Firebase emulator), never the user's live project. The first scope extension, ahead of any other language. Its place among the steps above is the owner's call.
 
+### Validation
+
+Imagineer is not marked validated until all of these hold, each with dated evidence (a test, a bench run or a real-project run) in its issue or pull request:
+
+- Test strength measured on the sales portal: a real number, on its business-rule code, in reasonable time ([#28](https://github.com/thuannguyen13/imagineer/issues/28)).
+- A run with the database the project's tests expect, so test strength matches CI ([#32](https://github.com/thuannguyen13/imagineer/issues/32)).
+- A run the owner starts with `/imagineer:inspect` in their own project, from the released version.
+- Inspect fully measures several projects with different layouts, with no layout assumptions left ([#29](https://github.com/thuannguyen13/imagineer/issues/29)). This is also the condition for turning Build back on.
+- The pane and band seen drawn in an interactive session in the Desktop app.
+
+### Not planned
+
+- A pipeline where one command must run before another.
+- A full architecture review on each change.
+- Copying each application's architecture into this repository.
+
 ## `/build`
 
 **Status:** turned off from 0.4.0 (decided 2026-11-08). Build stands on Inspect: it reads the project through Inspect's scan, learns intent from Inspect's questions and proves "done" with Inspect's test strength check. Until the scan reads any layout ([#29](https://github.com/thuannguyen13/imagineer/issues/29)) and test strength measures the right code in reasonable time ([#28](https://github.com/thuannguyen13/imagineer/issues/28)), Build cannot prove its work on projects like the sales portal. Its command and agents are kept in `parked/build/`, not installed; its script stays, because Inspect's attacker uses its model choice. Build comes back when Inspect fully measures several projects with different layouts (the bench app, the sales portal, a Vue or Svelte app, a monorepo) with no layout assumptions left.
@@ -395,7 +411,7 @@ Imagineer learns from its own runs, but never changes itself without review. Eve
 
 ### Health (proposed 2026-11-14)
 
-*Proposed 2026-11-14; the owner approved starting the regression suite the same day ([decisions](../../plan/decisions.md)). The rest is proposed.* The parts below learn from a problem after someone reports it. Health asks the earlier question: is Imagineer itself still doing its job, before a release and over time? Research, evidence and a trial of Claude Code's own plugin test runner: [self-health.md](../research/self-health.md).
+*Proposed 2026-11-14; the owner approved starting the regression suite the same day ([decisions](../decisions.md)). The rest is proposed.* The parts below learn from a problem after someone reports it. Health asks the earlier question: is Imagineer itself still doing its job, before a release and over time? Research, evidence and a trial of Claude Code's own plugin test runner: [self-health.md](../research/self-health.md).
 
 **Why.** So far the serious problems were found by the owner reading a run's log and by independent reviews, never by the self-check, the tests or the bench: attacks that ran against a real database ([#26](https://github.com/thuannguyen13/imagineer/issues/26)), a false 100% test strength, and about forty defects in the fix for #26 that its own tests passed. Imagineer's checks see only what Imagineer writes down about itself.
 
@@ -445,11 +461,19 @@ The user sees the full record and can edit or delete any of it. Then:
 - **Report to Imagineer** opens a pre-filled GitHub issue on the Imagineer repository in their browser; they press Submit themselves. A mod's link holds about 2 KB, so the record is kept short.
 - **Save as file**, for users without a GitHub account, or who cannot file issues on the repository (it is private, so only people the owner invites can).
 
-No server, no background upload, nothing sent without the user seeing it.
+No background upload, and nothing sent without the user seeing it.
+
+*Planned (decided 2026-11-09, [#39](https://github.com/thuannguyen13/imagineer/issues/39)):* **send from inside Imagineer.** The repository is private, so a pre-filled issue only works for people the owner invites, and a saved file rarely reaches the owner. Instead:
+
+- **One click to send.** The user sees the exact record, can edit it, and presses **Send**. That is the pane's Send button, or a confirmation in `/imagineer:feedback`. No GitHub account is needed.
+- **A small relay** receives it and files it as an issue in this repository, with the `feedback` label and its fingerprint, so triage works as before. The relay only forwards what the user sent. It holds the repository key itself, so nothing secret ships in the plugin, and it limits how much one sender can file.
+- **Private by default.** Feedback from attacks, or about permissions, data, money or secrets, can describe how a user's app can be broken. It only ever goes through this private channel. Records stay generic where they can: kind, area, rule and what Imagineer did.
+- **Save as file** stays as the fallback when the relay cannot be reached.
+- Open: how the pane's button sends while the mod stays read-only (a network call allowed to the mod for this one action, or handing the send to `feedback.mjs`); and where the relay runs.
 
 *Planned:* **each flag as a card in the pane**, with one click for each next step:
 
-- **Send:** opens the pre-filled issue (the flag, the run, Imagineer's version and the user's note), showing exactly what goes, with the line "Never includes your code". The user presses Submit.
+- **Send:** shows exactly what goes (the flag, the run, Imagineer's version and the user's note), with the line "Never includes your code", and sends it with one click through the relay above.
 - **Add a note:** a text box in the pane, "What happened, in your words?", sent with the report. The same draft can be started from the CLI with `/imagineer:feedback`.
 - **Not a problem:** hides the flag, remembered in the mod's own storage, never in the user's project.
 - **Try again:** where there is a clear next step, puts the command (such as `/imagineer:inspect`) in the prompt box, ready for Enter; the mod runs nothing itself.
@@ -545,4 +569,3 @@ The mod needs Claude Code 2.1.287 or later. It checks the running version and, o
 - What decides when Dev runs on Opus. Proposed: the Architect marks each task that touches data, money or permissions.
 - How existing parts fold in. Proposed: forge's run folder, state file, finding IDs and reviewer hook into Build; ground's checklist and the Inspector idea into Inspect; guard's rules into Dev's practices. The old skills and agents were removed in 0.2.0; their text stays at tag `v0.1.0` for these phases to draw on.
 - When Build brings review agents back, a mod `tool.call` hook could replace the Python settings hook forge used up to 0.1.0 (`forge-reviewer-guard.py`, run on every Bash call), and give a destructive-command guard proceed and cancel buttons. A mod loads in every session once the plugin is installed, so an opt-in guard needs its own switch.
-- Re-plan `plan/now.md` around these two commands; the bench stays the way each command is proven.

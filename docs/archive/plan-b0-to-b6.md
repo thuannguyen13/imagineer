@@ -1,8 +1,8 @@
 # Now, B0 to B6 (archived 2026-11-08)
 
-The build plan from 2026-11-05 to 2026-11-07, kept for its dated evidence. Current work: [now.md](../now.md).
+The build plan from 2026-11-05 to 2026-11-07, kept for its dated evidence. Current work is tracked on the GitHub board (Project #12); validation is in the design doc, [Validation](../proposals/inspect-and-build.md#validation).
 
-Imagineer: two commands, `/imagineer:inspect` and `/imagineer:build`, plus `/imagineer:status` for the grade. Design: [docs/proposals/inspect-and-build.md](../../docs/proposals/inspect-and-build.md). Decided 2026-11-05 in [decisions.md](../decisions.md). One branch and PR per phase.
+Imagineer: two commands, `/imagineer:inspect` and `/imagineer:build`, plus `/imagineer:status` for the grade. Design: [docs/proposals/inspect-and-build.md](../proposals/inspect-and-build.md). Decided 2026-11-05 in [decisions.md](../decisions.md). One branch and PR per phase.
 
 Every phase ends with the clean bar and follows the validated-status rule, both in [decisions.md](../decisions.md). A phase is done only with evidence: a bench run, a test, or a real-project run, named here with its date.
 
@@ -15,14 +15,14 @@ Evidence gathered 2026-11-05: Stryker on `bench/app` kills 30.5% of mutants (`se
 ## B0 — Design
 
 - [x] Design doc, decisions entry and this plan reviewed by the owner; committed (PR #9, 2026-11-05).
-- [x] Grading scale researched and chosen (2026-11-05): six dimensions, four states, weakest link, care dimensions capped at Weak, claims never Strong, every survivor in critical code explained. Research: [docs/research/grading.md](../../docs/research/grading.md).
+- [x] Grading scale researched and chosen (2026-11-05): six dimensions, four states, weakest link, care dimensions capped at Weak, claims never Strong, every survivor in critical code explained. Research: [docs/research/grading.md](../research/grading.md).
 - [x] Stop bar numbers confirmed by the owner (2026-11-05): Stryker 80% on inspected code, 2 clean attack rounds.
 
 ## B1 — Skeleton and status
 
 - [x] Versioning (`0.y.z` until B6): `v0.1.0` tagged on `79fda05` as the bench baseline (local tag, not pushed yet); `CHANGELOG.md`; `scripts/check-version.sh` and a pull-request workflow that fail when plugin files change without a version bump and changelog entry (checked both ways, 2026-11-05); version `0.2.0`, released when this phase merges.
 - [x] `plugin/skills/status`, not model-invocable; its text runs only where mods are off. `skills/inspect` and `skills/build` arrive with B2 and B4; the mod already watches their commands.
-- [x] Results file format 1: [docs/results-file.md](../../docs/results-file.md).
+- [x] Results file format 1: [docs/results-file.md](../results-file.md).
 - [x] The mod (`plugin/hooks/register.tsx`): answers `/imagineer:status` with the grade pane, or text where nothing draws; opens the pane and band on `/imagineer:inspect` and `/imagineer:build`; quiet without a results file. Evidence (2026-11-05): `claude plugin validate .` lists only `fs.exists`, `fs.stat`, `fs.read`, `clock.every`, state and drawing calls; 9 tests pass under `claude plugin test plugin`; headless `/imagineer:status` answered with and without a results file at 0 turns and $0.
 - [ ] Seen in an interactive session: the pane and band drawn in the terminal and the Desktop app.
 - [x] The plugin moved into `plugin/`, and the marketplace points there, so installs no longer carry `bench/`, `docs/` and `plan/`, and `claude plugin test plugin` runs only the mod's tests (2026-11-05, chosen by the owner). Marketplace and plugin validate, 9 mod tests and both Python hook test suites pass after the move.
@@ -76,7 +76,7 @@ Built in slices, each released on its own.
 
 ## B6 — Real project
 
-- [x] Dry run on the owner's sales portal, scoped to users and access (2026-11-06): grade ✕ Failing; three gaps the owner confirmed (deal notes after losing Pipeline access, Settings lockout by one Undo, the test admin reachable by Microsoft sign-in on staging); eight problems with Imagineer found and fixed in 0.9.0. Write-up: [docs/validation/2026-11-06-sales-portal-dry-run.md](../../docs/validation/2026-11-06-sales-portal-dry-run.md).
+- [x] Dry run on the owner's sales portal, scoped to users and access (2026-11-06): grade ✕ Failing; three gaps the owner confirmed (deal notes after losing Pipeline access, Settings lockout by one Undo, the test admin reachable by Microsoft sign-in on staging); eight problems with Imagineer found and fixed in 0.9.0. Write-up: [docs/validation/2026-11-06-sales-portal-dry-run.md](../validation/2026-11-06-sales-portal-dry-run.md).
 - [ ] A run with the database the project's tests expect, so test strength matches CI.
 - [ ] `lib/permissions.ts` measured: try Stryker's vitest runner, which runs only the tests that cover each break.
 - [ ] A run the owner starts with `/imagineer:inspect` in their own project, with 0.9.0 installed.

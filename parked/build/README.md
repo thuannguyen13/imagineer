@@ -1,6 +1,6 @@
 # Build, turned off
 
-Build (`/imagineer:build`) is turned off from 0.4.0 while Inspect's foundations are made solid enough for an agent to build on: reading any project's layout ([#29](https://github.com/thuannguyen13/imagineer/issues/29)) and a test strength check that measures the right code in reasonable time ([#28](https://github.com/thuannguyen13/imagineer/issues/28)). Without them, Build cannot prove its work is done on repositories like the sales portal. The decision is in [plan/decisions.md](../../plan/decisions.md).
+Build (`/imagineer:build`) is turned off from 0.4.0 while Inspect's foundations are made solid enough for an agent to build on: reading any project's layout ([#29](https://github.com/thuannguyen13/imagineer/issues/29)) and a test strength check that measures the right code in reasonable time ([#28](https://github.com/thuannguyen13/imagineer/issues/28)). Without them, Build cannot prove its work is done on repositories like the sales portal. The decision is in [docs/decisions.md](../../docs/decisions.md).
 
 What is here is not installed with the plugin:
 
