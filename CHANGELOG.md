@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.4.1 — 2026-11-14
+## 0.4.1 — 2026-11-15
 
 ### Changes you need to know
 
