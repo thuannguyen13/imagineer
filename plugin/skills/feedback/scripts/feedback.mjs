@@ -76,7 +76,8 @@ export function selfCheck(repo) {
   for (const d of denials.filter(d => d.kind !== 'database')) byRole.set(`${d.agent}:${d.tool}`, (byRole.get(`${d.agent}:${d.tool}`) ?? 0) + 1)
   for (const [key, n] of byRole) {
     const [agent, tool] = key.split(':')
-    flags.push(flag('rule-broken', 'agent', key, `The ${agent} agent tried ${n === 1 ? 'once' : `${n} times`} to use ${tool} outside its role; the role guard refused it.`))
+    const who = agent === 'lead' ? 'Inspect' : `The ${agent} agent`
+    flags.push(flag('rule-broken', 'agent', key, `${who} tried ${n === 1 ? 'once' : `${n} times`} to use ${tool} in a way its role does not allow, and was refused.`))
   }
 
   // Tools that did not run in the latest Inspect run.

@@ -127,7 +127,7 @@ test("the attacker runs Imagineer's attack script and nothing else", t => {
   ]) assert.match(bash(command), /something other than Imagineer's attack script/, command)
 })
 
-test("the attacker reads the copy, its run folder and Imagineer's scripts: never an env file, nothing else", t => {
+test("the attacker reads the copy, its run folder and Imagineer's scripts, and nothing else", t => {
   const { root, repo, copy, out, attacker } = session(t)
   assert.equal(attacker('Read', { file_path: join(copy, 'src/auth.ts') }), null)
   assert.equal(attacker('Read', { file_path: join(copy, '.env.example') }), null)
@@ -139,14 +139,15 @@ test("the attacker reads the copy, its run folder and Imagineer's scripts: never
   // A copy whose run is kept in another folder: any copy in the temp folder.
   assert.equal(attacker('Read', { file_path: join(tmpdir(), 'imagineer-AbC123/src/auth.ts') }), null)
 
-  for (const input of [{ file_path: join(repo, '.env.local') }, { file_path: join(copy, '.env') }, { file_path: join(out, 'attacks/.env.local') }]) {
-    assert.match(attacker('Read', input), /is an env file, which the attacker never reads/)
-  }
-  assert.match(attacker('Glob', { pattern: '**/.env*', path: copy }), /is an env file/)
-  assert.match(attacker('Glob', { pattern: '.env.*', path: copy }), /is an env file/)
-  assert.match(attacker('Grep', { pattern: 'DATABASE_URL', glob: '.env.production.local', path: copy }), /is an env file/)
+  // An env file of the copy is the copy's own: its database settings point nowhere.
+  assert.equal(attacker('Read', { file_path: join(copy, '.env') }), null)
+  assert.equal(attacker('Glob', { pattern: '**/.env*', path: copy }), null)
 
   const outside = /outside the throwaway copy, the run folder and Imagineer's scripts/
+  // The repository's own env file is outside like the rest of it, and the way to say what to do instead.
+  assert.match(attacker('Read', { file_path: join(repo, '.env.local') }), outside)
+  assert.match(attacker('Read', { file_path: join(repo, '.env.local') }), /record it as not attacked/)
+  assert.match(attacker('Glob', { pattern: '.env*', path: repo }), outside)
   assert.match(attacker('Read', { file_path: join(repo, 'src/auth.ts') }), outside)
   assert.match(attacker('Read', { file_path: join(repo, 'docker-compose.yml') }), outside)
   assert.match(attacker('Read', { file_path: join(root, 'other/notes.md') }), outside)
@@ -173,7 +174,7 @@ test('as a hook, a reach for an env file is refused and recorded apart from othe
   assert.equal(hook('Read', { file_path: join(copy, 'src/a.ts') }).stdout, '')
   const denials = readFileSync(join(repo, '.claude/imagineer/denials.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line))
   assert.deepEqual(denials.map(d => [d.agent, d.tool, d.kind]), [['attacker', 'Read', 'database'], ['attacker', 'Bash', undefined]])
-  assert.equal(denials[0].reason, '.env.local is an env file, which the attacker never reads')
+  assert.equal(denials[0].reason, 'an env file outside the copy')
   // Kept for the self-check, which the user may share: no path of theirs in it.
   assert.doesNotMatch(denials.map(d => d.reason).join(' '), new RegExp(repo))
 })
@@ -186,15 +187,10 @@ test('a search may not name a place outside through its pattern, whatever folder
   assert.match(attacker('Glob', { path: copy, pattern: `${repo}/**/*` }), outside)
   assert.match(attacker('Grep', { pattern: 'x', path: copy, glob: `${repo}/**/*.ts` }), outside)
   assert.equal(attacker('Grep', { pattern: `${repo}/src`, path: copy }), null) // what it searches for is not where it searches
-  assert.match(attacker('Glob', { pattern: '{.env,.env.local}', path: copy }), /is an env file/)
-  assert.match(attacker('Read', { file_path: join(copy, '.dev.vars') }), /is an env file/)
   // An empty folder is no folder: the search would run in the session's own, the repository.
   assert.match(attacker('Grep', { pattern: 'postgres', path: '' }), outside)
   assert.match(attacker('Glob', { pattern: '**/*', path: '' }), outside)
   assert.match(attacker('Read', { file_path: '' }), outside)
-  // A pattern of hidden files could match an env file whatever it spells.
-  assert.match(attacker('Glob', { pattern: '.e*', path: copy }), /never reads/)
-  assert.equal(attacker('Glob', { pattern: '.github/workflows/*.yml', path: copy }), null)
 })
 
 test('the guard holds when the plugin is started through a link, and says nothing of where it is installed', t => {

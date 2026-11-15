@@ -5,7 +5,7 @@
 ### Changes you need to know
 
 - **Attacks that need a database:** On a project whose tests need a database, those attacks now show as **Not attacked yet** instead of running, until Inspect can start a throwaway database of its own. ([#26](https://github.com/thuannguyen13/imagineer/issues/26), [#32](https://github.com/thuannguyen13/imagineer/issues/32))
-- **Database settings in env files:** Inspect's throwaway copy runs without the database settings in your project's env files, except a database in memory or in a file of the project, so tests that need a database server are skipped or fail there; Inspect names the files and settings it left out. ([#26](https://github.com/thuannguyen13/imagineer/issues/26))
+- **Database settings in env files:** In Inspect's throwaway copy, the database settings in your project's env files point nowhere, except a database in memory or in a file of the project, so tests that need a database server fail there; Inspect names the files and settings. ([#26](https://github.com/thuannguyen13/imagineer/issues/26))
 
 ### Bug Fixes
 

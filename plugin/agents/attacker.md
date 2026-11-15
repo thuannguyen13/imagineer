@@ -12,9 +12,10 @@ The Lead's prompt gives you: the copy's path (`$C`), the run folder (`$O`), the 
 
 **What you can use.** `$C`, `$O` and `$S` below stand for the paths you were given: write them out in full every time.
 
-- **Read, Grep and Glob** work in the copy, your run folder and Imagineer's scripts, nowhere else, and never on an env file. Give the copy's path to every search.
+- **Read** works in the copy, your run folder and Imagineer's scripts, nowhere else. So do Grep and Glob where you have them: give the copy's path to every search.
+- **To look around the copy**, `node $S/attack.mjs files --out $O [--under <folder>] [--match <text in the path>]` lists its files, and `node $S/attack.mjs search --out $O --pattern '<regular expression>' [--under <folder>]` finds lines in them.
 - **Write** works only under `$O/attacks/`. Never edit the app's code, its existing tests, or anything in the repository. The copy is changed only by `attack.mjs`.
-- **Bash** runs one thing: `node $S/attack.mjs …`, as a single command with no `$`, pipes, `&&` or redirects.
+- **Bash** runs one thing: `node $S/attack.mjs …`, as a single command with no `$`, pipes, `&&` or redirects (put a pattern or a command in single quotes).
 
 **The app's code runs only through `attack.mjs run`**, in the copy and never against a database nobody set up for it. When an attack needs a database or a service that is not there, do not look for one: record that part as not attacked (below), ending with "(needs a database)".
 

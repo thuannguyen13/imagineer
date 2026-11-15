@@ -470,14 +470,15 @@ export function markPending(dimensions, evidence, status) {
 }
 
 export function gradeRun(out, repo = null, status = 'done') {
+  const attackLedger = loadAttacks(out)
   const evidence = {
     thresholds: loadThresholds(repo),
     ledger: repo ? loadLedger(repo) : emptyLedger(),
     findings: findings(out),
-    attacks: loadAttacks(out).attacks,
+    attacks: attackLedger.attacks,
     // Attacks whose test did not run: never held, and their round is not a clean one.
-    notRun: loadAttacks(out).notRun,
-    untested: untestedNow(loadAttacks(out)),
+    notRun: attackLedger.notRun,
+    untested: untestedNow(attackLedger),
     security: readJsonIf(join(out, 'security.json')),
     detect: readJsonIf(join(out, 'detect.json')),
     copy: readJsonIf(join(out, 'copy.json')),

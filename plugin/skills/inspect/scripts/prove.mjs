@@ -11,7 +11,7 @@
 
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { arg, didNotRun, isMain, readJsonIf, tail, testInCopy, writeJson } from './lib.mjs'
+import { arg, idle, isMain, readJsonIf, tail, testInCopy, writeJson } from './lib.mjs'
 import { LEDGER, loadLedger } from './questions.mjs'
 
 /** Character offset of a 1-based { line, column } in a text. */
@@ -60,11 +60,11 @@ function prove({ repo, out, id, file, command }) {
   const mutation = readJsonIf(join(proof.runPath, 'mutation.json'))
   proof.place()
   const green = proof.start()
-  // A run that could not start, did not end, or passed with its test skipped says nothing about the code: nothing is recorded.
-  const idle = green.failed ?? (green.ok ? didNotRun(green.output) : null)
-  if (idle) {
+  // A run that could not start, did not end, found no test, or passed with its test skipped says nothing about the code: nothing is recorded.
+  const why = idle(green)
+  if (why) {
     proof.remove()
-    throw new Error(`${id}: the proof's test did not run, because ${idle}. Nothing is recorded: the answer is not proven, and the code is not shown to differ.\n${tail(green.output, 15)}`)
+    throw new Error(`${id}: the proof's test did not run, because ${why}. Nothing is recorded: the answer is not proven, and the code is not shown to differ.\n${tail(green.output, 15)}`)
   }
   const test = { file, run: command, commit: copy.commit, green: green.ok, red: null, output: green.ok ? '' : tail(green.output, 15) }
 

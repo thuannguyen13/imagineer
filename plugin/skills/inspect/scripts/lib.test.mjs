@@ -142,7 +142,7 @@ test("a failure only the estimate recorded, or recorded as the user's skip, read
   assert.equal(testStrengthResult(dir).declined, 'it would take about 45 minutes')
 })
 
-import { databaseAddressIn, databaseProblem, envFileIn, inRepository, isDatabaseSetting, isEnvFile, repositoryProblem, runProblem, testCounts, withoutDatabaseSettings } from './lib.mjs'
+import { databaseAddressIn, databaseProblem, envFileIn, inRepository, isDatabaseSetting, isEnvFile, repositoryProblem, runProblem, testCounts, withDatabasePointedNowhere } from './lib.mjs'
 import { mkdirSync } from 'node:fs'
 
 test('an env file is one that can hold real settings, never an example', () => {
@@ -152,7 +152,7 @@ test('an env file is one that can hold real settings, never an example', () => {
   assert.equal(envFileIn('**/.env*'), '.env')
   assert.equal(envFileIn('cat .env.*'), '.env.*')
   // Code that reads a setting is not a file.
-  assert.equal(envFileIn('grep -rn "process.env.DATABASE_URL" src'), null)
+  for (const code of ['grep -rn "process.env.DATABASE_URL" src', 'Object.keys(process.env)', 'grep -rn "process.env" src', 'import.meta.env, x']) assert.equal(envFileIn(code), null, code)
 })
 
 test('a database setting is known by its name or its address, whatever the database', () => {
@@ -231,8 +231,8 @@ test('a proof or an attack is refused for what its command or its test reaches f
   assert.equal(run("await fetch('http://admin:wrong@localhost:3000/admin')"), null)
 })
 
-test('an env file keeps every setting but its database settings', () => {
-  const { text, leftOut } = withoutDatabaseSettings(
+test('an env file keeps every setting; its database settings keep their names and point nowhere', () => {
+  const { text, replaced } = withDatabasePointedNowhere(
     [
       '# App',
       'APP_NAME=Lunch',
@@ -240,35 +240,64 @@ test('an env file keeps every setting but its database settings', () => {
       'export DATABASE_URL="postgresql://app:hunter2@db.example.com/app"',
       'CACHE=redis://cache.internal:6379',
       'DB_HOST=localhost',
+      'DB_PORT=5432',
       "FIREBASE_PRIVATE_KEY='-----BEGIN KEY-----",
       'MIIEvQIBADANBg',
       "-----END KEY-----'",
       'PORT=3000',
       'NEXT_PUBLIC_API=https://api.example.com',
       'pgpassword = hunter2',
+      'MONGO_URL: mongodb://user:pw@staging.example.com/app',
+      'DATABASE_REPLICA_URL=',
     ].join('\n'),
   )
-  assert.equal(text, ['# App', 'APP_NAME=Lunch', 'JWT_SECRET=test-secret', 'PORT=3000', 'NEXT_PUBLIC_API=https://api.example.com'].join('\n'))
-  assert.deepEqual(leftOut, ['DATABASE_URL', 'CACHE', 'DB_HOST', 'FIREBASE_PRIVATE_KEY', 'pgpassword'])
-  // Windows line endings hide nothing, and stay on what is kept.
-  assert.deepEqual(withoutDatabaseSettings('A=1\r\nDATABASE_URL=postgres://u:p@h/db\r\nB=2\r\n'), { text: 'A=1\r\nB=2\r\n', leftOut: ['DATABASE_URL'] })
+  // Not removed: without the setting, the project's code may fall back to a database of its own choosing.
+  assert.equal(
+    text,
+    [
+      '# App',
+      'APP_NAME=Lunch',
+      'JWT_SECRET=test-secret',
+      'export DATABASE_URL=postgresql://imagineer-no-database.invalid/none',
+      'CACHE=redis://imagineer-no-database.invalid/none',
+      'DB_HOST=imagineer-no-database.invalid',
+      'DB_PORT=1',
+      'FIREBASE_PRIVATE_KEY=imagineer-no-database.invalid',
+      'PORT=3000',
+      'NEXT_PUBLIC_API=https://api.example.com',
+      'pgpassword = imagineer-no-database.invalid',
+      'MONGO_URL: mongodb://imagineer-no-database.invalid/none',
+      'DATABASE_REPLICA_URL=',
+    ].join('\n'),
+  )
+  assert.deepEqual(replaced, ['DATABASE_URL', 'CACHE', 'DB_HOST', 'DB_PORT', 'FIREBASE_PRIVATE_KEY', 'pgpassword', 'MONGO_URL'])
+  assert.doesNotMatch(text, /hunter2|example\.com\/app|MIIEvQ/)
+  // Windows line endings hide nothing, and stay.
+  assert.deepEqual(withDatabasePointedNowhere('A=1\r\nDATABASE_URL=postgres://u:p@h/db\r\nB=2\r\n'), { text: 'A=1\r\nDATABASE_URL=postgres://imagineer-no-database.invalid/none\r\nB=2\r\n', replaced: ['DATABASE_URL'] })
+  // A value that ends in a backslash, or whose quote never closes, takes no later line with it.
+  assert.equal(withDatabasePointedNowhere('DB_PASSWORD="ends with backslash\\\\"\nKEEP=1\n').text, 'DB_PASSWORD=imagineer-no-database.invalid\nKEEP=1\n')
+  assert.equal(withDatabasePointedNowhere('DB_PASSWORD="abc\nKEEP=1\n').text, 'DB_PASSWORD=imagineer-no-database.invalid\nKEEP=1\n')
 })
 
 test('a test run says how many tests passed and were skipped, whichever runner printed it', () => {
-  assert.deepEqual(testCounts(' Test Files  1 passed (1)\n      Tests  3 passed (3)\n'), { passed: 3, skipped: 0 })
-  assert.deepEqual(testCounts(' Test Files  1 skipped (1)\n      Tests  2 skipped (2)\n'), { passed: 0, skipped: 2 })
-  assert.deepEqual(testCounts('\u001b[2m      Tests \u001b[22m \u001b[32m1 passed\u001b[39m | \u001b[33m2 skipped\u001b[39m (3)'), { passed: 1, skipped: 2 })
-  assert.deepEqual(testCounts('Tests:       1 skipped, 2 passed, 3 total'), { passed: 2, skipped: 1 })
+  const counts = output => {
+    const { passed, skipped } = testCounts(output)
+    return { passed, skipped }
+  }
+  assert.deepEqual(counts(' Test Files  1 passed (1)\n      Tests  3 passed (3)\n'), { passed: 3, skipped: 0 })
+  assert.deepEqual(counts(' Test Files  1 skipped (1)\n      Tests  2 skipped (2)\n'), { passed: 0, skipped: 2 })
+  assert.deepEqual(counts('\u001b[2m      Tests \u001b[22m \u001b[32m1 passed\u001b[39m | \u001b[33m2 skipped\u001b[39m (3)'), { passed: 1, skipped: 2 })
+  assert.deepEqual(counts('Tests:       1 skipped, 2 passed, 3 total'), { passed: 2, skipped: 1 })
   // The app's own output may start a line with the same word.
-  assert.deepEqual(testCounts('Tests connection to the store\n      Tests  3 passed (3)\n'), { passed: 3, skipped: 0 })
-  assert.deepEqual(testCounts('ℹ tests 2\nℹ pass 0\nℹ fail 0\nℹ skipped 2\nℹ todo 0'), { passed: 0, skipped: 2 })
-  assert.deepEqual(testCounts('# tests 1\n# pass 1\n# skipped 0'), { passed: 1, skipped: 0 })
-  assert.deepEqual(testCounts('  2 passing (12ms)\n  1 pending'), { passed: 2, skipped: 1 })
-  assert.deepEqual(testCounts(' 3 pass\n 1 skip\n 0 fail'), { passed: 3, skipped: 1 })
-  assert.deepEqual(testCounts('  1 skipped\n  2 passed (3.1s)'), { passed: 2, skipped: 1 })
+  assert.deepEqual(counts('Tests connection to the store\n      Tests  3 passed (3)\n'), { passed: 3, skipped: 0 })
+  assert.deepEqual(counts('ℹ tests 2\nℹ pass 0\nℹ fail 0\nℹ skipped 2\nℹ todo 0'), { passed: 0, skipped: 2 })
+  assert.deepEqual(counts('# tests 1\n# pass 1\n# skipped 0'), { passed: 1, skipped: 0 })
+  assert.deepEqual(counts('  2 passing (12ms)\n  1 pending'), { passed: 2, skipped: 1 })
+  assert.deepEqual(counts(' 3 pass\n 1 skip\n 0 fail'), { passed: 3, skipped: 1 })
+  assert.deepEqual(counts('  1 skipped\n  2 passed (3.1s)'), { passed: 2, skipped: 1 })
   // A runner told to pass when it finds nothing.
-  assert.deepEqual(testCounts('No tests found, exiting with code 0'), { passed: 0, skipped: 0 })
-  assert.deepEqual(testCounts('No test files found, exiting with code 0'), { passed: 0, skipped: 0 })
+  assert.deepEqual(counts('No tests found, exiting with code 0'), { passed: 0, skipped: 0 })
+  assert.deepEqual(counts('No test files found, exiting with code 0'), { passed: 0, skipped: 0 })
   assert.equal(testCounts('ok\n'), null)
 })
 
@@ -349,19 +378,24 @@ test('a package of a workspace is named with the package manager’s own flag, s
   for (const fine of ['pnpm --filter api test', 'pnpm --filter api exec vitest run test/a7.test.ts', 'pnpm -C packages/api test', 'yarn workspace api test', 'yarn workspace api vitest run a7.test.ts', 'npm -w api test', 'npm test -w api -- a7.test.ts', 'npm --workspace=api run test:unit', 'npx vitest@3 run test/a7.test.ts', 'npx vitest --root packages/api run a7.test.ts']) {
     assert.equal(runnerCall(fine).problem, undefined, fine)
   }
-  for (const other of ['pnpm --filter api db:reset', 'yarn workspace api prisma migrate reset', 'npx prisma@5 migrate reset', 'pnpm --filter api exec psql']) {
+  // pnpm's -w is the workspace root and takes no value; npm's names a package.
+  assert.equal(runnerCall('pnpm -w test').problem, undefined)
+  for (const other of ['pnpm --filter api db:reset', 'yarn workspace api prisma migrate reset', 'npx prisma@5 migrate reset', 'pnpm --filter api exec psql', 'npx run test', 'bunx run test:unit', 'npm -w test']) {
     assert.match(runnerCall(other).problem, /does not start a test runner/, other)
   }
 })
 
 test('a database in memory or in a file of the copy is the test’s own: it stays, in an env file and in a command', () => {
-  for (const value of ['file:./test.db', 'file:test.db', './data/test.sqlite', ':memory:', 'file::memory:?cache=shared', '"file:./dev.db"']) {
+  for (const value of ['file:./test.db', 'file:test.db', './data/test.sqlite', 'data/test.db', ':memory:', 'file::memory:?cache=shared', '"file:./dev.db"']) {
     assert.equal(isDatabaseSetting('DATABASE_URL', value), false, value)
   }
-  for (const value of ['', 'localhost', 'file:/Users/a/app/dev.db', 'file:../../app/dev.db', '~/dev.db', 'postgres://localhost/dev', 'sqlite:///data/dev.db']) {
+  for (const value of ['', 'localhost', 'test.db', 'file:/Users/a/app/dev.db', 'file:../../app/dev.db', '~/dev.db', 'postgres://localhost/dev', 'sqlite:///data/dev.db']) {
     assert.equal(isDatabaseSetting('DATABASE_URL', value), true, value)
   }
-  assert.deepEqual(withoutDatabaseSettings('DATABASE_URL=file:./test.db\nDB_HOST=localhost\n'), { text: 'DATABASE_URL=file:./test.db\n', leftOut: ['DB_HOST'] })
+  // A server whose name ends like a file is a server.
+  for (const [name, value] of [['DB_HOST', 'postgres.db'], ['PGHOST', 'pg.internal.db'], ['DB_HOST', './x.db']]) assert.equal(isDatabaseSetting(name, value), true, value)
+  assert.equal(databaseProblem('PGHOST=pg.internal.db npx vitest run x'), 'sets PGHOST, which says where a database is or how to sign in to it')
+  assert.deepEqual(withDatabasePointedNowhere('DATABASE_URL=file:./test.db\nDB_HOST=localhost\n'), { text: 'DATABASE_URL=file:./test.db\nDB_HOST=imagineer-no-database.invalid\n', replaced: ['DB_HOST'] })
   assert.equal(databaseProblem('DATABASE_URL=file:./test.db npx vitest run a.test.ts'), null)
 })
 
@@ -372,4 +406,49 @@ test('a repository one folder below the root does not turn every address and imp
   }
   assert.equal(repositoryProblem("process.chdir('/app')", '/app'), 'reaches into the repository itself, not the copy')
   assert.equal(runProblem({ command: 'npx vitest run --root /app', source: '/app' }), 'the command reaches into the repository itself, not the copy')
+})
+
+import { idle } from './lib.mjs'
+
+test('a path that climbs back out of Imagineer’s own folder is in the repository after all', () => {
+  const repo = '/Users/a/app'
+  const reaches = 'reaches into the repository itself, not the copy'
+  assert.equal(repositoryProblem(`dotenv.config({ path: '${repo}/.claude/imagineer/runs/3/../../../../.env' })`, repo), reaches)
+  assert.equal(repositoryProblem(`readFileSync('${repo}/.claude/imagineer/../../src/db.ts')`, repo), reaches)
+  assert.equal(repositoryProblem(`readFileSync('${repo}/.claude/imagineer/runs/3/attacks.json')`, repo), null)
+})
+
+test('every path a command names is in the copy: not the repository, a folder above it or another checkout', t => {
+  const root = mkdtempSync(join(tmpdir(), 'imagineer-paths-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const repo = join(root, 'code', 'app')
+  const copy = join(root, 'imagineer-copy')
+  mkdirSync(repo, { recursive: true })
+  mkdirSync(join(copy, 'packages/api'), { recursive: true })
+  const problem = command => runProblem({ command, source: repo, cwd: copy })
+  const outside = 'the command names a path outside the copy'
+  assert.equal(problem(`npx vitest run --root ${join(root, 'code')}`), outside)
+  assert.equal(problem(`pnpm -C ${join(root, 'code', 'app-worktree')} test`), outside)
+  assert.equal(problem('npx vitest run x --config /somewhere/else.ts'), outside)
+  assert.equal(problem('npm --prefix ../code test'), outside)
+  assert.equal(problem('npx vitest run --root=~/code'), outside)
+  assert.equal(problem(`npx vitest run --root ${repo}`), 'the command reaches into the repository itself, not the copy')
+  for (const fine of [`npx vitest run --root ${copy}/packages/api`, 'npx vitest run --root packages/api a7.test.ts', 'npx vitest run packages/api/../api/a7.test.ts', 'BASE_URL=http://localhost:3000/app npx playwright test attacks/a7.spec.ts', './node_modules/.bin/vitest run test/a7.test.ts']) {
+    assert.equal(problem(fine), null, fine)
+  }
+})
+
+test('a run says nothing about the app when it could not start, did not end, found no test or skipped it, however it exited', () => {
+  assert.equal(idle({ ok: false, failed: 'the test run did not end within 5 minutes', output: '' }), 'the test run did not end within 5 minutes')
+  assert.equal(idle({ ok: false, failed: null, output: 'No test files found, exiting with code 1' }), 'the runner found no test to run')
+  assert.equal(idle({ ok: false, failed: null, output: 'No tests found, exiting with code 1\nRun with `--passWithNoTests` to exit with code 0' }), 'the runner found no test to run')
+  assert.equal(idle({ ok: true, failed: null, output: ' Tests  2 skipped (2)' }), 'its test was skipped')
+  assert.equal(idle({ ok: false, failed: null, output: "Could not find 'test/a9.test.mjs'" }), 'the runner found no test to run')
+  assert.equal(idle({ ok: false, failed: null, output: 'ℹ tests 1\nℹ pass 1\nℹ fail 0\nError: could not close the server' }), 'the run ended badly, though no test failed')
+  // A test that ran and failed is a result, and so is a bad end with nothing this can read.
+  assert.equal(idle({ ok: false, failed: null, output: ' Tests  1 failed (1)' }), null)
+  assert.equal(idle({ ok: false, failed: null, output: 'ℹ pass 0\nℹ fail 1' }), null)
+  assert.equal(idle({ ok: false, failed: null, output: 'boom' }), null)
+  assert.equal(testCounts(' Tests  1 failed | 2 passed (3)').failed, 1)
+  assert.equal(idle({ ok: true, failed: null, output: ' Tests  1 passed (1)' }), null)
 })

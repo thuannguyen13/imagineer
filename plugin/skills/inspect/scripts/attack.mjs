@@ -13,11 +13,15 @@
 //   node attack.mjs void --out <run folder> --id A3 --reason "<why the test itself was wrong>"
 //   node attack.mjs untested --out <run folder> --round 1 --category permissions|data --what "<a part not attacked, in plain words>"
 //   node attack.mjs list --out <run folder>
+//   node attack.mjs files  --out <run folder> [--under <folder of the copy>] [--match <text in the path>]
+//   node attack.mjs search --out <run folder> --pattern '<regular expression>' [--under <folder of the copy>]
+//                          the copy's files and their lines, for an attacker with no other way to look
 //
 // Attack tests are written first to <run folder>/attacks/<path>.
 
-import { join } from 'node:path'
-import { arg, didNotRun, isMain, readJsonIf, runFolder, tail, testInCopy, writeJson } from './lib.mjs'
+import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { join, relative } from 'node:path'
+import { arg, didNotRun, idle, inside, isMain, readJsonIf, runCopy, runFolder, tail, testInCopy, writeJson } from './lib.mjs'
 
 export { didNotRun }
 
@@ -98,8 +102,8 @@ function attack({ out, round, id, category, title, file, command, about = null }
   // and would fail every later measurement of the copy.
   test.remove()
 
-  // A run that could not start, did not end, or ended well with its test skipped proved nothing: never "held", never a break.
-  const why = result.failed ?? (result.ok ? didNotRun(result.output) : null)
+  // A run that could not start, did not end, found no test, or ended well with its test skipped proved nothing: never "held", never a break.
+  const why = idle(result)
   const entry = { id, round, category, title, about, file, run: command, result: result.ok ? 'held' : 'broke', output: result.ok && !why ? '' : tail(result.output, 15), void: null }
   writeJson(ledgerPath(test.runPath), recordAttack(loadAttacks(test.runPath), entry, why))
   if (why) {
@@ -111,6 +115,40 @@ function attack({ out, round, id, category, title, file, command, about = null }
   // The attacker sees the app's code run nowhere else, so enough of the output to tell a wrong test from a real break.
   if (!result.ok) console.log(tail(result.output, 40))
 }
+
+/** The copy's files under a folder of it, as paths from the copy's top: no packages, no git, no links followed. */
+export function copyFiles(copy, under = '.') {
+  const top = under === '.' ? copy : inside(copy, under, 'the copy')
+  const files = []
+  const walk = dir => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        if (entry.name !== 'node_modules' && entry.name !== '.git') walk(join(dir, entry.name))
+      } else if (entry.isFile()) files.push(relative(copy, join(dir, entry.name)))
+    }
+  }
+  walk(top)
+  return files.sort()
+}
+
+/** The lines of the copy's files that match a pattern, as `path:line: text`. */
+export function copySearch(copy, pattern, under = '.') {
+  const expression = new RegExp(pattern)
+  const found = []
+  for (const file of copyFiles(copy, under)) {
+    const path = join(copy, file)
+    if (statSync(path).size > 1024 * 1024) continue
+    const text = readFileSync(path, 'utf8')
+    if (text.includes('\u0000')) continue
+    text.split('\n').forEach((line, at) => {
+      if (expression.test(line)) found.push(`${file}:${at + 1}: ${line.trim().slice(0, 200)}`)
+    })
+  }
+  return found
+}
+
+const LIMIT = 300
+const capped = (lines, what) => [...lines.slice(0, LIMIT), ...(lines.length > LIMIT ? [`… ${lines.length - LIMIT} more ${what}: narrow it with --under or a tighter --match or --pattern.`] : [])].join('\n')
 
 if (isMain(import.meta.url)) {
   const [step] = process.argv.slice(2)
@@ -139,8 +177,16 @@ if (isMain(import.meta.url)) {
       const summary = rounds(ledger.attacks, ledger.notRun)
       const notRun = ledger.notRun.map(a => `${a.id}: ${a.title} (${a.why})`)
       console.log(JSON.stringify({ ...summary, broke: summary.broke.map(a => `${a.id}: ${a.title}`), held: summary.held.length, notRun, untested: untestedNow(ledger) }, null, 2))
+    } else if (step === 'files') {
+      const { copy } = runCopy(out)
+      const match = arg('match')
+      console.log(capped(copyFiles(copy.path, arg('under') ?? '.').filter(file => !match || file.includes(match)), 'files') || 'No such files in the copy.')
+    } else if (step === 'search') {
+      const { copy } = runCopy(out)
+      if (!arg('pattern')) throw new Error("search needs --pattern '<regular expression>'")
+      console.log(capped(copySearch(copy.path, arg('pattern'), arg('under') ?? '.'), 'lines') || 'No line in the copy matches.')
     } else {
-      throw new Error('Steps: run, void, untested, list')
+      throw new Error('Steps: run, void, untested, list, files, search')
     }
   } catch (error) {
     console.error(error.message)

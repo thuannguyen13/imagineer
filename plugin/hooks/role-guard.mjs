@@ -124,7 +124,7 @@ export function blockedAttackerCommand(command, cwd = null) {
   if (!words) return 'is more than one plain call. Give one command with every path written out: no $, pipes, && or redirects, and the --run command in single quotes'
   const isAttackScript = words[0] === 'node' && words[1] && real(resolve(cwd ?? '/', words[1])) === real(ATTACK_SCRIPT)
   // Said without the script's path, which holds the user's home folder: the reason is kept for the self-check.
-  return isAttackScript ? null : "runs something other than Imagineer's attack script (node <the scripts folder you were given>/attack.mjs run | void | untested | list). Read and search with Read, Grep and Glob"
+  return isAttackScript ? null : "runs something other than Imagineer's attack script (node <the scripts folder you were given>/attack.mjs run | void | untested | list | files | search). List the copy's files with its files step and search them with its search step"
 }
 
 /** The throwaway copies of the runs kept in the session's folder, as each run recorded its own. */
@@ -155,18 +155,21 @@ function attackerMayRead(path, cwd) {
   return isUnder(target, temp) && target.slice(temp.length + 1).startsWith('imagineer-')
 }
 
-/** Why the attacker may not read or search this, or null; `envFile` says the reason is an env file. */
+/**
+ * Why the attacker may not read or search this, or null; `envFile` says the place it named is an
+ * env file, which is how an attack once got a real database's address. (Env files in the copy are
+ * the copy's own: their database settings point nowhere.)
+ */
 export function blockedAttackerRead(toolName, input, cwd = null) {
   // Read names a file; Grep and Glob a folder (the session's own when none is given) and a pattern of file names.
-  const pattern = toolName === 'Glob' ? input.pattern : input.glob
-  const file = envFileIn(input.file_path) ?? envFileIn(input.path) ?? envFileIn(pattern) ?? (/(^|\/)\.[\w-]*[*?[{]/.test(pattern ?? '') ? pattern : null)
-  if (file) return { envFile: true, reason: `${file} is an env file, which the attacker never reads` }
   // Every place the call names must be one the attacker reads: the folder, and a pattern that starts at the root.
-  const rooted = [toolName === 'Glob' ? input.pattern : null, input.glob].filter(p => p?.startsWith('/')).map(p => p.split(/[*?[{]/)[0])
+  const pattern = toolName === 'Glob' ? input.pattern : input.glob
+  const rooted = pattern?.startsWith('/') ? [pattern.split(/[*?[{]/)[0]] : []
   // An empty path is no path: the tool then searches the session's own folder.
   const places = [input.file_path || input.path || (rooted.length ? null : cwd || '.'), ...rooted].filter(Boolean)
   if (places.length && places.every(place => attackerMayRead(place, cwd))) return null
-  return { envFile: false, reason: "is outside the throwaway copy, the run folder and Imagineer's scripts, where the attacker reads. Give the copy's path" }
+  const envFile = Boolean(envFileIn(input.file_path) ?? envFileIn(input.path) ?? envFileIn(pattern))
+  return { envFile, reason: "is outside the throwaway copy, the run folder and Imagineer's scripts, where the attacker reads. Give the copy's path" }
 }
 
 const ROLES = new Set(['dev', 'qa', 'architect', 'attacker'])
@@ -187,7 +190,7 @@ export function judge(payload) {
     const blocked = blockedAttackerRead(payload.tool_name, input, payload.cwd)
     if (!blocked) return null
     if (!blocked.envFile) return { reason: `That ${blocked.reason}.`, database: false }
-    return { reason: `${blocked.reason}. If an attack needs a database that is not there, record it as not attacked (attack.mjs untested).`, database: true, record: blocked.reason }
+    return { reason: `That ${blocked.reason}. If an attack needs a database that is not there, record it as not attacked (attack.mjs untested).`, database: true, record: 'an env file outside the copy' }
   }
   if (payload.tool_name === 'Bash') {
     const reason = blockedCommand(name, input.command ?? '')

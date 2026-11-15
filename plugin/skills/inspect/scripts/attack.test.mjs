@@ -189,3 +189,28 @@ test('attack.mjs: a runner that cannot start is not a break, and a test an inter
   assert.deepEqual(JSON.parse(readFileSync(join(out, 'placed.json'), 'utf8')), [])
   assert.deepEqual([ledger().attacks.map(a => a.id), ledger().notRun], [['A8'], []])
 })
+
+test('attack.mjs: a runner that found no test to run is not a break, whatever it exited with', t => {
+  const { attack, ledger } = run(t, { 'a9.test.mjs': "test('A9', () => {})" })
+  // The path given to the runner is not the test's: node finds nothing and exits badly.
+  const result = attack('A9', 'a9.test.mjs', 'node --test test/no-such-file.test.mjs')
+  assert.match(result.stdout, /A9 \(data\): not attacked/, result.stderr)
+  assert.deepEqual([ledger().attacks, ledger().notRun.map(a => a.id)], [[], ['A9']])
+})
+
+test('attack.mjs lists and searches the copy for an attacker with no other way to look', t => {
+  const { copy, out } = run(t, {})
+  mkdirSync(join(copy, 'src/auth'), { recursive: true })
+  mkdirSync(join(copy, 'node_modules/pkg'), { recursive: true })
+  writeFileSync(join(copy, 'src/auth/roles.ts'), "export function requireRole(user, role) {\n  return user.role === role\n}\n")
+  writeFileSync(join(copy, 'src/index.ts'), "import { requireRole } from './auth/roles'\n")
+  writeFileSync(join(copy, 'node_modules/pkg/index.js'), 'requireRole()\n')
+  const call = (...args) => spawnSync('node', [ATTACK, ...args, '--out', out], { encoding: 'utf8' })
+  assert.equal(call('files').stdout, 'src/auth/roles.ts\nsrc/index.ts\n')
+  assert.equal(call('files', '--under', 'src/auth').stdout, 'src/auth/roles.ts\n')
+  assert.equal(call('files', '--match', 'index').stdout, 'src/index.ts\n')
+  assert.equal(call('search', '--pattern', 'requireRole\\(').stdout, 'src/auth/roles.ts:1: export function requireRole(user, role) {\n')
+  assert.match(call('search', '--pattern', 'nothing like this').stdout, /No line in the copy matches/)
+  // Only the copy: a folder that climbs out of it is refused.
+  assert.match(call('files', '--under', '../app').stderr, /--file is a path inside the copy/)
+})

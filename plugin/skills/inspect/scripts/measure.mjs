@@ -18,7 +18,7 @@ import { availableParallelism, tmpdir } from 'node:os'
 import { basename, dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { detect } from './detect.mjs'
-import { arg, isEnvFile, isEnvLike, isMain, PINNED, projectEnv, readJson, readJsonIf, run, runGroup, strykerFailure, tail, withoutDatabaseSettings, writeJson } from './lib.mjs'
+import { arg, isEnvFile, isEnvLike, isMain, PINNED, projectEnv, readJson, readJsonIf, run, runGroup, strykerFailure, tail, withDatabasePointedNowhere, writeJson } from './lib.mjs'
 
 const INSTALL = {
   npm: lock => (lock ? ['npm', 'ci', '--no-audit', '--no-fund'] : ['npm', 'install', '--no-audit', '--no-fund']),
@@ -101,10 +101,10 @@ export function removeLeftCopies(out) {
 
 /**
  * A commit can carry env files, an install can write more, and the project's own tests load them.
- * In the copy their database settings are left out (the examples' too: a test setup copies them into place), so no test reaches a database through them;
+ * In the copy their database settings point nowhere (the examples' too: a test setup copies them into place), so no test reaches a database through them;
  * every other setting stays, so the project's own test settings still work. A link is never
  * followed: an env file that is one is removed, and a linked folder is not entered, so nothing
- * outside the copy is read or written. Returns each file with the names left out, never their values.
+ * outside the copy is read or written. Returns each file with the names replaced, never their values.
  */
 export function cleanEnvFiles(root) {
   const cleaned = []
@@ -117,13 +117,13 @@ export function cleanEnvFiles(root) {
       } else if (isEnvLike(entry.name)) {
         if (entry.isSymbolicLink()) {
           rmSync(path, { force: true })
-          cleaned.push({ file, removed: true, leftOut: [] })
+          cleaned.push({ file, removed: true, replaced: [] })
         } else if (entry.isFile()) {
-          const { text, leftOut } = withoutDatabaseSettings(readFileSync(path, 'utf8'))
-          if (!leftOut.length) continue
+          const { text, replaced } = withDatabasePointedNowhere(readFileSync(path, 'utf8'))
+          if (!replaced.length) continue
           writeFileSync(path, text)
           // An example is cleaned too, and marked: it is not the project's own settings, so not worth telling the user about.
-          cleaned.push(isEnvFile(entry.name) ? { file, leftOut } : { file, example: true, leftOut })
+          cleaned.push(isEnvFile(entry.name) ? { file, replaced } : { file, example: true, replaced })
         }
       }
     }
@@ -154,7 +154,7 @@ function prepare(repo, out) {
   // Again after the install: its scripts can write an env file (a copy of the example, most often).
   for (const entry of facts.isNodeProject ? cleanEnvFiles(path) : []) {
     const earlier = envFilesCleaned.find(e => e.file === entry.file)
-    if (earlier) earlier.leftOut.push(...entry.leftOut)
+    if (earlier) earlier.replaced.push(...entry.replaced)
     else envFilesCleaned.push(entry)
   }
   writeJson(join(out, 'copy.json'), {
@@ -167,14 +167,14 @@ function prepare(repo, out) {
     install: { ok: install.ok, seconds: install.seconds, output: install.ok ? '' : tail(install.stderr || install.stdout) },
     // The project's code runs without the user's environment: the names left out, never their values.
     envLeftOut: projectEnv().dropped,
-    // The env files in the copy, and the database settings left out of each there: names, never values.
+    // The env files in the copy, and the database settings pointed nowhere in each there: names, never values.
     envFilesCleaned,
     // What a later run on the same commit, with the same versions, may reuse from this one.
     key: measurementKey(head.stdout.trim(), facts),
   })
   console.log(`Copied ${head.stdout.trim()}${dirty ? ' (uncommitted changes not included)' : ''} to ${path}; install ${install.ok ? 'passed' : 'failed'}.`)
-  for (const { file, removed, leftOut } of envFilesCleaned.filter(e => !e.example)) {
-    console.log(removed ? `${file} is a link: removed from the copy.` : `${file}: in the copy it runs without ${leftOut.join(', ')}.`)
+  for (const { file, removed, replaced } of envFilesCleaned.filter(e => !e.example)) {
+    console.log(removed ? `${file} is a link: removed from the copy.` : `${file}: in the copy, ${replaced.join(', ')} ${replaced.length === 1 ? 'points' : 'point'} nowhere, so no test reaches that database.`)
   }
 }
 
