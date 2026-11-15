@@ -271,3 +271,65 @@ test('a test run says how many tests passed and were skipped, whichever runner p
   assert.deepEqual(testCounts('No test files found, exiting with code 0'), { passed: 0, skipped: 0 })
   assert.equal(testCounts('ok\n'), null)
 })
+
+import { isEnvLike, runnerCall } from './lib.mjs'
+
+test('env files by any of their names; the examples are settings files too, only never real ones', () => {
+  for (const name of ['.env.defaults', '.env.dist', '.env_local', '.env-prod', 'prod.env', '.dev.vars']) assert.equal(isEnvFile(name), true, name)
+  for (const name of ['.env.example', '.env.local.sample', '.env_template']) assert.deepEqual([isEnvFile(name), isEnvLike(name)], [false, true], name)
+  assert.equal(isEnvLike('environment.ts'), false)
+  for (const name of ['AWS_ACCESS_KEY_ID', 'SQL_HOST', 'TYPEORM_HOST', 'S3_BUCKET']) assert.equal(isDatabaseSetting(name), true, name)
+})
+
+test('a proof or an attack runs a test runner and its words, with no shell: nothing else gets through', () => {
+  assert.deepEqual(runnerCall('NODE_ENV=test npx vitest run "test/my attack.test.ts"'), { env: { NODE_ENV: 'test' }, argv: ['npx', 'vitest', 'run', 'test/my attack.test.ts'] })
+  for (const fine of [
+    'npx vitest run test/a7.test.ts',
+    'npx -y jest test/a7.test.ts',
+    'node --test test/a7.test.mjs',
+    'node --import tsx --test test/a7.test.ts',
+    'npm test -- test/a7.test.ts',
+    'npm run test:unit -- test/a7.test.ts',
+    'pnpm exec vitest run test/a7.test.ts',
+    'pnpm test test/a7.test.ts',
+    'yarn vitest run test/a7.test.ts',
+    'bun test test/a7.test.ts',
+    'npx playwright test attacks/a7.spec.ts',
+    './node_modules/.bin/vitest run test/a7.test.ts',
+  ]) assert.equal(runnerCall(fine).problem, undefined, fine)
+  for (const shell of ['npx vitest run a.test.ts | tail', 'cd /Users/me && npx vitest run a.test.ts', 'R=/Users/me; cat $R/app/.e*', 'npx vitest run a.test.ts > out.txt', 'npx vitest run $(cat x)']) {
+    assert.match(runnerCall(shell).problem, /more than a test runner/, shell)
+  }
+  for (const other of [
+    'psql -h localhost -U postgres app_dev -c "drop table users"',
+    'docker run -d -p 5432:5432 postgres:17',
+    'cat src/app.ts',
+    'npx prisma migrate reset --force',
+    'npx -c "psql -h localhost"',
+    'npm exec -c "psql -h localhost"',
+    'npm run db:reset',
+    'node scripts/seed.js',
+    'node -e "require(\'child_process\').execSync(\'psql\')" --test',
+    'npx tsx scripts/seed.ts',
+    'true',
+  ]) assert.match(runnerCall(other).problem, /does not start a test runner/, other)
+  assert.equal(runProblem({ command: 'psql -h localhost -U postgres app_dev' }), 'the command does not start a test runner (npx vitest run <file>, npx jest <file>, node --test <file>, npm test -- <file> and the like)')
+})
+
+test('the repository is recognised with a space in its path, however the path is written', t => {
+  const root = mkdtempSync(join(tmpdir(), 'imagineer-space-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const repo = join(root, 'My Projects', 'app')
+  const copy = join(root, 'imagineer-copy')
+  mkdirSync(repo, { recursive: true })
+  mkdirSync(copy)
+  const reaches = 'reaches into the repository itself, not the copy'
+  assert.equal(repositoryProblem(`import { db } from "${repo}/src/db.ts"`, repo), reaches)
+  assert.equal(repositoryProblem(`readFileSync('${repo.toUpperCase()}/src/db.ts')`, repo), process.platform === 'darwin' ? reaches : null)
+  assert.equal(repositoryProblem("import { db } from '../My Projects/app/src/db.ts'", repo, { cwd: copy }), reaches)
+  assert.equal(runProblem({ command: `npx vitest run --root "${repo}"`, source: repo, cwd: copy }), `the command ${reaches}`)
+  assert.equal(runProblem({ command: `npx vitest run --root "../My Projects/app"`, source: repo, cwd: copy }), `the command ${reaches}`)
+  assert.equal(runProblem({ command: `npx vitest run --root=${repo.replaceAll(' ', '\\ ')}/src`, source: repo, cwd: copy }), `the command ${reaches}`)
+  assert.equal(runProblem({ command: 'npx vitest run test/a7.test.ts', test: `import { x } from '../../../My Projects/app/src/x.ts'`, source: repo, cwd: copy, testDir: join(copy, 'test/attacks') }), `the test ${reaches}`)
+  assert.equal(runProblem({ command: 'npx vitest run test/a7.test.ts', test: "import { x } from '../src/x.ts'", source: repo, cwd: copy, testDir: join(copy, 'test') }), null)
+})

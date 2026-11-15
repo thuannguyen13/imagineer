@@ -18,7 +18,7 @@ import { availableParallelism, tmpdir } from 'node:os'
 import { basename, dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { detect } from './detect.mjs'
-import { arg, isEnvFile, PINNED, projectEnv, readJson, readJsonIf, run, runGroup, strykerFailure, tail, withoutDatabaseSettings, writeJson } from './lib.mjs'
+import { arg, isEnvFile, isEnvLike, isMain, PINNED, projectEnv, readJson, readJsonIf, run, runGroup, strykerFailure, tail, withoutDatabaseSettings, writeJson } from './lib.mjs'
 
 const INSTALL = {
   npm: lock => (lock ? ['npm', 'ci', '--no-audit', '--no-fund'] : ['npm', 'install', '--no-audit', '--no-fund']),
@@ -101,7 +101,7 @@ export function removeLeftCopies(out) {
 
 /**
  * A commit can carry env files, an install can write more, and the project's own tests load them.
- * In the copy their database settings are left out, so no test reaches a database through them;
+ * In the copy their database settings are left out (the examples' too: a test setup copies them into place), so no test reaches a database through them;
  * every other setting stays, so the project's own test settings still work. A link is never
  * followed: an env file that is one is removed, and a linked folder is not entered, so nothing
  * outside the copy is read or written. Returns each file with the names left out, never their values.
@@ -114,7 +114,7 @@ export function cleanEnvFiles(root) {
       const file = relative(root, path)
       if (entry.isDirectory()) {
         if (entry.name !== 'node_modules' && entry.name !== '.git') walk(path)
-      } else if (isEnvFile(entry.name)) {
+      } else if (isEnvLike(entry.name)) {
         if (entry.isSymbolicLink()) {
           rmSync(path, { force: true })
           cleaned.push({ file, removed: true, leftOut: [] })
@@ -122,7 +122,8 @@ export function cleanEnvFiles(root) {
           const { text, leftOut } = withoutDatabaseSettings(readFileSync(path, 'utf8'))
           if (!leftOut.length) continue
           writeFileSync(path, text)
-          cleaned.push({ file, leftOut })
+          // An example is cleaned too, and marked: it is not the project's own settings, so not worth telling the user about.
+          cleaned.push(isEnvFile(entry.name) ? { file, leftOut } : { file, example: true, leftOut })
         }
       }
     }
@@ -172,7 +173,7 @@ function prepare(repo, out) {
     key: measurementKey(head.stdout.trim(), facts),
   })
   console.log(`Copied ${head.stdout.trim()}${dirty ? ' (uncommitted changes not included)' : ''} to ${path}; install ${install.ok ? 'passed' : 'failed'}.`)
-  for (const { file, removed, leftOut } of envFilesCleaned) {
+  for (const { file, removed, leftOut } of envFilesCleaned.filter(e => !e.example)) {
     console.log(removed ? `${file} is a link: removed from the copy.` : `${file}: in the copy it runs without ${leftOut.join(', ')}.`)
   }
 }
@@ -364,7 +365,7 @@ function cleanup(out) {
 }
 
 // Run as a command (paths compared resolved, so spaces or a relative path do not stop it); loaded by a test, it only exports.
-if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+if (isMain(import.meta.url)) {
   const [step] = process.argv.slice(2)
   const out = arg('out')
   try {

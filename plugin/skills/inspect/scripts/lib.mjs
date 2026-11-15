@@ -4,7 +4,8 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { appendFileSync, existsSync, readFileSync, realpathSync, writeFileSync, mkdirSync, readdirSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { basename, join, dirname, relative, resolve, sep } from 'node:path'
+import { basename, isAbsolute, join, dirname, relative, resolve, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 /** Tool versions Inspect uses when the repository has none of its own. */
 export const PINNED = { fallow: '3.40.0', stryker: '9.6.1' }
@@ -45,14 +46,19 @@ export function projectEnv(source = process.env) {
 // that finds a test skipped for want of a database goes looking for one, and the user's own is
 // the nearest. These say what counts as reaching for one, by name and by address, never by value.
 
-/** A file that can hold real settings: `.env`, `.env.local`, `.env.production.local`, `.envrc`. Example files hold none. */
-export const isEnvFile = path => {
-  const name = basename(String(path))
-  return /^\.env(rc|(\.[\w-]+)*)$/.test(name) && !/\.(example|sample|template|dist|defaults)$/.test(name)
-}
+const EXAMPLE = /[._-](example|sample|template)$/
+
+/**
+ * A file of settings by its name: `.env`, `.env.local`, `.env_local`, `.envrc`, `prod.env`,
+ * `.dev.vars`, and their examples (`.env.example`), which an install or a test setup copies into place.
+ */
+export const isEnvLike = path => /^(\.env(rc|[._-][\w.-]+)?|[\w.-]+\.env|\.dev\.vars)$/.test(basename(String(path)))
+
+/** An env file that can hold real settings: every one but an example. */
+export const isEnvFile = path => isEnvLike(path) && !EXAMPLE.test(basename(String(path)))
 
 // An env file named in a command, a path or a pattern of file names (`.env*`, `.env.*`). `process.env.NAME` is not one.
-const ENV_FILE_IN_TEXT = /(?:^|[\s/'"=<>(:,])(\.env(?:rc|(?:\.[\w*?-]+)*))(?=$|[\s'")|;&<>,:*?])/g
+const ENV_FILE_IN_TEXT = /(?:^|[\s/'"=<>(:,{])((?:\.env(?:rc|(?:[._-][\w*?-]+)*)|[\w-]+\.env|\.dev\.vars))(?=$|[\s'")|;&<>,:*?}])/g
 
 /** The env file a text names, or the pattern that would match one; null otherwise. */
 export function envFileIn(text) {
@@ -60,9 +66,10 @@ export function envFileIn(text) {
   return null
 }
 
-// Settings that say where a database (or a hosted backend, a cache, a queue) is, or how to sign in to it.
+// Settings that say where a database (or a hosted backend, a cloud data store, a cache, a queue) is, or how to
+// sign in to it. A list, so never complete: what it misses still needs a test that asks for it.
 const DATABASE_NAME =
-  /(^|_)(DATABASE|DB|PG|PG(HOST|HOSTADDR|PORT|USER|PASSWORD|PASSFILE|DATABASE|SERVICE|OPTIONS|SSL[A-Z]*)|POSTGRES(QL)?|MYSQL|MARIADB|MONGO(DB)?|REDIS|SQLITE|MSSQL|SQLSERVER|SUPABASE|FIREBASE|FIRESTORE|PRISMA|DRIZZLE|TURSO|LIBSQL|NEON|PLANETSCALE|COCKROACH(DB)?|DYNAMO(DB)?|CLICKHOUSE|ELASTIC(SEARCH)?|UPSTASH|KV|AMQP|RABBITMQ)(_|$)/i
+  /(^|_)(DATABASE|DB|SQL|PG|PG(HOST|HOSTADDR|PORT|USER|PASSWORD|PASSFILE|DATABASE|SERVICE|OPTIONS|SSL[A-Z]*)|POSTGRES(QL)?|MYSQL|MARIADB|MONGO(DB)?|REDIS|SQLITE|MSSQL|SQLSERVER|SUPABASE|FIREBASE|FIRESTORE|PRISMA|DRIZZLE|TYPEORM|SEQUELIZE|KNEX|TURSO|LIBSQL|NEON|PLANETSCALE|COCKROACH(DB)?|DYNAMO(DB)?|AWS|S3|RDS|COSMOS|BIGQUERY|SNOWFLAKE|CASSANDRA|NEO4J|COUCH(DB|BASE)?|INFLUX(DB)?|CLICKHOUSE|ELASTIC(SEARCH|ACHE)?|MEMCACHED?|UPSTASH|KV|CONVEX|POCKETBASE|APPWRITE|HASURA|XATA|FAUNA|AMQP|RABBITMQ|KAFKA)(_|$)/i
 const DATABASE_SCHEME = /^(postgres(ql)?|mysql|mariadb|mongodb|rediss?|amqps?|mssql|sqlserver|libsql|cockroachdb|clickhouse|sqlite)(\+[\w.-]+)?$/i
 
 /**
@@ -80,19 +87,97 @@ export function databaseAddressIn(text, { signIn = true } = {}) {
 export const isDatabaseSetting = (name, value = '') => DATABASE_NAME.test(name) || databaseAddressIn(value) !== null
 
 /**
- * Why a command reaches for a database, in plain words, or null: it reads an env file, sets a
- * database setting, or names a database. Says names and schemes only, never a value.
+ * Why a text of settings and words reaches for a database, in plain words, or null: it reads an
+ * env file, sets a database setting, or names a database. Says names and schemes only, never a value.
  */
 export function databaseProblem(command) {
   const text = String(command ?? '')
   const file = envFileIn(text)
   if (file) return `reads an env file (${file})`
-  for (const [, name] of text.matchAll(/(?:^|[\s;&|('"`])(?:export\s+)?([A-Z_][A-Z0-9_]*)=/g)) {
+  for (const [, name] of text.matchAll(/(?:^|[\s;&|('"`])(?:export\s+)?([A-Za-z_]\w*)=/g)) {
     if (DATABASE_NAME.test(name)) return `sets ${name}, which says where a database is or how to sign in to it`
   }
   const scheme = databaseAddressIn(text)
   if (scheme) return `names a database, or a service with a sign-in (${scheme}://…)`
   return null
+}
+
+/**
+ * The words of a command that is one plain program call, or null: nothing chained, piped,
+ * redirected or expanded by the shell (`$`, backticks), which would run before the program does.
+ * Text in single quotes is passed on as it is.
+ */
+export function plainCall(command) {
+  const words = []
+  let word = ''
+  let started = false
+  let quote = null
+  const text = String(command ?? '').trim()
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text[i]
+    if (quote === "'") {
+      if (c === "'") quote = null
+      else word += c
+    } else if (c === '$' || c === '`') return null
+    else if (quote === '"') {
+      if (c === '"') quote = null
+      else if (c === '\\' && i + 1 < text.length) word += text[++i]
+      else word += c
+    } else if (c === '"' || c === "'") {
+      quote = c
+      started = true
+    } else if (c === '\\') {
+      if (i + 1 >= text.length || text[i + 1] === '\n') return null
+      word += text[++i]
+      started = true
+    } else if (c === '\n' || ';&|()<>'.includes(c)) return null
+    else if (/\s/.test(c)) {
+      if (started) words.push(word)
+      word = ''
+      started = false
+    } else {
+      word += c
+      started = true
+    }
+  }
+  if (quote) return null
+  if (started) words.push(word)
+  return words
+}
+
+const RUNNERS = new Set(['vitest', 'jest', 'mocha', 'ava', 'tap', 'playwright', 'cypress', 'uvu', 'jasmine', 'tsx'])
+const MANAGERS = new Set(['npm', 'npx', 'pnpm', 'yarn', 'bun', 'bunx'])
+
+/** Whether words start a test runner: the runner itself, through a package manager, or the project's own test script. */
+function startsTestRunner([program, ...rest]) {
+  const name = basename(program ?? '')
+  const runner = (word, args) => RUNNERS.has(basename(word ?? '')) && (basename(word) !== 'tsx' || args.includes('--test'))
+  if (name === 'node') return rest.includes('--test') && !rest.some(a => /^(-e|--eval|-p|--print)(=|$)/.test(a))
+  if (runner(program, rest)) return true
+  if (!MANAGERS.has(name)) return false
+  // `npx -y vitest`, `pnpm exec jest`, `npm test -- file`, `yarn run test:unit`: never `npx -c "<any command>"`.
+  const args = rest.filter(a => !/^(-y|--yes|--no-install|--silent|-s|exec|dlx|x|--)$/.test(a))
+  if (args[0] === 'run') return /^test/.test(args[1] ?? '')
+  if (name !== 'npx' && name !== 'bunx' && /^t(est[\w:-]*)?$/.test(args[0] ?? '')) return true
+  return runner(args[0], args)
+}
+
+/**
+ * A proof's or an attack's command, as a test runner to start without a shell: `{ env, argv }`, or
+ * `{ problem }` when it is anything else. A shell cannot be kept in the copy or away from a database
+ * by reading what it is asked to run, so no shell runs: only a test runner and its words, with any
+ * `NAME=value` settings before it.
+ */
+export function runnerCall(command) {
+  const words = plainCall(command)
+  if (!words) return { problem: 'is more than a test runner and its words: no pipes, &&, redirects or $' }
+  const env = {}
+  while (/^[A-Za-z_]\w*=/.test(words[0] ?? '')) {
+    const setting = words.shift()
+    env[setting.slice(0, setting.indexOf('='))] = setting.slice(setting.indexOf('=') + 1)
+  }
+  if (!startsTestRunner(words)) return { problem: 'does not start a test runner (npx vitest run <file>, npx jest <file>, node --test <file>, npm test -- <file> and the like)' }
+  return { env, argv: words }
 }
 
 const CASELESS = process.platform === 'darwin' || process.platform === 'win32'
@@ -117,35 +202,82 @@ export function isUnder(path, dir) {
 /** Whether a path is in the repository itself, outside Imagineer's own folder there. */
 export const inRepository = (path, repo) => isUnder(path, repo) && !isUnder(path, join(repo, '.claude', 'imagineer'))
 
+const REACHES = 'reaches into the repository itself, not the copy'
+const HOME = /(^|[\s"'=:(,])(~|\$HOME|\$\{HOME\})(?=\/)/g
+
+/** Whether one path, written as a shell or a program would read it from `cwd`, is in the repository itself. */
+function pathReaches(piece, repo, cwd) {
+  const path = piece.replace(/^file:\/\//, '').replace(/^(~|\$HOME|\$\{HOME\})(?=\/|$)/, homedir())
+  if (!path) return false
+  if (isAbsolute(path)) return inRepository(path, repo)
+  return cwd !== null && /[/.]/.test(path) && inRepository(resolve(cwd, path), repo)
+}
+
 /**
- * Why a text (a command, a test file) reaches into the repository itself, or null: everything runs
- * in the copy. Paths are read as the shell would from `cwd`: quoted, relative, under `~` or `$HOME`,
- * joined with colons, or as a `file://` address.
+ * Why a text (a test file, a command) reaches into the repository itself, or null: everything runs
+ * in the copy. The repository's path written out is found spaces and all; other paths are read as
+ * a program would from `cwd`: relative, under `~` or `$HOME`, joined with colons, a `file://` address.
  */
 export function repositoryProblem(text, repo, { cwd = null } = {}) {
   if (!repo) return null
-  const plain = String(text ?? '').replace(/["']/g, '').replace(/file:\/\//g, ' ')
-  for (const token of plain.split(/[\s=;&|()<>`,:]+/)) {
-    const path = token.replace(/^(~|\$HOME|\$\{HOME\})(?=\/|$)/, homedir())
-    const reaches = path.startsWith('/') ? inRepository(path, repo) : cwd && /^\.\.?(\/|$)/.test(path) && inRepository(resolve(cwd, path), repo)
-    if (reaches) return 'reaches into the repository itself, not the copy'
+  const raw = String(text ?? '').replace(HOME, (_, before) => before + homedir())
+  const fold = value => (CASELESS ? value.toLowerCase() : value)
+  // Without its quotes, so a path quoted in parts ("/Users/me"/app) reads as the shell joins it.
+  const joined = raw.replace(/["']/g, '')
+  for (const root of new Set([resolve(repo), real(repo)])) {
+    for (let at = fold(joined).indexOf(fold(root)); at !== -1; at = fold(joined).indexOf(fold(root), at + 1)) {
+      const rest = joined.slice(at + root.length)
+      // A longer name beside it (app-two) is another folder; Imagineer's own folder in it is fine.
+      if (!/^[\w.-]/.test(rest) && !/^\/\.claude\/imagineer(?![\w.-])/.test(rest)) return REACHES
+    }
   }
+  // A path in quotes is one path, spaces and all (an import, a file to open); outside quotes, words are.
+  const quoted = [...raw.matchAll(/(["'`])((?:\\.|(?!\1)[^\n])*)\1/g)].map(m => m[2])
+  const words = raw.replace(/["']/g, ' ').split(/[\s=;&|()<>`,]+/).flatMap(token => [token, ...token.split(':')])
+  for (const piece of [...quoted, ...words]) if (/^(\.\.?\/|\.\.$|file:\/\/)/.test(piece) && pathReaches(piece, repo, cwd)) return REACHES
   return null
 }
 
 /**
- * Why a proof or an attack must not run as asked, or null. Its command runs in the copy (`cwd`) and
- * may not reach for a database or the repository (`source`); its test may not name a database or the
- * repository either. A test may still say `.env` or sign in to the app under test: those are attacks.
+ * Why a proof or an attack must not run as asked, or null. Its command starts a test runner in the
+ * copy (`cwd`) and may not reach for a database or the repository (`source`); its test, which sits
+ * in `testDir` of the copy, may not name a database or the repository either. A test may still say
+ * `.env` or sign in to the app under test: those are attacks worth trying.
  */
-export function runProblem({ command, test = '', source = null, cwd = null }) {
-  const inCommand = databaseProblem(command) ?? repositoryProblem(command, source, { cwd })
+export function runProblem({ command, test = '', source = null, cwd = null, testDir = null }) {
+  // What it reaches for first: that is the reason worth telling, and worth flagging.
+  const inCommand = databaseProblem(command)
   if (inCommand) return `the command ${inCommand}`
+  const call = runnerCall(command)
+  if (call.problem) return `the command ${call.problem}`
+  const words = [...call.argv, ...Object.values(call.env)]
+  if (source && words.some(word => [word, ...word.split(/[=:,]/)].some(piece => pathReaches(piece, source, cwd)))) return `the command ${REACHES}`
   const scheme = databaseAddressIn(test, { signIn: false })
   if (scheme) return `the test names a database (${scheme}://…)`
-  const inTest = repositoryProblem(test, source)
+  const inTest = repositoryProblem(test, source, { cwd: testDir })
   return inTest ? `the test ${inTest}` : null
 }
+
+/** A run's folder, `<repository>/.claude/imagineer/runs/<n>`, as `{ path, repo }`. Throws for any other folder, one nested in a run included. */
+export function runFolder(out) {
+  const path = real(out)
+  const [, repo] = path.match(/^(.+)\/\.claude\/imagineer\/runs\/[^/]+$/) ?? []
+  if (!repo || /\/\.claude\/imagineer(\/|$)/.test(repo)) throw new Error(`--out is a run's folder, <repository>/.claude/imagineer/runs/<n>, not ${out}.`)
+  return { path, repo }
+}
+
+/** A file's full path inside a folder, links followed. Throws when the path given leaves the folder. */
+export function inside(folder, file, what) {
+  const path = resolve(folder, file)
+  if (isAbsolute(file) || !isUnder(path, folder) || real(path) === real(folder)) throw new Error(`--file is a path inside ${what}, not ${file}.`)
+  return path
+}
+
+/**
+ * Whether this module is the program that was started, whatever its path holds: a link, a space,
+ * a letter outside English. (Comparing `import.meta.url` with `file://` + the path fails on each.)
+ */
+export const isMain = metaUrl => Boolean(process.argv[1]) && real(fileURLToPath(metaUrl)) === real(process.argv[1])
 
 /**
  * An env file's text without its database settings: those lines are left out (a quoted value over
@@ -187,26 +319,37 @@ const stripAnsi = text => String(text ?? '').replace(/\u001b\[[0-9;]*m/g, '')
 
 /**
  * How many tests a run says passed and were skipped, read from the summary of the usual runners
- * (Vitest, Jest, node:test, Mocha, Playwright, Bun), or null when the output has no such summary.
+ * (Vitest, Jest, node:test, Mocha, AVA, tap, Jasmine, uvu, Playwright, Bun), with or without a
+ * prefix a workspace tool puts before each line; null when the output has no such summary.
  * A runner counts the tests a name filter left out as skipped too.
  */
 export function testCounts(output) {
   const text = stripAnsi(output)
   const count = (from, pattern) => Number(from.match(pattern)?.[1] ?? 0)
   const first = pattern => (pattern.test(text) ? count(text, pattern) : null)
+  const START = '(?:^|[\\s:|>])'
   // Vitest: "Tests  3 passed | 1 skipped (4)". Jest: "Tests:  1 skipped, 2 passed, 3 total". The last
   // such line with a count in it: the app's own output may start a line with "Tests" too.
-  const line = [...text.matchAll(/^\s*Tests:?\s+(.*\b\d+ (?:passed|failed|skipped|todo|total)\b.*)$/gm)].at(-1)?.[1]
+  const line = [...text.matchAll(new RegExp(`${START}Tests:?\\s+(.*\\b\\d+ (?:passed|failed|skipped|todo|total)\\b.*)$`, 'gm'))].at(-1)?.[1]
   if (line) return { passed: count(line, /(\d+) passed/), skipped: count(line, /(\d+) skipped/) + count(line, /(\d+) todo/) }
-  // node:test: "ℹ pass 3", "ℹ skipped 1" (or "# pass 3").
-  const pass = first(/^(?:ℹ|#) pass (\d+)$/m)
-  if (pass !== null) return { passed: pass, skipped: count(text, /^(?:ℹ|#) skipped (\d+)$/m) + count(text, /^(?:ℹ|#) todo (\d+)$/m) }
+  // node:test and tap: "ℹ pass 3", "ℹ skipped 1", "# pass 3", "# skip 1".
+  const pass = first(new RegExp(`${START}(?:ℹ|#) pass\\s+(\\d+)\\s*$`, 'm'))
+  if (pass !== null) return { passed: pass, skipped: count(text, /(?:ℹ|#) skip(?:ped)?\s+(\d+)\s*$/m) + count(text, /(?:ℹ|#) todo\s+(\d+)\s*$/m) }
   // Mocha: "3 passing", "1 pending".
-  const passing = first(/^\s*(\d+) passing\b/m)
-  if (passing !== null) return { passed: passing, skipped: count(text, /^\s*(\d+) pending\b/m) }
+  const passing = first(new RegExp(`${START}(\\d+) passing\\b`, 'm'))
+  if (passing !== null) return { passed: passing, skipped: count(text, /(\d+) pending\b/) }
+  // AVA: "2 tests passed", "1 test skipped", "1 test todo".
+  const ava = [/(\d+) tests? passed\b/, /(\d+) tests? skipped\b/, /(\d+) tests? todo\b/].map(first)
+  if (ava.some(n => n !== null)) return { passed: ava[0] ?? 0, skipped: (ava[1] ?? 0) + (ava[2] ?? 0) }
+  // Jasmine: "3 specs, 0 failures, 1 pending spec".
+  const specs = text.match(/(\d+) specs?, (\d+) failures?(?:, (\d+) pending specs?)?/)
+  if (specs) return { passed: Number(specs[1]) - Number(specs[2]) - Number(specs[3] ?? 0), skipped: Number(specs[3] ?? 0) }
+  // uvu: "Total: 3", "Passed: 3", "Skipped: 0".
+  const uvu = first(/Passed:\s+(\d+)/)
+  if (uvu !== null) return { passed: uvu, skipped: count(text, /Skipped:\s+(\d+)/) }
   // Playwright: "3 passed (2.1s)", "1 skipped". Bun: "3 pass", "1 skip".
-  const passed = first(/^\s*(\d+) pass(?:ed)?\b/m)
-  const skipped = first(/^\s*(\d+) skip(?:ped)?\b/m)
+  const passed = first(new RegExp(`${START}(\\d+) pass(?:ed)?\\b`, 'm'))
+  const skipped = first(new RegExp(`${START}(\\d+) skip(?:ped)?\\b`, 'm'))
   if (passed !== null || skipped !== null) return { passed: passed ?? 0, skipped: skipped ?? 0 }
   // A runner told to pass when it finds nothing: "No tests found, exiting with code 0".
   return /\bno tests?(?: files?)?(?: were)? found\b/i.test(text) ? { passed: 0, skipped: 0 } : null

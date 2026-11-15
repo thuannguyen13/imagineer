@@ -16,9 +16,9 @@
 //
 // Attack tests are written first to <run folder>/attacks/<path>.
 
-import { copyFileSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { arg, readJson, readJsonIf, recordDenial, run, runProblem, tail, testCounts, writeJson } from './lib.mjs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
+import { arg, inside, isMain, isUnder, readJson, readJsonIf, recordDenial, run, runFolder, runnerCall, runProblem, tail, testCounts, writeJson } from './lib.mjs'
 
 export const CATEGORIES = ['permissions', 'data']
 
@@ -45,14 +45,13 @@ export function recordUntested(ledger, { round, category, what }) {
 }
 
 /**
- * Why a test run that ended well still says nothing about the app, or null: no test passed, or
- * some were skipped. A skipped test cannot be told from one a name filter left out, so the
- * command must run the attack's own test and nothing else. Output with no summary this reads
- * (an unusual runner) is taken as it ended.
+ * Why a test run that ended well still says nothing about the app, or null: no test passed, some
+ * were skipped, or the run printed no summary to tell by. A skipped test cannot be told from one a
+ * name filter left out, so the command must run the attack's own test and nothing else.
  */
 export function didNotRun(output) {
   const counts = testCounts(output)
-  if (!counts) return null
+  if (!counts) return 'the run printed no summary of tests passed and skipped'
   if (counts.passed === 0) return counts.skipped ? 'its test was skipped' : 'no test ran'
   return counts.skipped ? `${counts.skipped} of the tests in that run ${counts.skipped === 1 ? 'was' : 'were'} skipped` : null
 }
@@ -70,18 +69,23 @@ export function recordAttack(ledger, entry, why = null) {
   return ledger
 }
 
-/** What the rounds found: breaks still standing, and how many rounds in a row found nothing new. */
-export function rounds(attacks) {
+/**
+ * What the rounds found: breaks still standing, and how many rounds in a row found nothing new.
+ * A round with an attack whose test did not run found out less than it set out to: it is not a
+ * clean round, so Inspect is never finished on attacks that never ran.
+ */
+export function rounds(attacks, notRun = []) {
   const live = attacks.filter(a => !a.void)
-  const numbers = [...new Set(live.map(a => a.round))].sort((a, b) => a - b)
+  const numbers = [...new Set([...live, ...notRun].map(a => a.round))].sort((a, b) => a - b)
   const perRound = numbers.map(round => ({
     round,
     tried: live.filter(a => a.round === round).length,
     broke: live.filter(a => a.round === round && a.result === 'broke').length,
+    notRun: notRun.filter(a => a.round === round).length,
   }))
   let clean = 0
   for (const r of [...perRound].reverse()) {
-    if (r.broke > 0) break
+    if (r.broke > 0 || r.notRun > 0) break
     clean += 1
   }
   return { perRound, cleanInARow: clean, broke: live.filter(a => a.result === 'broke'), held: live.filter(a => a.result === 'held') }
@@ -89,20 +93,27 @@ export function rounds(attacks) {
 
 function attack({ out, round, id, category, title, file, command, about = null }) {
   if (!CATEGORIES.includes(category)) throw new Error(`Category must be one of ${CATEGORIES.join(', ')}.`)
-  const copy = readJson(join(out, 'copy.json'))
-  const source = join(out, 'attacks', file)
-  const problem = runProblem({ command, test: readFileSync(source, 'utf8'), source: copy.source, cwd: copy.path })
+  // The run's own folder, never one written to look like it: its copy.json says where the app's code runs.
+  const { path: runPath, repo } = runFolder(out)
+  const copy = readJson(join(runPath, 'copy.json'))
+  if (!basename(copy.path ?? '').startsWith('imagineer-') || isUnder(copy.path, repo)) throw new Error(`${out}/copy.json does not name a throwaway copy.`)
+  // The test stays in the attacks folder and lands in the copy, at a path of its own.
+  const source = inside(join(runPath, 'attacks'), file, "the run's attacks folder")
+  const target = inside(copy.path, file, 'the copy')
+  if (existsSync(target)) throw new Error(`The copy already has a file at ${file}: give the attack test a name of its own.`)
+  const problem = runProblem({ command, test: readFileSync(source, 'utf8'), source: repo, cwd: copy.path, testDir: dirname(target) })
   if (problem) {
-    if (copy.source) recordDenial(copy.source, { agent: 'attacker', tool: 'attack.mjs', kind: 'database', reason: problem })
+    recordDenial(repo, { agent: 'attacker', tool: 'attack.mjs', kind: 'database', reason: problem })
     throw new Error(
       `Refused: ${problem}. Attacks run in the copy, never against a database nobody set up for them. If this attack needs a database or a service that is not there, ` +
         `record it instead: attack.mjs untested --out ${out} --round ${round} --category ${category} --what "<the part, in plain words> (needs a database)".`,
     )
   }
-  const target = join(copy.path, file)
   mkdirSync(dirname(target), { recursive: true })
   copyFileSync(source, target)
-  const result = run(['sh', '-c', command], { cwd: copy.path, timeoutMs: 5 * 60_000, project: true })
+  // The test runner itself, with no shell around it.
+  const { env, argv } = runnerCall(command)
+  const result = run(argv, { cwd: copy.path, timeoutMs: 5 * 60_000, project: true, env })
   // The attack test leaves the copy as it came: a test that broke through fails on purpose,
   // and would fail every later measurement of the copy.
   rmSync(target, { force: true })
@@ -111,7 +122,7 @@ function attack({ out, round, id, category, title, file, command, about = null }
   // A run that ended well with its test skipped proved nothing: never "held".
   const why = result.ok ? didNotRun(output) : null
   const entry = { id, round, category, title, about, file, run: command, result: result.ok ? 'held' : 'broke', output: result.ok && !why ? '' : tail(output, 15), void: null }
-  writeJson(ledgerPath(out), recordAttack(loadAttacks(out), entry, why))
+  writeJson(ledgerPath(runPath), recordAttack(loadAttacks(runPath), entry, why))
   if (why) {
     console.log(`${id} (${category}): not attacked, because ${why}, most often for want of a database or a setting, or because the command ran more than the attack's own test. It is listed as not attacked yet and does not count as held. ${title}`)
     console.log(tail(output, 40))
@@ -122,11 +133,12 @@ function attack({ out, round, id, category, title, file, command, about = null }
   if (!result.ok) console.log(tail(output, 40))
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   const [step] = process.argv.slice(2)
-  const out = arg('out')
+  let out = arg('out')
   try {
     if (!out) throw new Error('--out <run folder> is required')
+    out = runFolder(out).path
     if (step === 'run') {
       const fields = { round: Number(arg('round')), id: arg('id'), category: arg('category'), title: arg('title'), file: arg('file'), command: arg('run') }
       if (Object.values(fields).some(v => v === null || Number.isNaN(v))) throw new Error('run needs --round, --id, --category, --title, --file and --run')
@@ -145,7 +157,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       console.log(`Round ${round}: not attacked yet (${arg('category')}): ${arg('what')}`)
     } else if (step === 'list') {
       const ledger = loadAttacks(out)
-      const summary = rounds(ledger.attacks)
+      const summary = rounds(ledger.attacks, ledger.notRun)
       const notRun = ledger.notRun.map(a => `${a.id}: ${a.title} (${a.why})`)
       console.log(JSON.stringify({ ...summary, broke: summary.broke.map(a => `${a.id}: ${a.title}`), held: summary.held.length, notRun, untested: untestedNow(ledger) }, null, 2))
     } else {

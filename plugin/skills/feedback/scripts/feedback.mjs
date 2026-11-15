@@ -14,7 +14,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, write
 import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { testStrengthResult } from '../../inspect/scripts/lib.mjs'
+import { isMain, testStrengthResult } from '../../inspect/scripts/lib.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO_URL = 'https://github.com/thuannguyen13/imagineer'
@@ -164,7 +164,7 @@ export function issueFor(record) {
   return { title, body, url }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   const [step] = process.argv.slice(2)
   try {
     if (step === 'check') {

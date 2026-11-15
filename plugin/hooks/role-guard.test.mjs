@@ -177,3 +177,28 @@ test('as a hook, a reach for an env file is refused and recorded apart from othe
   // Kept for the self-check, which the user may share: no path of theirs in it.
   assert.doesNotMatch(denials.map(d => d.reason).join(' '), new RegExp(repo))
 })
+
+import { symlinkSync } from 'node:fs'
+
+test('a search may not name a place outside through its pattern, whatever folder it gives', t => {
+  const { repo, copy, attacker } = session(t)
+  const outside = /outside the throwaway copy/
+  assert.match(attacker('Glob', { path: copy, pattern: `${repo}/**/*` }), outside)
+  assert.match(attacker('Grep', { pattern: 'x', path: copy, glob: `${repo}/**/*.ts` }), outside)
+  assert.equal(attacker('Grep', { pattern: `${repo}/src`, path: copy }), null) // what it searches for is not where it searches
+  assert.match(attacker('Glob', { pattern: '{.env,.env.local}', path: copy }), /is an env file/)
+  assert.match(attacker('Read', { file_path: join(copy, '.dev.vars') }), /is an env file/)
+})
+
+test('the guard holds when the plugin is started through a link, and says nothing of where it is installed', t => {
+  const { root, repo } = session(t)
+  symlinkSync(dirname(fileURLToPath(import.meta.url)), join(root, 'hooks link'))
+  const hook = command => spawnSync('node', [join(root, 'hooks link', 'role-guard.mjs')], { input: JSON.stringify({ cwd: repo, agent_type: 'imagineer:attacker', tool_name: 'Bash', tool_input: { command } }), encoding: 'utf8', cwd: repo })
+  assert.equal(JSON.parse(hook('cat .env.local').stdout).hookSpecificOutput.permissionDecision, 'deny')
+  assert.equal(JSON.parse(hook("export $(grep '^DATABASE_URL=' .env.local | xargs) && npx vitest run a4.test.ts").stdout).hookSpecificOutput.permissionDecision, 'deny')
+  assert.equal(JSON.parse(hook('git log').stdout).hookSpecificOutput.permissionDecision, 'deny')
+  const denials = readFileSync(join(repo, '.claude/imagineer/denials.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line))
+  // A refused command that names an env file or a database is flagged as a reach for one; any other is an ordinary refusal.
+  assert.deepEqual(denials.map(d => d.kind), ['database', 'database', undefined])
+  assert.doesNotMatch(denials.map(d => d.reason).join(' '), new RegExp(dirname(ATTACK)))
+})

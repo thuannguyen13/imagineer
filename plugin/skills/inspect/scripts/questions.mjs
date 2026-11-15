@@ -18,7 +18,7 @@
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { arg, readJsonIf, writeJson } from './lib.mjs'
+import { arg, isMain, readJsonIf, writeJson } from './lib.mjs'
 
 export const LEDGER = '.claude/imagineer/questions.json'
 
@@ -366,7 +366,7 @@ export function summary(ledger) {
 
 const list = value => (value ? value.split(',').map(s => s.trim()).filter(Boolean) : [])
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   const [step] = process.argv.slice(2)
   const repo = arg('repo', '.')
   try {

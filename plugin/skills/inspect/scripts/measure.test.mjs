@@ -115,11 +115,13 @@ test("env files run in the copy without their database settings, wherever they a
   const cleaned = cleanEnvFiles(copy).sort((a, b) => a.file.localeCompare(b.file))
   assert.deepEqual(cleaned, [
     { file: '.env', leftOut: ['DATABASE_URL', 'PGHOST'] },
+    // An example too: a test setup copies it into place after the cleaning.
+    { file: '.env.example', example: true, leftOut: ['DATABASE_URL'] },
     { file: '.env.local', removed: true, leftOut: [] },
     { file: 'apps/web/build/.env.test', leftOut: ['REDIS_URL'] },
   ])
   assert.equal(readFileSync(join(copy, '.env'), 'utf8'), 'APP_NAME=Lunch\nJWT_SECRET=test-secret\n')
-  assert.equal(readFileSync(join(copy, '.env.example'), 'utf8'), 'DATABASE_URL=\n')
+  assert.equal(readFileSync(join(copy, '.env.example'), 'utf8'), '')
   assert.equal(existsSync(join(copy, '.env.local')), false)
   // Nothing outside the copy was written.
   assert.equal(readFileSync(join(outside, 'real.env'), 'utf8'), 'DATABASE_URL=real\n')

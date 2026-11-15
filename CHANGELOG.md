@@ -10,7 +10,8 @@
 ### Bug Fixes
 
 - **Attacks reached a real database:** Inspect's attacker could take a database address from your local env file and attack that database; it now runs your app's code only in the throwaway copy, reads nothing outside it and never an env file, and any attempt is flagged at the end of the run. ([#26](https://github.com/thuannguyen13/imagineer/issues/26))
-- **Skipped attacks counted as held:** An attack whose test was skipped, most often for want of a database, was counted as the app holding; it is now listed as **Not attacked yet**. ([#26](https://github.com/thuannguyen13/imagineer/issues/26))
+- **Skipped attacks counted as held:** An attack whose test was skipped, most often for want of a database, was counted as the app holding; it is now listed as **Not attacked yet**, and a round with such an attack no longer counts toward finishing. ([#26](https://github.com/thuannguyen13/imagineer/issues/26))
+- **Install folders with a space or a link:** When the folder Claude Code keeps plugins in had a space, a non-English letter or a link in its path, Imagineer's scripts did nothing and its role guard let everything through; both now work there. ([#26](https://github.com/thuannguyen13/imagineer/issues/26))
 
 ## 0.4.0 — 2026-11-08
 

@@ -16,7 +16,9 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { envFileIn, isUnder, real, recordDenial } from '../skills/inspect/scripts/lib.mjs'
+import { databaseProblem, envFileIn, isMain, isUnder, plainCall, real, recordDenial } from '../skills/inspect/scripts/lib.mjs'
+
+export { plainCall }
 
 const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit'])
 const READ_TOOLS = new Set(['Read', 'Grep', 'Glob'])
@@ -113,49 +115,6 @@ export function blockedWrite(name, path) {
 }
 
 /**
- * The words of a command that is one plain program call, or null: nothing chained, piped,
- * redirected or expanded by the shell (`$`, backticks), which would run before the program does.
- * Text in single quotes is passed on as it is.
- */
-export function plainCall(command) {
-  const words = []
-  let word = ''
-  let started = false
-  let quote = null
-  const text = String(command ?? '').trim()
-  for (let i = 0; i < text.length; i += 1) {
-    const c = text[i]
-    if (quote === "'") {
-      if (c === "'") quote = null
-      else word += c
-    } else if (c === '$' || c === '`') return null
-    else if (quote === '"') {
-      if (c === '"') quote = null
-      else if (c === '\\' && i + 1 < text.length) word += text[++i]
-      else word += c
-    } else if (c === '"' || c === "'") {
-      quote = c
-      started = true
-    } else if (c === '\\') {
-      if (i + 1 >= text.length || text[i + 1] === '\n') return null
-      word += text[++i]
-      started = true
-    } else if (c === '\n' || ';&|()<>'.includes(c)) return null
-    else if (/\s/.test(c)) {
-      if (started) words.push(word)
-      word = ''
-      started = false
-    } else {
-      word += c
-      started = true
-    }
-  }
-  if (quote) return null
-  if (started) words.push(word)
-  return words
-}
-
-/**
  * Why the attacker may not run this command, or null. It runs Imagineer's attack script and nothing
  * else: a shell cannot be kept in the copy or away from a database by reading what it is asked to
  * run, so the app's code runs only where attack.mjs runs it.
@@ -164,7 +123,8 @@ export function blockedAttackerCommand(command, cwd = null) {
   const words = plainCall(command)
   if (!words) return 'is more than one plain call. Give one command with every path written out: no $, pipes, && or redirects, and the --run command in single quotes'
   const isAttackScript = words[0] === 'node' && words[1] && real(resolve(cwd ?? '/', words[1])) === real(ATTACK_SCRIPT)
-  return isAttackScript ? null : `runs something other than Imagineer's attack script (node ${ATTACK_SCRIPT} run | void | untested | list). Read and search with Read, Grep and Glob`
+  // Said without the script's path, which holds the user's home folder: the reason is kept for the self-check.
+  return isAttackScript ? null : "runs something other than Imagineer's attack script (node <the scripts folder you were given>/attack.mjs run | void | untested | list). Read and search with Read, Grep and Glob"
 }
 
 /** The throwaway copies of the runs kept in the session's folder, as each run recorded its own. */
@@ -201,53 +161,60 @@ export function blockedAttackerRead(toolName, input, cwd = null) {
   const pattern = toolName === 'Glob' ? input.pattern : input.glob
   const file = envFileIn(input.file_path) ?? envFileIn(input.path) ?? envFileIn(pattern)
   if (file) return { envFile: true, reason: `${file} is an env file, which the attacker never reads` }
-  const where = input.file_path ?? input.path ?? (pattern?.startsWith('/') ? pattern.split(/[*?[{]/)[0] : (cwd ?? '.'))
-  if (attackerMayRead(where, cwd)) return null
+  // Every place the call names must be one the attacker reads: the folder, and a pattern that starts at the root.
+  const rooted = [toolName === 'Glob' ? input.pattern : null, input.glob].filter(p => p?.startsWith('/')).map(p => p.split(/[*?[{]/)[0])
+  const places = [input.file_path ?? input.path ?? (rooted.length ? null : (cwd ?? '.')), ...rooted].filter(Boolean)
+  if (places.every(place => attackerMayRead(place, cwd))) return null
   return { envFile: false, reason: "is outside the throwaway copy, the run folder and Imagineer's scripts, where the attacker reads. Give the copy's path" }
 }
 
 const ROLES = new Set(['dev', 'qa', 'architect', 'attacker'])
 
-export function decide(payload) {
+/** Why a tool call is outside the agent's role, and whether it was a reach for a database; null when it is fine. */
+export function judge(payload) {
   const name = role(payload.agent_type)
   if (!ROLES.has(name)) return null
   const input = payload.tool_input ?? {}
   if (name === 'attacker' && payload.tool_name === 'Bash') {
-    const reason = blockedAttackerCommand(input.command ?? '', payload.cwd)
-    return reason ? `This command ${reason}.` : null
+    const command = input.command ?? ''
+    const reason = blockedAttackerCommand(command, payload.cwd)
+    if (!reason) return null
+    // A refused command that names an env file or a database is how an attack once ran against a real one: flagged apart.
+    return { reason: `This command ${reason}.`, database: Boolean(envFileIn(command) || databaseProblem(command)) }
   }
   if (name === 'attacker' && READ_TOOLS.has(payload.tool_name)) {
     const blocked = blockedAttackerRead(payload.tool_name, input, payload.cwd)
     if (!blocked) return null
-    return blocked.envFile ? `${blocked.reason}. If an attack needs a database that is not there, record it as not attacked (attack.mjs untested).` : `That ${blocked.reason}.`
+    if (!blocked.envFile) return { reason: `That ${blocked.reason}.`, database: false }
+    return { reason: `${blocked.reason}. If an attack needs a database that is not there, record it as not attacked (attack.mjs untested).`, database: true, record: blocked.reason }
   }
   if (payload.tool_name === 'Bash') {
     const reason = blockedCommand(name, input.command ?? '')
-    return reason ? `This command ${reason}. ${name === 'dev' ? 'Dev commits; the Lead pushes and opens the pull request.' : 'The Lead owns commits, pushes and GitHub.'}` : null
+    return reason ? { reason: `This command ${reason}. ${name === 'dev' ? 'Dev commits; the Lead pushes and opens the pull request.' : 'The Lead owns commits, pushes and GitHub.'}`, database: false } : null
   }
   if (WRITE_TOOLS.has(payload.tool_name)) {
     const path = input.file_path ?? input.notebook_path ?? ''
     const reason = blockedWrite(name, path)
-    return reason ? `${path} ${reason}.` : null
+    return reason ? { reason: `${path} ${reason}.`, database: false } : null
   }
   return null
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+export const decide = payload => judge(payload)?.reason ?? null
+
+if (isMain(import.meta.url)) {
   let payload = {}
   try {
     payload = JSON.parse(readFileSync(0, 'utf8') || '{}')
   } catch {
     process.exit(0)
   }
-  const reason = decide(payload)
-  if (reason) {
+  const verdict = judge(payload)
+  if (verdict) {
     // Keep a record for Imagineer's self-check: an agent stepping outside its role is a sign Imagineer went wrong.
-    // An attacker reaching for an env file is flagged apart: it is how an attack once ran against a real database.
-    const read = role(payload.agent_type) === 'attacker' && READ_TOOLS.has(payload.tool_name) ? blockedAttackerRead(payload.tool_name, payload.tool_input ?? {}, payload.cwd) : null
-    recordDenial(payload.cwd ?? process.cwd(), { agent: role(payload.agent_type), tool: payload.tool_name, ...(read?.envFile ? { kind: 'database', reason: read.reason } : { reason }) })
+    recordDenial(payload.cwd ?? process.cwd(), { agent: role(payload.agent_type), tool: payload.tool_name, ...(verdict.database ? { kind: 'database' } : {}), reason: verdict.record ?? verdict.reason })
     process.stdout.write(
-      JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } }),
+      JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: verdict.reason } }),
     )
   }
   process.exit(0)

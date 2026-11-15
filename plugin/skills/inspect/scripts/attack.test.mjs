@@ -20,8 +20,11 @@ test('a test that was skipped, or did not run, says nothing about the app', () =
   assert.equal(didNotRun('      Tests  1 passed | 2 skipped (3)'), '2 of the tests in that run were skipped')
   assert.equal(didNotRun('      Tests  3 passed (3)'), null)
   assert.equal(didNotRun('No tests found, exiting with code 0'), 'no test ran')
-  // A runner whose summary is not known is taken as it ended.
-  assert.equal(didNotRun('done'), null)
+  // With a workspace tool's prefix before each line, or a less common runner.
+  assert.equal(didNotRun('web:test:  Tests  3 skipped (3)'), 'its test was skipped')
+  assert.equal(didNotRun('  1 test skipped'), 'its test was skipped')
+  // No summary to tell by: never held on the exit alone.
+  assert.equal(didNotRun('done'), 'the run printed no summary of tests passed and skipped')
 })
 
 test('an attack whose test did not run is never held: it is listed as not attacked yet', () => {
@@ -33,7 +36,12 @@ test('an attack whose test did not run is never held: it is listed as not attack
   assert.deepEqual(untestedNow(ledger), [{ category: 'permissions', what: 'A2 title (its test was skipped)', id: 'A2' }])
   // It counts in no round, so a round of skipped tests is not a clean round.
   recordAttack(ledger, entry('A3', 2), 'its test was skipped')
-  assert.deepEqual(rounds(ledger.attacks).perRound, [{ round: 1, tried: 1, broke: 0 }])
+  assert.deepEqual(rounds(ledger.attacks, ledger.notRun).perRound, [{ round: 1, tried: 1, broke: 0, notRun: 1 }, { round: 2, tried: 0, broke: 0, notRun: 1 }])
+  assert.equal(rounds(ledger.attacks, ledger.notRun).cleanInARow, 0)
+  // Two rounds where every attack ran and held are clean; one attack that did not run in the later round is not.
+  const two = [entry('B1', 1), entry('B2', 2)]
+  assert.equal(rounds(two).cleanInARow, 2)
+  assert.equal(rounds(two, [{ id: 'B3', round: 2 }]).cleanInARow, 0)
   // It stays listed whatever later rounds say they did not reach.
   recordUntested(ledger, { round: 2, category: 'permissions', what: 'the export page' })
   recordUntested(ledger, { round: 3, category: 'permissions', what: 'the admin settings page' })
@@ -61,7 +69,7 @@ function run(t, tests) {
   for (const [name, body] of Object.entries(tests)) writeFileSync(join(out, 'attacks/test', name), `import { test } from 'node:test'\n${body}\n`)
   const attack = (id, file, command) =>
     spawnSync('node', [ATTACK, 'run', '--out', out, '--round', '1', '--id', id, '--category', 'data', '--title', `${id} title`, '--file', `test/${file}`, '--run', command], { encoding: 'utf8' })
-  return { repo, copy, out, attack, ledger: () => JSON.parse(readFileSync(join(out, 'attacks.json'), 'utf8')) }
+  return { root, repo, copy, out, attack, ledger: () => JSON.parse(readFileSync(join(out, 'attacks.json'), 'utf8')) }
 }
 
 test('attack.mjs: a held attack is held, a skipped one is not attacked, and neither stays in the copy', t => {
@@ -100,4 +108,60 @@ test('attack.mjs: a database address written into the test is refused before any
   assert.match(result.stderr, /Refused: the test names a database \(postgres:\/\/…\)/)
   assert.equal(existsSync(join(out, 'attacks.json')), false)
   assert.equal(existsSync(join(copy, 'test/a5.test.mjs')), false)
+})
+
+import { symlinkSync } from 'node:fs'
+
+test('attack.mjs: only a run\'s own folder is one, and a test stays in its folder and in the copy', t => {
+  const { repo, copy, out, attack } = run(t, { 'a6.test.mjs': "test('A6', () => {})" })
+  writeFileSync(join(repo, 'app.ts'), 'export const x = 1\n')
+  mkdirSync(join(copy, 'src'))
+  writeFileSync(join(copy, 'src/app.ts'), 'export const x = 1\n')
+  const call = (...args) => spawnSync('node', [ATTACK, 'run', '--round', '1', '--id', 'A6', '--category', 'data', '--title', 'A6 title', ...args], { encoding: 'utf8' })
+
+  // A copy.json the attacker wrote under attacks/, naming the repository as the copy.
+  mkdirSync(join(out, 'attacks/attacks'), { recursive: true })
+  writeFileSync(join(out, 'attacks/copy.json'), JSON.stringify({ path: repo }))
+  writeFileSync(join(out, 'attacks/attacks/a6.test.mjs'), "import { test } from 'node:test'\ntest('A6', () => {})\n")
+  const forged = call('--out', join(out, 'attacks'), '--file', 'a6.test.mjs', '--run', 'node --test a6.test.mjs')
+  assert.match(forged.stderr, /--out is a run's folder/)
+  // The same nested deeper, to look like a run's folder.
+  const nested = join(out, 'attacks/.claude/imagineer/runs/9')
+  mkdirSync(join(nested, 'attacks'), { recursive: true })
+  writeFileSync(join(nested, 'copy.json'), JSON.stringify({ path: repo }))
+  assert.match(call('--out', nested, '--file', 'a6.test.mjs', '--run', 'node --test a6.test.mjs').stderr, /--out is a run's folder/)
+  assert.equal(existsSync(join(repo, 'a6.test.mjs')), false)
+
+  // A path that climbs out of the attacks folder to a file of the repository, which the clean-up would then delete.
+  for (const file of ['../../../../app.ts', join(repo, 'app.ts'), '../copy.json']) {
+    assert.match(call('--out', out, '--file', file, '--run', 'node --test test/a6.test.mjs').stderr, /--file is a path inside/, file)
+  }
+  assert.equal(readFileSync(join(repo, 'app.ts'), 'utf8'), 'export const x = 1\n')
+  // A test named as a file the copy already has would overwrite it, then delete it.
+  mkdirSync(join(out, 'attacks/src'))
+  writeFileSync(join(out, 'attacks/src/app.ts'), 'export const x = 2\n')
+  assert.match(call('--out', out, '--file', 'src/app.ts', '--run', 'node --test src/app.ts').stderr, /The copy already has a file at src\/app\.ts/)
+  assert.equal(readFileSync(join(copy, 'src/app.ts'), 'utf8'), 'export const x = 1\n')
+  // A folder of the copy that is a link out of it.
+  symlinkSync(repo, join(copy, 'linked'))
+  mkdirSync(join(out, 'attacks/linked'))
+  writeFileSync(join(out, 'attacks/linked/a6.test.mjs'), "import { test } from 'node:test'\ntest('A6', () => {})\n")
+  assert.match(call('--out', out, '--file', 'linked/a6.test.mjs', '--run', 'node --test linked/a6.test.mjs').stderr, /--file is a path inside the copy/)
+  assert.equal(existsSync(join(repo, 'a6.test.mjs')), false)
+
+  // Anything but a test runner, however it is dressed.
+  for (const command of ['psql -h localhost -U postgres app_dev', 'pwd; cat .e*', `cd ${repo} && node --test`, 'node --test test/a6.test.mjs | tail -3']) {
+    const result = attack('A6', 'a6.test.mjs', command)
+    assert.equal(result.status, 1, command)
+    assert.match(result.stderr, /Refused: the command (does not start a test runner|is more than a test runner)/, command)
+  }
+  assert.equal(existsSync(join(out, 'attacks.json')), false)
+})
+
+test('attack.mjs works when it is started through a link', t => {
+  const { root, attack, out } = run(t, { 'a1.test.mjs': "test('A1', () => {})" })
+  symlinkSync(dirname(ATTACK), join(root, 'scripts'))
+  const linked = spawnSync('node', [join(root, 'scripts/attack.mjs'), 'list', '--out', out], { encoding: 'utf8' })
+  assert.match(linked.stdout, /"cleanInARow"/, linked.stderr)
+  assert.match(attack('A1', 'a1.test.mjs', 'node --test test/a1.test.mjs').stdout, /the app held/)
 })
