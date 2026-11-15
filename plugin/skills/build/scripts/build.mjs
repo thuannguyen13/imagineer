@@ -17,7 +17,7 @@ import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { arg, DEFAULT_THRESHOLDS, keepOutOfGit, loadThresholds, readJson, readJsonIf, run, tail, writeJson } from '../../inspect/scripts/lib.mjs'
+import { arg, DEFAULT_THRESHOLDS, isMain, keepOutOfGit, loadThresholds, readJson, readJsonIf, run, tail, writeJson } from '../../inspect/scripts/lib.mjs'
 import { detect } from '../../inspect/scripts/detect.mjs'
 import { mutationScore } from '../../inspect/scripts/grade.mjs'
 import { isCritical, loadLedger } from '../../inspect/scripts/questions.mjs'
@@ -246,7 +246,7 @@ export function prBody(state, results = null) {
   return lines.join('\n')
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   const [step] = process.argv.slice(2)
   try {
     const repo = arg('repo') ? resolve(arg('repo')) : null

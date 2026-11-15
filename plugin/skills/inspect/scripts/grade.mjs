@@ -10,7 +10,7 @@
 import { existsSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { arg, DEFAULT_THRESHOLDS, keepOutOfGit, loadThresholds, readJson, readJsonIf, testStrengthResult, writeJson } from './lib.mjs'
+import { arg, DEFAULT_THRESHOLDS, isMain, keepOutOfGit, loadThresholds, readJson, readJsonIf, testStrengthResult, writeJson } from './lib.mjs'
 import { loadAttacks, rounds, untestedNow } from './attack.mjs'
 import { CRITICAL_TOPICS, emptyLedger, findings, isCritical, isGapToFix, loadLedger, openQuestions, summary } from './questions.mjs'
 
@@ -243,9 +243,9 @@ function answersOn(ledger, topic) {
 /** What the latest attack round says it did not reach in a category: never safe, only not tested yet. */
 const notAttacked = (evidence, category) => (evidence.untested ?? []).filter(u => u.category === category).map(u => `Not attacked yet: ${u.what}`)
 
-function attackNotes(attacks, category) {
-  const mine = attacks.filter(a => a.category === category && !a.void)
-  const { cleanInARow } = rounds(mine)
+function attackNotes(evidence, category) {
+  const mine = (evidence.attacks ?? []).filter(a => a.category === category && !a.void)
+  const { cleanInARow } = rounds(mine, (evidence.notRun ?? []).filter(a => a.category === category))
   const broke = mine.filter(a => a.result === 'broke')
   return { tried: mine.length, broke, cleanInARow }
 }
@@ -253,7 +253,7 @@ function attackNotes(attacks, category) {
 export function security(evidence) {
   const name = 'Security and permissions'
   const ledger = evidence.ledger ?? emptyLedger()
-  const attacks = attackNotes(evidence.attacks ?? [], 'permissions')
+  const attacks = attackNotes(evidence, 'permissions')
   const scan = evidence.security
   if (!attacks.tried && !scan) return dimension('security', name, 'trust', 'unchecked', 'none', 'Not tested by Imagineer yet.', notAttacked(evidence, 'permissions'))
 
@@ -281,7 +281,7 @@ export function security(evidence) {
 export function dataSafety(evidence) {
   const name = 'Data safety'
   const ledger = evidence.ledger ?? emptyLedger()
-  const attacks = attackNotes(evidence.attacks ?? [], 'data')
+  const attacks = attackNotes(evidence, 'data')
   const answers = answersOn(ledger, 'data')
   if (!attacks.tried && !answers.total) return dimension('data-safety', name, 'trust', 'unchecked', 'none', 'Not tested by Imagineer yet.', notAttacked(evidence, 'data'))
 
@@ -397,7 +397,7 @@ export function stopBar(dimensions, attacks, evidence = {}) {
     missing.push(...(needs.length ? needs : [`tests that catch at least ${thresholdsOf(evidence).tests}% of deliberate breaks`]))
   }
   if (byId('structure')?.state !== 'strong') missing.push('you to review the code quality findings')
-  const clean = rounds((attacks ?? []).filter(a => !a.void)).cleanInARow
+  const clean = rounds((attacks ?? []).filter(a => !a.void), evidence.notRun ?? []).cleanInARow
   if (clean < 2) missing.push('two attack rounds in a row that find nothing new')
   // Whose thresholds they are: the pane and report say "you set" or "Imagineer suggests".
   return { met: missing.length === 0, missing, progress: finishProgress(byId, clean, evidence), by: thresholdsOf(evidence).bySetting ? 'you' : 'imagineer' }
@@ -470,12 +470,15 @@ export function markPending(dimensions, evidence, status) {
 }
 
 export function gradeRun(out, repo = null, status = 'done') {
+  const attackLedger = loadAttacks(out)
   const evidence = {
     thresholds: loadThresholds(repo),
     ledger: repo ? loadLedger(repo) : emptyLedger(),
     findings: findings(out),
-    attacks: loadAttacks(out).attacks,
-    untested: untestedNow(loadAttacks(out)),
+    attacks: attackLedger.attacks,
+    // Attacks whose test did not run: never held, and their round is not a clean one.
+    notRun: attackLedger.notRun,
+    untested: untestedNow(attackLedger),
     security: readJsonIf(join(out, 'security.json')),
     detect: readJsonIf(join(out, 'detect.json')),
     copy: readJsonIf(join(out, 'copy.json')),
@@ -503,7 +506,7 @@ function imagineerVersion() {
 }
 
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   const repo = arg('repo')
   const out = arg('out')
   if (!repo || !out) {

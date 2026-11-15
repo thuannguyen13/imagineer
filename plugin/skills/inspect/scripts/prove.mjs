@@ -9,9 +9,9 @@
 // into the copy at the same path, runs it, records the result on the question,
 // and explains (dismisses) each line whose every break the test caught.
 
-import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { arg, readJson, readJsonIf, run, tail, writeJson } from './lib.mjs'
+import { readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { arg, idle, isMain, readJsonIf, tail, testInCopy, writeJson } from './lib.mjs'
 import { LEDGER, loadLedger } from './questions.mjs'
 
 /** Character offset of a 1-based { line, column } in a text. */
@@ -45,20 +45,28 @@ export function targetMutants(mutation, about, equivalent = {}) {
 }
 
 function prove({ repo, out, id, file, command }) {
-  const copy = readJson(join(out, 'copy.json'))
-  const mutation = readJsonIf(join(out, 'mutation.json'))
   const ledger = loadLedger(repo)
   const question = ledger.questions.find(q => q.id === id)
   if (!question) throw new Error(`No question ${id}.`)
-
-  const source = join(out, 'tests', file)
-  const target = join(copy.path, file)
-  mkdirSync(dirname(target), { recursive: true })
-  copyFileSync(source, target)
-  const sh = cmd => run(['sh', '-c', cmd], { cwd: copy.path, timeoutMs: 5 * 60_000, project: true })
-
-  const green = sh(command)
-  const test = { file, run: command, commit: copy.commit, green: green.ok, red: null, output: green.ok ? '' : tail(green.stdout + '\n' + green.stderr, 15) }
+  // A proof runs as an attack does: a test runner, in the run's own copy, never against a database nobody set up for it.
+  let proof
+  try {
+    proof = testInCopy({ out, folder: 'tests', file, command, agent: 'lead', tool: 'prove.mjs' })
+  } catch (error) {
+    if (!error.refused) throw error
+    throw new Error(`Refused: ${error.message}. Proofs run in the copy; an answer whose test needs a database that is not there cannot be proven yet.`)
+  }
+  const { copy } = proof
+  const mutation = readJsonIf(join(proof.runPath, 'mutation.json'))
+  proof.place()
+  const green = proof.start()
+  // A run that could not start, did not end, found no test, or passed with its test skipped says nothing about the code: nothing is recorded.
+  const why = idle(green)
+  if (why) {
+    proof.remove()
+    throw new Error(`${id}: the proof's test did not run, because ${why}. Nothing is recorded: the answer is not proven, and the code is not shown to differ.\n${tail(green.output, 15)}`)
+  }
+  const test = { file, run: command, commit: copy.commit, green: green.ok, red: null, output: green.ok ? '' : tail(green.output, 15) }
 
   if (green.ok) {
     const targets = targetMutants(mutation, question.about, ledger.equivalent)
@@ -68,7 +76,8 @@ function prove({ repo, out, id, file, command }) {
       const full = join(copy.path, path)
       const original = readFileSync(full, 'utf8')
       writeFileSync(full, applyMutant(original, mutant))
-      const broken = sh(command)
+      // A break that makes the test hang is caught, as the test strength check counts it.
+      const broken = proof.start()
       writeFileSync(full, original)
       const entry = caughtByKey.get(key) ?? { caught: 0, total: 0 }
       entry.total += 1
@@ -84,7 +93,7 @@ function prove({ repo, out, id, file, command }) {
   }
 
   // The proof leaves the copy as it came, so later measurements see only the repository's own tests.
-  rmSync(target, { force: true })
+  proof.remove()
   question.test = test
   writeJson(join(repo, LEDGER), ledger)
 
@@ -96,7 +105,7 @@ function prove({ repo, out, id, file, command }) {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   try {
     const repo = arg('repo')
     const out = arg('out')

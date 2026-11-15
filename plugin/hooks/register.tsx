@@ -156,7 +156,10 @@ function watch($: EngineInterface): void {
   stopWatching = () => timer.cancel()
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  // Whether a run opens the pane is the user's choice (the plugin's settings), never Imagineer's.
+  const opensPaneOnRun = options.openPaneOnRun === true
+
   // Quiet in repos that do not use Imagineer: only watch when a results
   // file is already there, or when an Imagineer command runs.
   on('session.start', async ($, e, next) => {
@@ -183,16 +186,17 @@ export const register: Register = on => {
     return opened.isPlaced ? {} : { text: summaryText(summary) }
   })
 
-  // /imagineer:inspect and /imagineer:build: watched, then passed on. The pane opens unasked
-  // only where it sits beside the transcript; elsewhere the band's Details button opens it.
-  // Inspect opens it from the start, so each area fills in as it is measured.
+  // /imagineer:inspect and /imagineer:build: watched, then passed on. The pane opens only when
+  // the user turned on openPaneOnRun, and then only where it sits beside the transcript;
+  // otherwise the band's Details button or /imagineer:status opens it.
+  // Inspect then opens it from the start, so each area fills in as it is measured.
   for (const command of ['imagineer:inspect', 'imagineer:build']) {
     on('command.run', { command }, async ($, e, next) => {
       watch($)
       const summary = await refresh($)
       const isInspect = command === 'imagineer:inspect'
       if (isInspect) await update($, startingAtom, () => true)
-      if ((isInspect || summary.kind === 'results') && e.presentation.isFullscreen) {
+      if (opensPaneOnRun && (isInspect || summary.kind === 'results') && e.presentation.isFullscreen) {
         void $.ui.open({ id: PANE, title: TITLE })
       }
       return next(e)

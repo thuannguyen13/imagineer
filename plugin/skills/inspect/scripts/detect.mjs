@@ -7,7 +7,7 @@
 
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { listFiles, readJsonIf } from './lib.mjs'
+import { isMain, listFiles, readJsonIf } from './lib.mjs'
 
 const LOCKFILES = [
   ['package-lock.json', 'npm'],
@@ -110,7 +110,7 @@ export function detect(repo) {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   const repo = process.argv[2]
   if (!repo) {
     console.error('Usage: node detect.mjs <repo>')

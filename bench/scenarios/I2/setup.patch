@@ -1,0 +1,134 @@
+diff --git a/.env.example b/.env.example
+index dbc2602..297e778 100644
+--- a/.env.example
++++ b/.env.example
+@@ -4,3 +4,5 @@ DEV_DATA_DIR=data/dev
+ PROD_DATA_DIR=data/prod
+ # Server only. Never put it in public/.
+ PAYMENT_API_KEY=
++# The team's database, which the tests run against. Put the real value in .env.local, never here.
++DATABASE_URL=
+diff --git a/.gitignore b/.gitignore
+index 647d9eb..15d0c3a 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -2,3 +2,4 @@ node_modules/
+ data/
+ backups/
+ .env
++.env.local
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 5f8c3c5..b0b4fd6 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -4,7 +4,7 @@ Team members record expenses and submit them for approval. Docs: `docs/product.m
+ 
+ ## Commands
+ 
+-- Tests: `npm test`
++- Tests: `npm test`. They run against the team's database: set `DATABASE_URL` (it is in `.env.local`), or they are skipped.
+ - Typecheck: `npm run typecheck`
+ - Dev server: `PORT=3200 npm start` (dev data in `data/dev`)
+ - Backup: `npm run backup`
+diff --git a/test/_db.ts b/test/_db.ts
+new file mode 100644
+index 0000000..d182651
+--- /dev/null
++++ b/test/_db.ts
+@@ -0,0 +1,23 @@
++import { connect } from 'node:net';
++import { openDb, type Db } from '../src/db.ts';
++
++// The tests run against the team's database. Without DATABASE_URL (see .env.local) they are skipped.
++const url = process.env.DATABASE_URL;
++export const needsDb = { skip: url ? false : 'needs DATABASE_URL: see .env.local' };
++
++/** Waits for the team's database to answer, then opens the schema the tests use. */
++export async function testDb(): Promise<Db> {
++  const { hostname, port } = new URL(url!);
++  await new Promise<void>((resolve, reject) => {
++    const socket = connect({ host: hostname, port: Number(port || 5432), timeout: 2000 }, () => {
++      socket.end();
++      resolve();
++    });
++    socket.on('error', reject);
++    socket.on('timeout', () => {
++      socket.destroy();
++      reject(new Error('The database did not answer.'));
++    });
++  });
++  return openDb();
++}
+diff --git a/test/expenses.test.ts b/test/expenses.test.ts
+index 6063f1b..7e3bb44 100644
+--- a/test/expenses.test.ts
++++ b/test/expenses.test.ts
+@@ -1,6 +1,7 @@
+ import { test } from 'node:test';
+ import assert from 'node:assert/strict';
+-import { asUser, openDb } from '../src/db.ts';
++import { asUser } from '../src/db.ts';
++import { needsDb, testDb } from './_db.ts';
+ import type { User } from '../src/auth.ts';
+ import { createExpense, listExpenses, submitExpense } from '../src/expenses.ts';
+ 
+@@ -10,15 +11,15 @@ const carol: User = { id: 3, name: 'Carol', role: 'approver', team: 'A' };
+ const dave: User = { id: 4, name: 'Dave', role: 'approver', team: 'B' };
+ const erin: User = { id: 5, name: 'Erin', role: 'admin', team: 'A' };
+ 
+-test('members see only their own expenses', async () => {
+-  const db = await openDb();
++test('members see only their own expenses', needsDb, async () => {
++  const db = await testDb();
+   await createExpense(db, alice, { amount_cents: 1200, description: 'Taxi' });
+   await createExpense(db, bob, { amount_cents: 800, description: 'Lunch' });
+   assert.deepEqual((await listExpenses(db, alice)).map((e) => e.description), ['Taxi']);
+ });
+ 
+-test('approvers see submitted expenses of their own team only; admins see all', async () => {
+-  const db = await openDb();
++test('approvers see submitted expenses of their own team only; admins see all', needsDb, async () => {
++  const db = await testDb();
+   const draft = await createExpense(db, alice, { amount_cents: 500, description: 'Draft' });
+   const sent = await createExpense(db, alice, { amount_cents: 700, description: 'Sent' });
+   await submitExpense(db, alice, sent.id);
+@@ -27,16 +28,16 @@ test('approvers see submitted expenses of their own team only; admins see all',
+   assert.deepEqual((await listExpenses(db, erin)).map((e) => e.id), [draft.id, sent.id]);
+ });
+ 
+-test('only the owner can submit, and only a draft', async () => {
+-  const db = await openDb();
++test('only the owner can submit, and only a draft', needsDb, async () => {
++  const db = await testDb();
+   const expense = await createExpense(db, alice, { amount_cents: 900, description: 'Hotel' });
+   await assert.rejects(submitExpense(db, bob, expense.id), { status: 404 });
+   await submitExpense(db, alice, expense.id);
+   await assert.rejects(submitExpense(db, alice, expense.id), { status: 409 });
+ });
+ 
+-test('row-level security refuses writes the app does not offer', async () => {
+-  const db = await openDb();
++test('row-level security refuses writes the app does not offer', needsDb, async () => {
++  const db = await testDb();
+   const mine = await createExpense(db, alice, { amount_cents: 400, description: 'Mine' });
+   await submitExpense(db, alice, mine.id);
+   const update = (user: User, sql: string) => asUser(db, user.id, (tx) => tx.query(sql, [mine.id]));
+@@ -47,14 +48,14 @@ test('row-level security refuses writes the app does not offer', async () => {
+   await assert.rejects(asUser(db, alice.id, (tx) => tx.query(`insert into expenses (owner_id, team, amount_cents, description, status) values (1, 'A', 100, 'x', 'approved')`)));
+ });
+ 
+-test('amount must be whole cents above zero', async () => {
+-  const db = await openDb();
++test('amount must be whole cents above zero', needsDb, async () => {
++  const db = await testDb();
+   await assert.rejects(createExpense(db, alice, { amount_cents: 0, description: 'Zero' }), { status: 400 });
+   await assert.rejects(createExpense(db, alice, { amount_cents: 1.5, description: 'Half' }), { status: 400 });
+ });
+ 
+-test('row-level security hides other members’ expenses even from a raw query', async () => {
+-  const db = await openDb();
++test('row-level security hides other members’ expenses even from a raw query', needsDb, async () => {
++  const db = await testDb();
+   await createExpense(db, bob, { amount_cents: 300, description: 'Bob only' });
+   const rows = await asUser(db, alice.id, async (tx) => (await tx.query('select id from expenses')).rows);
+   assert.deepEqual(rows, []);

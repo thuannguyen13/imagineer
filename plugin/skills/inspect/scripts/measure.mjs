@@ -13,12 +13,12 @@
 // checks, fallow, security and stryker reuse an earlier run's result when it measured the same
 // commit with the same Imagineer and tool versions, and say so; --fresh measures again.
 
-import { mkdtempSync, rmSync, writeFileSync, existsSync, copyFileSync, readdirSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync, existsSync, copyFileSync, readFileSync, readdirSync } from 'node:fs'
 import { availableParallelism, tmpdir } from 'node:os'
-import { basename, dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { detect } from './detect.mjs'
-import { arg, PINNED, projectEnv, readJson, readJsonIf, run, runGroup, strykerFailure, tail, writeJson } from './lib.mjs'
+import { arg, isEnvFile, isEnvLike, isMain, PINNED, projectEnv, readJson, readJsonIf, run, runGroup, strykerFailure, tail, withDatabasePointedNowhere, writeJson } from './lib.mjs'
 
 const INSTALL = {
   npm: lock => (lock ? ['npm', 'ci', '--no-audit', '--no-fund'] : ['npm', 'install', '--no-audit', '--no-fund']),
@@ -99,6 +99,39 @@ export function removeLeftCopies(out) {
   return removed
 }
 
+/**
+ * A commit can carry env files, an install can write more, and the project's own tests load them.
+ * In the copy their database settings point nowhere (the examples' too: a test setup copies them into place), so no test reaches a database through them;
+ * every other setting stays, so the project's own test settings still work. A link is never
+ * followed: an env file that is one is removed, and a linked folder is not entered, so nothing
+ * outside the copy is read or written. Returns each file with the names replaced, never their values.
+ */
+export function cleanEnvFiles(root) {
+  const cleaned = []
+  const walk = dir => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name)
+      const file = relative(root, path)
+      if (entry.isDirectory()) {
+        if (entry.name !== 'node_modules' && entry.name !== '.git') walk(path)
+      } else if (isEnvLike(entry.name)) {
+        if (entry.isSymbolicLink()) {
+          rmSync(path, { force: true })
+          cleaned.push({ file, removed: true, replaced: [] })
+        } else if (entry.isFile()) {
+          const { text, replaced } = withDatabasePointedNowhere(readFileSync(path, 'utf8'))
+          if (!replaced.length) continue
+          writeFileSync(path, text)
+          // An example is cleaned too, and marked: it is not the project's own settings, so not worth telling the user about.
+          cleaned.push(isEnvFile(entry.name) ? { file, replaced } : { file, example: true, replaced })
+        }
+      }
+    }
+  }
+  walk(root)
+  return cleaned
+}
+
 function prepare(repo, out) {
   const left = removeLeftCopies(out)
   if (left.length) console.log(`Removed the throwaway ${left.length === 1 ? 'copy' : 'copies'} that run ${left.join(', ')} left behind.`)
@@ -113,10 +146,17 @@ function prepare(repo, out) {
   const path = mkdtempSync(join(tmpdir(), 'imagineer-'))
   const archive = run(['sh', '-c', `git -C "$1" archive HEAD | tar -x -C "$2"`, 'sh', repo, path])
   if (!archive.ok) throw new Error(`Could not copy the repository: ${tail(archive.stderr)}`)
+  const envFilesCleaned = cleanEnvFiles(path)
 
   const install = facts.isNodeProject
     ? run(INSTALL[facts.manager](facts.lockfile), { cwd: path, timeoutMs: 15 * 60_000, project: true })
     : { ok: false, seconds: 0, stderr: 'No package.json.' }
+  // Again after the install: its scripts can write an env file (a copy of the example, most often).
+  for (const entry of facts.isNodeProject ? cleanEnvFiles(path) : []) {
+    const earlier = envFilesCleaned.find(e => e.file === entry.file)
+    if (earlier) earlier.replaced.push(...entry.replaced)
+    else envFilesCleaned.push(entry)
+  }
   writeJson(join(out, 'copy.json'), {
     path,
     source: repo,
@@ -127,10 +167,15 @@ function prepare(repo, out) {
     install: { ok: install.ok, seconds: install.seconds, output: install.ok ? '' : tail(install.stderr || install.stdout) },
     // The project's code runs without the user's environment: the names left out, never their values.
     envLeftOut: projectEnv().dropped,
+    // The env files in the copy, and the database settings pointed nowhere in each there: names, never values.
+    envFilesCleaned,
     // What a later run on the same commit, with the same versions, may reuse from this one.
     key: measurementKey(head.stdout.trim(), facts),
   })
   console.log(`Copied ${head.stdout.trim()}${dirty ? ' (uncommitted changes not included)' : ''} to ${path}; install ${install.ok ? 'passed' : 'failed'}.`)
+  for (const { file, removed, replaced } of envFilesCleaned.filter(e => !e.example)) {
+    console.log(removed ? `${file} is a link: removed from the copy.` : `${file}: in the copy, ${replaced.join(', ')} ${replaced.length === 1 ? 'points' : 'point'} nowhere, so no test reaches that database.`)
+  }
 }
 
 function checks(out) {
@@ -320,7 +365,7 @@ function cleanup(out) {
 }
 
 // Run as a command (paths compared resolved, so spaces or a relative path do not stop it); loaded by a test, it only exports.
-if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+if (isMain(import.meta.url)) {
   const [step] = process.argv.slice(2)
   const out = arg('out')
   try {

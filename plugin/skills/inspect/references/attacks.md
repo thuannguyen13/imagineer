@@ -10,11 +10,12 @@ Try to break the app on purpose. Before the first round, regrade with `--status 
 
 Without a user, use the `default` it prints. Spawn the attacker with its `attacker` model.
 
-Each round, spawn the `imagineer:attacker` agent with the Agent tool (model: the `attacker` above) and give it, in its prompt: the copy's path (from `$O/copy.json`), `$O`, `$S`, the round number, the attack IDs to use (six per round, continuing from the last), what the app is for and its roles, the user's answers from the ledger, and the attacks already tried and the parts not yet attacked (`node $S/attack.mjs list --out $O`: `untested`). Point the next round at what is still untested first.
+Each round, spawn the `imagineer:attacker` agent with the Agent tool (model: the `attacker` above) and give it, in its prompt: the copy's path (from `$O/copy.json`), `$O` and `$S`, each written out in full (it can run nothing but `attack.mjs` and read nothing outside these), the round number, the attack IDs to use (six per round, continuing from the last), what the app is for and its roles, the user's answers from the ledger, and the attacks already tried and the parts not yet attacked (`node $S/attack.mjs list --out $O`: `untested`). Point the next round at what is still untested first.
 
 After each round:
 
 1. Run `node $S/attack.mjs list --out $O`. For each attack that broke through, read its test to confirm it is a real break, and add it as a check for the user (topic `permissions` or `data`): the attack's situation as the example, stopping before what happened ("Carol, an approver on team A, opens Dave's expense from team B and presses Approve"), outcomes such as "The app refuses" and "The expense is approved", and `today` the one the attack showed. The user decides; Inspect does not fix it.
+   Attacks it lists under `notRun` did not run (a test was skipped, most often for want of a database). They are not held: the grade lists them as not attacked yet, and so does your report, with the reason.
 2. Regrade with `--status running --step "Attack round <next>: trying to break permissions and data"` before the next round, or `--step "Cleaning up"` when the rounds are over.
 3. **Stop** when 2 rounds in a row find nothing new, after 4 rounds, or when the user says so. Ask before each round after the second.
 
