@@ -1,3 +1,5 @@
+> **Names since this was written:** the Structure area is now **Code quality** (0.3.0), and the grade's sections are called **areas** where people read them (`dimensions` stays the results file's field).
+
 > Research brief written by a Claude research agent on 2026-11-05 for the grading decision in [inspect-and-build.md](../proposals/inspect-and-build.md#grade). Claims about external systems link their sources; `[inferred]` marks the agent's own reasoning. The owner's decisions are recorded in the design doc, not here.
 
 # Grading a repository's trustworthiness: research brief for Imagineer

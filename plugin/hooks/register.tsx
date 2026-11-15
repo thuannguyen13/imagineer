@@ -1,7 +1,7 @@
 // Imagineer's mod: the grade pane, the status band above the prompt, and the
 // instant answer to /imagineer:status. It only reads the results file and
 // draws: it never writes files, runs processes, calls models or approves
-// tool calls. The grade itself is computed by Inspect and Build; this mod
+// tool calls. The grade itself is computed by Inspect; this mod
 // shows what the results file says and nothing else.
 
 import { atom, read, update } from 'claude-code'
@@ -21,6 +21,9 @@ import {
   MEASURED_LABEL,
   parseHead,
   progressBar,
+  targetBar,
+  CONDITION_MARK,
+  whoseShort,
   whose,
   PENDING_LABEL,
   QUESTIONS_PATH,
@@ -37,6 +40,9 @@ import {
   statusLine,
   summaryText,
 } from './results'
+
+// The finish conditions' goal column: the longest goal and two columns of space.
+const GOAL_WIDTH = 37
 
 const PANE = 'imagineer'
 const TITLE = `Imagineer ${VERSION}`
@@ -186,11 +192,11 @@ export const register: Register = (on, options) => {
     return opened.isPlaced ? {} : { text: summaryText(summary) }
   })
 
-  // /imagineer:inspect and /imagineer:build: watched, then passed on. The pane opens only when
+  // /imagineer:inspect: watched, then passed on. The pane opens only when
   // the user turned on openPaneOnRun, and then only where it sits beside the transcript;
   // otherwise the band's Details button or /imagineer:status opens it.
   // Inspect then opens it from the start, so each area fills in as it is measured.
-  for (const command of ['imagineer:inspect', 'imagineer:build']) {
+  for (const command of ['imagineer:inspect']) {
     on('command.run', { command }, async ($, e, next) => {
       watch($)
       const summary = await refresh($)
@@ -250,7 +256,53 @@ export const register: Register = (on, options) => {
     const bar = summary.run.bar
     const progress = bar && bar.progress.length > 0 ? bar : null
     const doneCount = progress ? progress.progress.filter(p => p.met).length : 0
+    // Each finish condition as what it is: a mark for its state and its goal, then beneath it the
+    // picture its kind calls for. A condition that cannot be measured says why, with no picture.
+    const condition = (step: NonNullable<typeof progress>['progress'][number]) => {
+      const state = step.state ?? (step.met ? 'met' : 'open')
+      const color = state === 'met' ? 'success' : state === 'blocked' ? 'warning' : undefined
+      const shown = state === 'open' || state === 'met'
+      const cells = step.kind === 'threshold' ? targetBar(step.value, step.target) : null
+      const lit = step.met ? 'success' : 'warning'
+      const dots = Math.max(0, Math.min(step.target, step.value ?? 0))
+      // One row: the mark, the goal in its own column, then what it calls for and the note, so every
+      // condition's detail starts at the same place.
+      return (
+        <Box flexDirection="row">
+          <Box width={2} flexShrink={0}>
+            <Text color={color} dimColor={state === 'pending'}>
+              {CONDITION_MARK[state]}
+            </Text>
+          </Box>
+          <Box width={GOAL_WIDTH} flexShrink={0}>
+            <Text wrap="truncate-end" dimColor={state === 'pending'}>
+              {step.goal}
+            </Text>
+          </Box>
+          {shown && cells && (
+            <Text>
+              <Text color={lit}>{cells.filled}</Text>
+              <Text dimColor>{cells.empty}</Text>
+              <Text>{cells.mark}</Text>
+              <Text color={lit}>{cells.over}</Text>
+              <Text dimColor>{`${cells.rest}  `}</Text>
+            </Text>
+          )}
+          {shown && step.kind === 'streak' && (
+            <Text>
+              <Text color={lit}>{'● '.repeat(dots)}</Text>
+              <Text dimColor>{`${'○ '.repeat(step.target - dots)} `}</Text>
+            </Text>
+          )}
+          <Text color={state === 'blocked' ? 'warning' : undefined} dimColor={state !== 'blocked'} wrap="truncate-end">
+            {step.note}
+          </Text>
+        </Box>
+      )
+    }
     const bars = progress?.progress.map(step => {
+      if (step.kind) return condition(step)
+      // Results from before 0.5.0: their numbers as bars.
       const cells = progressBar(step.done, step.total)
       return (
         <Box flexDirection="row">
@@ -272,16 +324,21 @@ export const register: Register = (on, options) => {
         </Box>
       )
     })
-    const progressTitle = progress ? `Inspect's progress · ${doneCount} of ${progress.progress.length} done` : ''
+    const isConditions = Boolean(progress?.progress.some(step => step.kind))
+    const progressTitle = progress ? (isConditions ? `To finish Inspect · ${doneCount} of ${progress.progress.length} done` : `Inspect's progress · ${doneCount} of ${progress.progress.length} done`) : ''
 
     const header = isRunning ? (
       <Box flexDirection="column" borderStyle="round" borderColor="claude" paddingX={1}>
         <Box flexDirection="row" flexWrap="wrap">
           <Text color="claude">{`${SPINNER[frame % SPINNER.length]} `}</Text>
           <Text weight="semibold">{progressTitle || runningTitle(summary.run).replace(/^◌ /, '')}</Text>
-          {progress && <Text dimColor>{`   by the thresholds ${whose(progress)}`}</Text>}
+          {progress && <Text dimColor>{`   ${isConditions ? whoseShort(progress) : `by the thresholds ${whose(progress)}`}`}</Text>}
         </Box>
-        <Text dimColor>{summary.run.step || 'Working…'}</Text>
+        {/* In line with the title after the spinner, and with the bars' labels. */}
+        <Box flexDirection="row">
+          <Box width={2} flexShrink={0} />
+          <Text dimColor>{summary.run.step || 'Working…'}</Text>
+        </Box>
         {bars}
       </Box>
     ) : (
@@ -290,6 +347,8 @@ export const register: Register = (on, options) => {
           {overall.icon} {overall.word}
         </Text>
         <Text dimColor>{[summary.run.commit, tested ? `tested ${tested}` : ''].filter(Boolean).join(' · ')}</Text>
+        {/* What Inspect took the project to be, so a wrong guess is seen. */}
+        {summary.run.layout && <Text dimColor>{summary.run.layout}</Text>}
         {/* Out of date: said once, here, not on every area. */}
         {summary.isStale && (
           <Text color="warning">⟳ Your code has changed since. Run /imagineer:inspect for a current grade.</Text>
@@ -298,7 +357,7 @@ export const register: Register = (on, options) => {
           <Text color="success">{`✓ Inspect finished: every threshold ${whose(progress)} is met.`}</Text>
         ) : progress ? (
           <Box flexDirection="column" marginTop={1}>
-            <Text dimColor>{`${progressTitle} · by the thresholds ${whose(progress)}`}</Text>
+            <Text dimColor>{isConditions ? `${progressTitle}   ${whoseShort(progress)}` : `${progressTitle} · by the thresholds ${whose(progress)}`}</Text>
             {bars}
             <Text dimColor>Run /imagineer:inspect to continue.</Text>
           </Box>

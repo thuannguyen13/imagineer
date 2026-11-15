@@ -6,6 +6,10 @@
 //                          [--work <empty folder>] [--model claude-opus-5-5] [--budget 10] [--minutes 90]
 //   node bench/inspect.mjs <scenario> --check <evidence folder>      judge kept evidence again, at no cost
 //   node bench/inspect.mjs <scenario> --plugin … --out … --dry        prepare the project and stop
+//   node bench/inspect.mjs <scenario> --plugin … --out … --runs 3 [--baseline <older plugin folder>]
+//                          the scenario several times, and the baseline as many, side by side: one run
+//                          says little, as the same session can pass once and fail the next. Evidence in
+//                          <out>/<plugin|baseline>/<n>, the comparison in <out>/benchmark.json
 //
 // The plugin under test is a folder, so any version can be judged: a checkout, or
 // `git archive <ref> plugin | tar -x -C <folder>`.
@@ -107,6 +111,31 @@ export function evidence(out) {
   }
 }
 
+/**
+ * Tokens in a transcript, each reply counted once. Claude Code writes a reply in several entries
+ * that share its request (one per content block), and only the last carries its final output count,
+ * so adding them all up overcounts several times (as Anthropic's session-report plugin found).
+ */
+export function tokens(events) {
+  const last = new Map()
+  events.forEach((event, at) => {
+    const usage = event.message?.usage
+    if (!usage) return
+    last.set(event.requestId ?? event.message?.id ?? `at-${at}`, usage)
+  })
+  const sum = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0, replies: last.size }
+  for (const usage of last.values()) {
+    sum.input += usage.input_tokens ?? 0
+    sum.output += usage.output_tokens ?? 0
+    sum.cacheWrite += usage.cache_creation_input_tokens ?? 0
+    sum.cacheRead += usage.cache_read_input_tokens ?? 0
+  }
+  const read = sum.input + sum.cacheWrite + sum.cacheRead
+  // How much of what was read came from the cache: low means each turn paid for its context again.
+  sum.cacheHit = read ? Math.round((sum.cacheRead / read) * 100) / 100 : null
+  return sum
+}
+
 /** What a run cost and did, for the results file: nothing here is a verdict. */
 export function vitals(e) {
   const live = (e.attacks?.attacks ?? []).filter(a => !a.void)
@@ -121,6 +150,8 @@ export function vitals(e) {
     grade: e.results?.overall?.state ?? null,
     attacks: { held: live.filter(a => a.result === 'held').length, broke: live.filter(a => a.result === 'broke').length, notRun: (e.attacks?.notRun ?? []).length, setAside: (e.attacks?.attacks ?? []).filter(a => a.void).length },
     refusals: e.denials.length,
+    // Where the tokens went: the Lead's own turns and each agent's, every reply counted once.
+    tokens: { lead: tokens(e.transcript.filter(x => !x.parent_tool_use_id)), agents: e.agentTranscripts.map(tokens) },
   }
 }
 
@@ -132,19 +163,73 @@ async function judge(id, out) {
   writeFileSync(join(out, 'verdict.json'), JSON.stringify(verdict, null, 2) + '\n')
   for (const c of checks) console.log(`${c.pass ? 'PASS' : 'FAIL'}  ${c.name}${c.detail ? `: ${c.detail}` : ''}`)
   console.log(`${verdict.pass ? 'PASS' : 'FAIL'}  ${id}  ${JSON.stringify(verdict.vitals)}`)
-  return verdict.pass
+  return verdict
+}
+
+const stats = values => {
+  const xs = values.filter(v => typeof v === 'number' && Number.isFinite(v))
+  if (!xs.length) return null
+  const mean = xs.reduce((a, b) => a + b, 0) / xs.length
+  const sd = xs.length > 1 ? Math.sqrt(xs.reduce((a, b) => a + (b - mean) ** 2, 0) / (xs.length - 1)) : 0
+  return { mean: Math.round(mean * 100) / 100, sd: Math.round(sd * 100) / 100, n: xs.length }
+}
+
+/**
+ * Several runs of one plugin, summed up: how often each check passed, and cost, time and turns as
+ * mean ± standard deviation. Nothing here is a verdict on its own; side by side with a baseline it is.
+ */
+export function summarize(verdicts) {
+  const names = [...new Set(verdicts.flatMap(v => v.checks.map(c => c.name)))]
+  return {
+    runs: verdicts.length,
+    passed: verdicts.filter(v => v.pass).length,
+    checks: Object.fromEntries(names.map(name => [name, `${verdicts.filter(v => v.checks.find(c => c.name === name)?.pass).length}/${verdicts.length}`])),
+    costUsd: stats(verdicts.map(v => v.vitals?.costUsd)),
+    minutes: stats(verdicts.map(v => v.vitals?.minutes)),
+    turns: stats(verdicts.map(v => v.vitals?.turns)),
+  }
+}
+
+/** The plugin under test against the baseline, from their summaries: what changed, check by check. */
+export function compare(current, baseline) {
+  const delta = key => (current[key] && baseline[key] ? Math.round((current[key].mean - baseline[key].mean) * 100) / 100 : null)
+  const checks = Object.keys({ ...current.checks, ...baseline.checks }).filter(name => current.checks[name] !== baseline.checks[name])
+  return { passed: `${current.passed}/${current.runs} against ${baseline.passed}/${baseline.runs}`, checksThatDiffer: Object.fromEntries(checks.map(name => [name, `${current.checks[name] ?? '–'} against ${baseline.checks[name] ?? '–'}`])), costUsd: delta('costUsd'), minutes: delta('minutes'), turns: delta('turns') }
 }
 
 async function main() {
   const id = process.argv[2]
   const scenario = join(BENCH, 'scenarios', id ?? '')
   if (!id || !existsSync(join(scenario, 'prompt.txt'))) throw new Error('Usage: node bench/inspect.mjs <scenario> --plugin <plugin folder> --out <evidence folder>')
-  if (arg('check')) return (await judge(id, resolve(arg('check')))) ? 0 : 1
+  if (arg('check')) return (await judge(id, resolve(arg('check')))).pass ? 0 : 1
 
   const plugin = resolve(arg('plugin') ?? '')
   const out = resolve(arg('out') ?? '')
   if (!arg('plugin') || !existsSync(join(plugin, '.claude-plugin', 'plugin.json'))) throw new Error('--plugin is the plugin folder under test (it holds .claude-plugin/plugin.json).')
   if (!arg('out')) throw new Error('--out is the folder the evidence is kept in.')
+  const runs = Number(arg('runs') ?? 1)
+  const baseline = arg('baseline') ? resolve(arg('baseline')) : null
+  if (baseline && !existsSync(join(baseline, '.claude-plugin', 'plugin.json'))) throw new Error('--baseline is an older plugin folder (it holds .claude-plugin/plugin.json).')
+  if ((runs > 1 || baseline) && arg('work')) throw new Error('--work names one folder, for one run: leave it out with --runs or --baseline.')
+  if (runs === 1 && !baseline) return (await runOnce(id, scenario, plugin, out)).pass ? 0 : 1
+
+  // Several runs, the baseline's between them, so a change in the service hits both alike.
+  const verdicts = { plugin: [], baseline: [] }
+  for (let n = 1; n <= runs; n += 1) {
+    for (const [label, folder] of [['plugin', plugin], ...(baseline ? [['baseline', baseline]] : [])]) {
+      console.log(`\n${label} run ${n} of ${runs}`)
+      verdicts[label].push(await runOnce(id, scenario, folder, join(out, label, String(n))))
+    }
+  }
+  const benchmark = { scenario: id, plugin: summarize(verdicts.plugin), ...(baseline ? { baseline: summarize(verdicts.baseline) } : {}) }
+  if (baseline) benchmark.compared = compare(benchmark.plugin, benchmark.baseline)
+  writeFileSync(join(out, 'benchmark.json'), JSON.stringify(benchmark, null, 2) + '\n')
+  console.log(`\n${JSON.stringify(benchmark.compared ?? benchmark.plugin, null, 2)}`)
+  return verdicts.plugin.every(v => v.pass) ? 0 : 1
+}
+
+/** One run of a scenario on one plugin folder: prepare, run, keep the evidence, judge it. */
+async function runOnce(id, scenario, plugin, out) {
   mkdirSync(out, { recursive: true })
   const target = join(arg('work') ? resolve(arg('work')) : mkdtempSync(join(tmpdir(), 'bench-inspect-')), 'app')
   const commit = prepare(scenario, target)
@@ -157,7 +242,7 @@ async function main() {
   if (process.argv.includes('--dry')) {
     wire?.close()
     console.log(`Prepared ${id} in ${target}; nothing run.`)
-    return 0
+    return { pass: true, checks: [], vitals: {} }
   }
   const model = arg('model') ?? 'claude-opus-5-5'
   const meta = { scenario: id, plugin: JSON.parse(readFileSync(join(plugin, '.claude-plugin', 'plugin.json'), 'utf8')).version, pluginFolder: plugin, model, budgetUsd: Number(arg('budget') ?? 10), commit, target, startedAt: new Date().toISOString() }
@@ -190,7 +275,7 @@ async function main() {
   const session = events(join(out, 'transcript.jsonl')).find(e => e.session_id)?.session_id
   mkdirSync(join(out, 'agents'), { recursive: true })
   for (const file of agentTranscripts(session)) cpSync(file, join(out, 'agents', file.split('/').pop()))
-  return (await judge(id, out)) ? 0 : 1
+  return judge(id, out)
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

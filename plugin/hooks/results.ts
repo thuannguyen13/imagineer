@@ -14,7 +14,7 @@ import type {
   Summary,
 } from '../types'
 
-/** Where Inspect and Build write their results, relative to the repo root. */
+/** Where Inspect writes its results, relative to the repo root. */
 export const RESULTS_PATH = '.claude/imagineer/results.json'
 
 /** The self-check's flags, written by /imagineer:feedback's check. */
@@ -44,6 +44,8 @@ const count = (value: unknown): number =>
 
 const oneOf = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T =>
   allowed.includes(value as T) ? (value as T) : fallback
+
+const oneOrNull = <T extends string>(value: unknown, allowed: readonly T[]): T | null => (allowed.includes(value as T) ? (value as T) : null)
 
 const unreadable = (reason: string): Summary => ({ kind: 'unreadable', reason })
 
@@ -78,12 +80,13 @@ function toRun(raw: unknown): Run {
   const run = isObject(raw) ? raw : {}
 
   return {
-    command: run.command === 'build' ? 'build' : 'inspect',
+    command: 'inspect',
     status: oneOf(run.status, RUN_STATUSES, 'done'),
     round: count(run.round),
     commit: text(run.commit),
     step: text(run.step),
     at: text(run.at),
+    layout: text(run.layout),
     bar: isObject(run.bar)
       ? {
           met: run.bar.met === true,
@@ -96,6 +99,12 @@ function toRun(raw: unknown): Run {
                 total: Math.max(1, count(p.total)),
                 met: p.met === true,
                 text: text(p.text),
+                kind: oneOrNull(p.kind, ['threshold', 'countdown', 'streak'] as const),
+                state: oneOrNull(p.state, ['met', 'open', 'blocked', 'pending'] as const),
+                goal: text(p.goal),
+                value: typeof p.value === 'number' && Number.isFinite(p.value) ? p.value : null,
+                target: count(p.target),
+                note: text(p.note),
               }))
             : [],
         }
@@ -274,6 +283,20 @@ export function whenTested(iso: string, now = new Date()): string {
  * A segmented bar of `width` cells for `done` of `total`, as its filled and empty parts, drawn in two
  * colours. The segments do not fill the line's height, so bars on consecutive rows stay apart.
  */
+/**
+ * A threshold drawn as what it is: today's share as a bar, with the target marked where it sits
+ * (`▰▰▰▰▰▰▰▱▱▱│▱▱` for 61% of an 80% target). Pieces, so each gets its own colour.
+ */
+export function targetBar(value: number | null, target: number, width = 12): { filled: string; empty: string; mark: string; over: string; rest: string } {
+  const at = Math.max(1, Math.min(width - 1, Math.round((target / 100) * width)))
+  const filled = Math.max(0, Math.min(width, Math.round(((value ?? 0) / 100) * width)))
+  const before = Math.min(filled, at)
+  return { filled: '▰'.repeat(before), empty: '▱'.repeat(at - before), mark: '│', over: '▰'.repeat(Math.max(0, filled - at)), rest: '▱'.repeat(width - Math.max(filled, at)) }
+}
+
+/** The mark for a condition's state: ✓ met, ○ not yet, ⊘ cannot be measured, ◌ not measured yet. */
+export const CONDITION_MARK = { met: '✓', open: '○', blocked: '⊘', pending: '◌' } as const
+
 export function progressBar(done: number, total: number, width = 12): { filled: string; empty: string } {
   const filled = total > 0 ? Math.round((Math.min(done, total) / total) * width) : 0
   return { filled: '▰'.repeat(filled), empty: '▱'.repeat(width - filled) }
@@ -283,8 +306,11 @@ export function progressBar(done: number, total: number, width = 12): { filled: 
 /** Whose thresholds they are, as the pane says it. */
 export const whose = (bar: { by?: 'you' | 'imagineer' }) => (bar.by === 'you' ? 'you set' : 'Imagineer suggests')
 
+/** Whose thresholds, as the short dim note after the finish header. */
+export const whoseShort = (bar: { by?: 'you' | 'imagineer' }) => (bar.by === 'you' ? 'your thresholds' : "Imagineer's suggested thresholds")
+
 export function finishLines(bar: { met: boolean; missing: string[]; by?: 'you' | 'imagineer' }): string[] {
-  if (bar.met) return [`✓ Finished, by the thresholds ${whose(bar)}: tests catch enough breaks, nothing is left to review, and two attack rounds in a row found nothing new.`]
+  if (bar.met) return [`✓ Finished, by the thresholds ${whose(bar)}: tests catch enough planted bugs, nothing is left to review, and two attack rounds in a row found nothing new.`]
   return [
     `Not finished yet. By the thresholds ${whose(bar)}, Inspect still needs:`,
     ...bar.missing.map(m => `  • ${m}`),
@@ -318,7 +344,7 @@ export const labelFor = (dimension: Dimension): { icon: string; word: string; co
   dimension.isPending ? PENDING_LABEL : STATE_LABEL[dimension.state]
 
 /** The pane's header while a run is under way, in place of the verdict. */
-export const runningTitle = (run: Run): string => `◌ ${run.command === 'build' ? 'Build' : 'Inspect'} is running`
+export const runningTitle = (_run: Run): string => '◌ Inspect is running'
 
 export const MEASURED_LABEL: Record<Measured, string> = {
   repo: "● the repo's own setup",
@@ -326,7 +352,6 @@ export const MEASURED_LABEL: Record<Measured, string> = {
   none: '○ not measured',
 }
 
-const COMMAND_WORD = { inspect: 'Inspecting', build: 'Building' } as const
 
 /** True while a run is under way, so the band has something to say. */
 export const isActive = (summary: Summary): summary is Results =>
@@ -334,7 +359,7 @@ export const isActive = (summary: Summary): summary is Results =>
 
 /** The band's one line, for example "Inspecting · round 2 · 3 questions waiting". */
 export function statusLine(results: Results): string {
-  const parts: string[] = [COMMAND_WORD[results.run.command]]
+  const parts: string[] = ['Inspecting']
   if (results.run.round > 0) parts.push(`round ${results.run.round}`)
   if (results.run.status === 'running' && results.run.step) parts.push(results.run.step)
   const waiting = results.questions.waiting
@@ -377,6 +402,7 @@ export function summaryText(summary: Summary): string {
     lines.push('Run /imagineer:feedback to record or share it.')
   }
   if (summary.run.commit) lines.push(`Measured at commit ${summary.run.commit}.`)
+  if (summary.run.layout) lines.push(`Read as: ${summary.run.layout}.`)
 
   return lines.join('\n')
 }

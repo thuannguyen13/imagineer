@@ -23,8 +23,6 @@ In Claude Code:
 | `/imagineer:status` | You want to see your project's grade and any questions waiting for you |
 | `/imagineer:feedback` | Imagineer got something wrong, or right, and you want to say so |
 
-Build, which made new features with tests, is turned off for now while Inspect learns to read any project reliably.
-
 ### Inspect: check what you have
 
 Run `/imagineer:inspect` in your project, ideally first, and again after big changes.
@@ -35,7 +33,7 @@ It never changes your code or your git history. It can offer tests and docs as n
 
 ### Status: see the grade
 
-Run `/imagineer:status` at any time. It opens a pane beside the chat, instantly and at no cost. Inspect doesn't open the pane by itself; to have it open with each run, turn on **Open the pane when Inspect or Build runs** in `/config`.
+Run `/imagineer:status` at any time. It opens a pane beside the chat, instantly and at no cost. Inspect doesn't open the pane by itself; to have it open with each run, turn on **Open the pane when Inspect runs** in `/config`.
 
 The pane grades your project area by area (tests, code quality, security, data safety and more) as **Strong**, **Weak**, **At risk** or **Not checked**, with evidence behind each. It also lists the questions Imagineer still needs you to answer and says whether Inspect is finished.
 

@@ -1,18 +1,22 @@
 #!/usr/bin/env node
 // PreToolUse settings hook: keeps each Imagineer agent to its role.
 //
-//   dev        writes code, never tests; may commit, never push or call GitHub
-//   qa         writes tests only; never commits, pushes or calls GitHub
-//   architect  writes only under .claude/imagineer/; never commits, pushes or calls GitHub
 //   attacker   runs one thing, Imagineer's attack script; reads only the throwaway copy, its
 //              run folder and Imagineer's scripts, never an env file; writes only its attack
 //              tests. So the app's code runs in one place: the copy, through attack.mjs.
+//   verifier   reads where the attacker reads; runs only Imagineer's questions script to record
+//              its ruling, and the attack script's read-only steps; writes nothing.
 //
-// Plugin agents ignore their own `hooks` frontmatter, so this runs for every
-// matching tool call in the session and acts only when `agent_type` names one
-// of these agents. Everyone else, the main session included, passes untouched.
+// Plugin agents ignore their own `hooks` frontmatter, so this runs for every matching tool call in
+// the session and acts only on Imagineer's own agents: Claude Code names a plugin's agent with the
+// plugin's prefix (`imagineer:attacker`), so a user's own `attacker`, or another plugin's, passes untouched.
+//
+// The main session (the Lead) is held to one rule, only while an Inspect run is in progress in its
+// folder: Inspect never changes the repository, so writing a file there outside .claude/imagineer/,
+// or a git command that writes, asks the user first. Adding proven tests or docs the user said yes
+// to is such a write, and the user confirms it.
 
-import { readFileSync, readdirSync } from 'node:fs'
+import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -25,19 +29,16 @@ const READ_TOOLS = new Set(['Read', 'Grep', 'Glob'])
 // Imagineer's own files, wherever the plugin is installed.
 const PLUGIN = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const ATTACK_SCRIPT = join(PLUGIN, 'skills', 'inspect', 'scripts', 'attack.mjs')
+const QUESTIONS_SCRIPT = join(PLUGIN, 'skills', 'inspect', 'scripts', 'questions.mjs')
 const GIT_WRITES = new Set(['commit', 'push', 'merge', 'rebase', 'cherry-pick', 'revert', 'am', 'pull', 'reset', 'checkout', 'switch'])
 const GIT_VALUE_OPTIONS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path'])
 
-export const isTestFile = path =>
-  /(^|\/)(test|tests|__tests__|spec|e2e)\//.test(path) || /\.(test|spec)\.[cm]?[jt]sx?$/.test(path)
-
-export const isImagineerFile = path => /(^|\/)\.claude\/imagineer\//.test(path)
 
 /** An attack test, where the attacker writes them: a run's `attacks` folder. Nothing else of a run is the attacker's to write. */
 export const isAttackTest = path => /(^|\/)\.claude\/imagineer\/runs\/[^/]+\/attacks\/./.test(path)
 
-/** The agent's short name: `imagineer:dev` and `dev` are both `dev`. */
-export const role = agentType => (agentType ?? '').split(':').pop()
+/** Imagineer's agent's short name (`imagineer:attacker` is `attacker`); empty for every other agent. */
+export const role = agentType => (/^imagineer:/.test(agentType ?? '') ? agentType.slice('imagineer:'.length) : '')
 
 /** Splits a shell command into simple commands, keeping quoted text whole. */
 export function segments(command) {
@@ -87,33 +88,6 @@ function gitSubcommand(words) {
   return rest[0] ?? null
 }
 
-/** Why a shell command is outside the role, or null. */
-export function blockedCommand(name, command) {
-  for (const raw of segments(command)) {
-    const words = program(raw)
-    if (!words.length) continue
-    const bin = words[0].split('/').pop()
-    if (bin === 'gh') return 'calls GitHub'
-    if (bin === 'git') {
-      const sub = gitSubcommand(words)
-      if (!GIT_WRITES.has(sub)) continue
-      if (name === 'dev' && sub === 'commit') continue
-      return `runs git ${sub}`
-    }
-  }
-  return null
-}
-
-/** Why writing this file is outside the role, or null. */
-export function blockedWrite(name, path) {
-  if (name === 'dev' && isTestFile(path) && !isImagineerFile(path)) return 'is a test file, and Dev never writes or edits tests'
-  if (name === 'qa' && !isTestFile(path) && !isImagineerFile(path)) return 'is not a test file, and QA writes only tests'
-  if (name === 'architect' && !isImagineerFile(path)) return 'is outside .claude/imagineer/, where the architect writes'
-  // Not the run's own records (the copy's path, the results of attacks): those are the scripts' to write.
-  if (name === 'attacker' && !isAttackTest(resolve('/', path))) return "is outside its run's attacks folder (.claude/imagineer/runs/<n>/attacks/), where the attacker writes"
-  return null
-}
-
 /**
  * Why the attacker may not run this command, or null. It runs Imagineer's attack script and nothing
  * else: a shell cannot be kept in the copy or away from a database by reading what it is asked to
@@ -125,6 +99,20 @@ export function blockedAttackerCommand(command, cwd = null) {
   const isAttackScript = words[0] === 'node' && words[1] && real(resolve(cwd ?? '/', words[1])) === real(ATTACK_SCRIPT)
   // Said without the script's path, which holds the user's home folder: the reason is kept for the self-check.
   return isAttackScript ? null : "runs something other than Imagineer's attack script (node <the scripts folder you were given>/attack.mjs run | void | untested | list | files | search). List the copy's files with its files step and search them with its search step"
+}
+
+/**
+ * Why the verifier may not run this command, or null. It judges code it reads; the only things it
+ * runs are recording its ruling (questions.mjs verdict) and listing or searching the copy (attack.mjs
+ * files, search, list). It runs none of the app's code.
+ */
+export function blockedVerifierCommand(command, cwd = null) {
+  const words = plainCall(command)
+  if (!words) return 'is more than one plain call. Give one command with every path written out: no $, pipes, && or redirects'
+  const script = words[0] === 'node' && words[1] ? real(resolve(cwd ?? '/', words[1])) : null
+  if (script === real(QUESTIONS_SCRIPT) && words[2] === 'verdict') return null
+  if (script === real(ATTACK_SCRIPT) && ['files', 'search', 'list'].includes(words[2])) return null
+  return "runs something other than recording a verdict (node <the scripts folder you were given>/questions.mjs verdict …) or looking around the copy (attack.mjs files | search | list)"
 }
 
 /** The throwaway copies of the runs kept in the session's folder, as each run recorded its own. */
@@ -169,10 +157,48 @@ export function blockedAttackerRead(toolName, input, cwd = null) {
   const places = [input.file_path || input.path || (rooted.length ? null : cwd || '.'), ...rooted].filter(Boolean)
   if (places.length && places.every(place => attackerMayRead(place, cwd))) return null
   const envFile = Boolean(envFileIn(input.file_path) ?? envFileIn(input.path) ?? envFileIn(pattern))
-  return { envFile, reason: "is outside the throwaway copy, the run folder and Imagineer's scripts, where the attacker reads. Give the copy's path" }
+  return { envFile, reason: "is outside the throwaway copy, the run folder and Imagineer's scripts, where Imagineer's agents read. Give the copy's path" }
 }
 
-const ROLES = new Set(['dev', 'qa', 'architect', 'attacker'])
+const ROLES = new Set(['attacker', 'verifier'])
+
+// A run whose results were last written longer ago than this was stopped, not paused: it holds nothing.
+const RUN_FRESH_MS = 12 * 60 * 60 * 1000
+const LEAD_GIT_WRITES = new Set([...GIT_WRITES, 'add', 'stash', 'clean', 'restore', 'tag', 'apply', 'mv', 'rm'])
+
+/** The Inspect run in progress in a folder: its results say running or waiting, written recently. */
+export function activeRun(cwd, now = Date.now()) {
+  if (!cwd) return null
+  const file = join(cwd, '.claude', 'imagineer', 'results.json')
+  try {
+    if (now - statSync(file).mtimeMs > RUN_FRESH_MS) return null
+    const run = JSON.parse(readFileSync(file, 'utf8')).run
+    return run?.command === 'inspect' && ['running', 'waiting'].includes(run.status) ? run : null
+  } catch {
+    return null
+  }
+}
+
+/** What the Lead is about to change in the repository during a run, in plain words, or null. */
+export function leadChange(payload) {
+  const cwd = payload.cwd
+  if (!activeRun(cwd)) return null
+  const input = payload.tool_input ?? {}
+  if (WRITE_TOOLS.has(payload.tool_name)) {
+    const target = resolve(cwd, input.file_path ?? input.notebook_path ?? '')
+    if (isUnder(target, cwd) && !isUnder(target, join(cwd, '.claude', 'imagineer'))) return `writes ${target.slice(cwd.length + 1)} in the repository`
+    return null
+  }
+  if (payload.tool_name === 'Bash') {
+    for (const raw of segments(input.command ?? '')) {
+      const words = program(raw)
+      if (words[0]?.split('/').pop() !== 'git') continue
+      const sub = gitSubcommand(words)
+      if (LEAD_GIT_WRITES.has(sub)) return `runs git ${sub}, which changes the repository`
+    }
+  }
+  return null
+}
 
 /** Why a tool call is outside the agent's role, and whether it was a reach for a database; null when it is fine. */
 export function judge(payload) {
@@ -186,25 +212,44 @@ export function judge(payload) {
     // A refused command that names an env file or a database is how an attack once ran against a real one: flagged apart.
     return { reason: `This command ${reason}.`, database: Boolean(envFileIn(command) || databaseProblem(command)) }
   }
-  if (name === 'attacker' && READ_TOOLS.has(payload.tool_name)) {
+  if (name === 'verifier' && payload.tool_name === 'Bash') {
+    const command = input.command ?? ''
+    const reason = blockedVerifierCommand(command, payload.cwd)
+    return reason ? { reason: `This command ${reason}.`, database: Boolean(envFileIn(command) || databaseProblem(command)) } : null
+  }
+  if (name === 'verifier' && WRITE_TOOLS.has(payload.tool_name)) return { reason: 'The verifier writes nothing: record a ruling with questions.mjs verdict.', database: false }
+  if ((name === 'attacker' || name === 'verifier') && READ_TOOLS.has(payload.tool_name)) {
     const blocked = blockedAttackerRead(payload.tool_name, input, payload.cwd)
     if (!blocked) return null
     if (!blocked.envFile) return { reason: `That ${blocked.reason}.`, database: false }
     return { reason: `That ${blocked.reason}. If an attack needs a database that is not there, record it as not attacked (attack.mjs untested).`, database: true, record: 'an env file outside the copy' }
   }
-  if (payload.tool_name === 'Bash') {
-    const reason = blockedCommand(name, input.command ?? '')
-    return reason ? { reason: `This command ${reason}. ${name === 'dev' ? 'Dev commits; the Lead pushes and opens the pull request.' : 'The Lead owns commits, pushes and GitHub.'}`, database: false } : null
-  }
-  if (WRITE_TOOLS.has(payload.tool_name)) {
+  if (name === 'attacker' && WRITE_TOOLS.has(payload.tool_name)) {
     const path = input.file_path ?? input.notebook_path ?? ''
-    const reason = blockedWrite(name, path)
-    return reason ? { reason: `${path} ${reason}.`, database: false } : null
+    // Not the run's own records (the copy's path, the results of attacks): those are the scripts' to write.
+    return isAttackTest(resolve('/', path)) ? null : { reason: `${path} is outside its run's attacks folder (.claude/imagineer/runs/<n>/attacks/), where the attacker writes.`, database: false }
   }
   return null
 }
 
 export const decide = payload => judge(payload)?.reason ?? null
+
+/** The hook's answer: refused for an agent outside its role, asked of the user for the Lead's change during a run. */
+export function hookAnswer(payload) {
+  const verdict = judge(payload)
+  if (verdict) return { verdict, output: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: verdict.reason } }
+  if (payload.agent_type) return null
+  const change = leadChange(payload)
+  if (!change) return null
+  return {
+    verdict: null,
+    output: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'ask',
+      permissionDecisionReason: `An Inspect run is in progress, and Inspect never changes your repository; this ${change}. Allow it only if you asked for it, such as adding the proven tests or docs.`,
+    },
+  }
+}
 
 if (isMain(import.meta.url)) {
   let payload = {}
@@ -213,13 +258,12 @@ if (isMain(import.meta.url)) {
   } catch {
     process.exit(0)
   }
-  const verdict = judge(payload)
-  if (verdict) {
+  const answer = hookAnswer(payload)
+  if (answer?.verdict) {
     // Keep a record for Imagineer's self-check: an agent stepping outside its role is a sign Imagineer went wrong.
+    const { verdict } = answer
     recordDenial(payload.cwd ?? process.cwd(), { agent: role(payload.agent_type), tool: payload.tool_name, ...(verdict.database ? { kind: 'database' } : {}), reason: verdict.record ?? verdict.reason })
-    process.stdout.write(
-      JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: verdict.reason } }),
-    )
   }
+  if (answer) process.stdout.write(JSON.stringify({ hookSpecificOutput: answer.output }))
   process.exit(0)
 }

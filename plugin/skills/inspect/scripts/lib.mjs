@@ -577,22 +577,6 @@ export function testStrengthResult(out) {
 }
 
 /** Every file under a folder, relative to it, skipping dependencies and build output. */
-export function listFiles(root, { skip = ['node_modules', '.git', 'dist', 'build', 'coverage', '.next', '.claude', 'reports', '.stryker-tmp'] } = {}) {
-  const out = []
-  const walk = dir => {
-    for (const name of readdirSync(dir)) {
-      if (skip.includes(name)) continue
-      const path = join(dir, name)
-      const stat = statSync(path, { throwIfNoEntry: false })
-      if (!stat) continue
-      if (stat.isDirectory()) walk(path)
-      else out.push(relative(root, path))
-    }
-  }
-  if (existsSync(root)) walk(root)
-  return out
-}
-
 export const arg = (name, fallback = null) => {
   const index = process.argv.indexOf(`--${name}`)
   return index === -1 ? fallback : process.argv[index + 1]
@@ -665,6 +649,86 @@ export function keepOutOfGit(dir) {
 export const DEFAULT_THRESHOLDS = { tests: 80, critical: 80 }
 
 const settingsPath = repo => join(repo, '.claude/imagineer/settings.json')
+
+/**
+ * The models Inspect's agents run on, the user's choice for every repository: Recommended gives the
+ * attacker and the verifier the strongest model, Budget a faster, cheaper one (attacks may miss more).
+ */
+export const MODEL_PRESETS = {
+  recommended: { attacker: 'opus', verifier: 'opus' },
+  budget: { attacker: 'sonnet', verifier: 'sonnet' },
+}
+const preferencesPath = () => join(process.env.IMAGINEER_HOME ?? join(homedir(), '.claude', 'imagineer'), 'preferences.json')
+
+/**
+ * How much of a run's work the user wants, for every repository: most of a run's Claude usage is the
+ * attacker's and the verifier's conversations, so the sizes differ in those. Quick runs no agents;
+ * Standard two rounds of four attacks; Thorough up to four rounds of six.
+ */
+export const RUN_SIZES = {
+  quick: { rounds: 0, attacksPerRound: 0, agents: false, models: 'budget' },
+  standard: { rounds: 2, attacksPerRound: 4, agents: true, models: 'budget' },
+  thorough: { rounds: 4, attacksPerRound: 6, agents: true, models: 'recommended' },
+}
+
+/** The saved run size, `{ size, rounds, attacksPerRound, agents, models }`, or null when the user has not chosen. */
+export function savedRunSize(path = preferencesPath()) {
+  const size = readJsonIf(path)?.runSize
+  return size in RUN_SIZES ? { size, ...RUN_SIZES[size] } : null
+}
+
+/** The run size to use: the saved one, else Standard. */
+export const runSize = (path = preferencesPath()) => savedRunSize(path) ?? { size: 'standard', ...RUN_SIZES.standard }
+
+/** Saves the user's run size; returns it. */
+export function saveRunSize(size, path = preferencesPath()) {
+  if (!(size in RUN_SIZES)) throw new Error(`Choose ${Object.keys(RUN_SIZES).join(', ')}.`)
+  writeJson(path, { ...readJsonIf(path), runSize: size })
+  return savedRunSize(path)
+}
+
+/** The saved choice, `{ preset, attacker, verifier }`, or null when the user has not chosen. A choice saved for Build before 0.5.0 still counts. */
+export function savedModels(path = preferencesPath()) {
+  const prefs = readJsonIf(path) ?? {}
+  if (prefs.models?.preset in MODEL_PRESETS) return { preset: prefs.models.preset, ...MODEL_PRESETS[prefs.models.preset] }
+  const old = prefs.buildModels
+  if (!old) return null
+  const preset = old.preset === 'budget' || old.attacker === 'sonnet' ? 'budget' : 'recommended'
+  return { preset, ...MODEL_PRESETS[preset] }
+}
+
+/** Saves the user's choice of preset; returns it. */
+export function saveModels(preset, path = preferencesPath()) {
+  if (!(preset in MODEL_PRESETS)) throw new Error(`Choose ${Object.keys(MODEL_PRESETS).join(' or ')}.`)
+  writeJson(path, { ...readJsonIf(path), models: { preset } })
+  return savedModels(path)
+}
+
+/** What the user said about this repository's layout: which folder is their app, which folders hold its code, where docs go. */
+export const loadLayoutChoices = repo => (repo ? readJsonIf(settingsPath(repo))?.layout : null) ?? {}
+
+/** Keeps the user's answer about the layout; `null` forgets one, `reset` forgets all. */
+export function saveLayoutChoices(repo, { app, docs, source, reset = false }) {
+  const path = settingsPath(repo)
+  const settings = readJsonIf(path) ?? {}
+  const next = reset ? {} : { ...settings.layout }
+  const clean = value => String(value).trim().replace(/^\.\//, '').replace(/\/+$/, '') || '.'
+  const inside = (name, value) => {
+    if (/(^|\/)\.\.(\/|$)/.test(String(value)) || String(value).startsWith('/')) throw new Error(`${name} is a folder inside the repository, not ${value}.`)
+    return clean(value)
+  }
+  for (const [name, value] of Object.entries({ app, docs, source })) {
+    if (value === undefined) continue
+    if (value === null) delete next[name]
+    // Source folders are a list, from the app's folder.
+    else next[name] = name === 'source' ? [].concat(value).flatMap(v => String(v).split(',')).filter(v => v.trim()).map(v => inside(name, v)) : inside(name, value)
+  }
+  if (Object.keys(next).length) settings.layout = next
+  else delete settings.layout
+  keepOutOfGit(join(repo, '.claude/imagineer'))
+  writeJson(path, settings)
+  return loadLayoutChoices(repo)
+}
 
 export function loadThresholds(repo) {
   const saved = repo ? readJsonIf(settingsPath(repo))?.thresholds : null

@@ -1,0 +1,13 @@
+{
+  "name": "action",
+  "private": true,
+  "main": "dist/index.js",
+  "scripts": {
+    "test": "node --test",
+    "typecheck": "tsc --noEmit",
+    "bundle": "ncc build src/index.ts -o dist --source-map"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}

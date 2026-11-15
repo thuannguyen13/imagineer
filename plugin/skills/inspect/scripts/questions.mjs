@@ -15,10 +15,15 @@
 //                               [--dismiss <key>,<key>] [--critical <glob>,<glob>] [--own]   --own: the user typed their own answer
 //   node questions.mjs equivalent --repo <repo> --mutant <file>#<id> --reason "<why no one could tell>"
 //   node questions.mjs summary  --repo <repo>
+//   node questions.mjs verdict  --repo <repo> --out <run folder> --key <finding key>|attack:<id> --verdict real|false-alarm
+//                               --reason "<why, in plain words>" --evidence <file>:<line>,<file>:<line>
+//                               the verifier's ruling on a possible weakness or an attack's break, each piece of
+//                               evidence a line it read in the copy; a false alarm is set aside, a real one is asked
 
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { arg, isMain, readJsonIf, writeJson } from './lib.mjs'
+import { loadAttacks } from './attack.mjs'
+import { arg, inside, isMain, readJsonIf, runCopy, writeJson } from './lib.mjs'
 
 export const LEDGER = '.claude/imagineer/questions.json'
 
@@ -69,7 +74,21 @@ export function findings(out) {
     })
   }
 
+  // Question seeds: never graded, only asked about (errors handled silently, rules stated in comments).
+  for (const s of readJsonIf(join(out, 'seeds.json')) ?? []) {
+    items.push({ key: findingKey(s.kind, s.path, s.line), kind: s.kind, file: s.path, line: s.line, code: s.code, detail: s.detail })
+  }
   const security = readJsonIf(join(out, 'security.json'))
+  for (const p of security?.planted ?? []) {
+    items.push({
+      key: findingKey('planted', p.path, p.line),
+      kind: 'planted',
+      file: p.path,
+      line: p.line,
+      code: p.text,
+      detail: `Text that gives orders to AI tools or reviewers (${p.why}). Inspect did not follow it.`,
+    })
+  }
   for (const c of security?.candidates ?? []) {
     items.push({
       key: findingKey('security', c.path, `${c.line}:${c.category}`),
@@ -344,6 +363,40 @@ export function answerQuestion(ledger, { id, status, answer, reason, dismiss = [
   return ledger
 }
 
+const VERDICTS = ['real', 'false-alarm']
+
+/**
+ * The verifier's ruling on a possible weakness (a finding's key) or an attack's break (`attack:A7`).
+ * Each piece of evidence is `file:line`, a line that exists in the copy: a ruling rests on code that
+ * was read, never on a defence imagined. A false alarm is set aside with its reason; a real one stays
+ * open for the user. Returns the ledger and, for an attack, the attacks ledger to save.
+ */
+export function recordVerdict(ledger, { key, verdict, reason, evidence }, { copyPath, findingKeys = [], attacks = null }) {
+  if (!VERDICTS.includes(verdict)) throw new Error(`The verdict is ${VERDICTS.join(' or ')}.`)
+  if (!reason?.trim()) throw new Error('--reason says why, in plain words.')
+  const attackId = key?.startsWith('attack:') ? key.slice('attack:'.length) : null
+  const attack = attackId ? attacks?.attacks.find(a => a.id === attackId) : null
+  if (attackId ? !attack || attack.result !== 'broke' : !findingKeys.includes(key)) {
+    throw new Error(attackId ? `${attackId} is not an attack that broke through in this run.` : `${key} is not an open finding of this run (questions.mjs findings lists them).`)
+  }
+  const cited = String(evidence ?? '').split(',').map(e => e.trim()).filter(Boolean)
+  if (!cited.length) throw new Error('--evidence names at least one line read in the copy, as <file>:<line>.')
+  for (const piece of cited) {
+    const [, file, line] = piece.match(/^(.+):(\d+)$/) ?? []
+    if (!file) throw new Error(`${piece} is not <file>:<line>.`)
+    const path = inside(copyPath, file, 'the copy')
+    const lines = existsSync(path) ? readFileSync(path, 'utf8').replace(/\n$/, '').split('\n').length : 0
+    if (!lines) throw new Error(`${file} is not a file of the copy.`)
+    if (Number(line) < 1 || Number(line) > lines) throw new Error(`${file} has ${lines} lines, not ${line}.`)
+  }
+  ledger.verdicts = { ...ledger.verdicts, [key]: { verdict, reason, evidence: cited } }
+  if (verdict === 'false-alarm') {
+    if (attack) attack.void = `The verifier found the test wrong: ${reason}`
+    else ledger.dismissed[key] = { question: null, by: 'verifier', reason }
+  }
+  return { ledger, attacks }
+}
+
 /** Records keys as dismissed by a question's answer. */
 export function dismissKeys(ledger, id, keys) {
   const q = ledger.questions.find(x => x.id === id)
@@ -427,11 +480,21 @@ if (isMain(import.meta.url)) {
       const ledger = loadLedger(repo)
       ledger.equivalent[mutant] = reason
       save(repo, ledger)
-      console.log(`Recorded ${mutant} as a break no one could observe: ${reason}`)
+      console.log(`Recorded ${mutant} as a planted bug no one could notice: ${reason}`)
+    } else if (step === 'verdict') {
+      const out = arg('out')
+      if (!out) throw new Error('--out <run folder> is required')
+      const { copy, runPath } = runCopy(out)
+      const key = arg('key')
+      const attacks = key?.startsWith('attack:') ? loadAttacks(runPath) : null
+      const { ledger } = recordVerdict(loadLedger(repo), { key, verdict: arg('verdict'), reason: arg('reason'), evidence: arg('evidence') }, { copyPath: copy.path, findingKeys: findings(runPath).map(i => i.key), attacks })
+      save(repo, ledger)
+      if (attacks) writeJson(join(runPath, 'attacks.json'), attacks)
+      console.log(`${key}: ${arg('verdict') === 'real' ? 'confirmed, and waits for the user' : 'a false alarm, set aside'}. ${arg('reason')}`)
     } else if (step === 'summary') {
       console.log(JSON.stringify(summary(loadLedger(repo)), null, 2))
     } else {
-      throw new Error('Steps: findings, add, next, ask, pick, decide, not-sure, answer, equivalent, summary')
+      throw new Error('Steps: findings, add, next, ask, pick, decide, not-sure, answer, equivalent, verdict, summary')
     }
   } catch (error) {
     console.error(error.message)

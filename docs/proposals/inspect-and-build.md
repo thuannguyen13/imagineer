@@ -1,15 +1,12 @@
-# Imagineer: Inspect and Build
+# Imagineer: Inspect
 
-**Status:** direction set by the owner on 2026-11-05. What Inspect checks in each area set on 2026-11-06 ([What Inspect checks](#what-inspect-checks)); parts marked *Planned* are not built yet. Supersedes the three-skill entry points in [skillset.md](../archive/skillset.md): guard, forge and ground become parts of these two commands. The failure research in skillset.md §1 still applies.
+**Status:** direction set by the owner on 2026-11-05. What Inspect checks in each area set on 2026-11-06 ([What Inspect checks](#what-inspect-checks)); parts marked *Planned* are not built yet. Supersedes the three-skill entry points in [skillset.md](../archive/skillset.md): guard, forge and ground became parts of Inspect and of Build, which was removed on 2026-11-15 ([decisions](../decisions.md)). The failure research in skillset.md §1 still applies.
 
 ## Purpose
 
 **Mission:** help people who dream up software turn it into real work they can trust, even with little or no technical knowledge.
 
-Imagineer makes AI-built software trustworthy without the user having to trust the AI. It does two things:
-
-1. **`/inspect`** an existing repo until it is hard to break.
-2. **`/build`** new work in a new or ongoing repo, to the same quality thresholds.
+Imagineer makes AI-built software trustworthy without the user having to trust the AI. **`/inspect`** checks an existing repo, asks the user what it should do, proves the answers and tries to break it, until it is hard to break. Imagineer reports what to fix; it does not change the code.
 
 **Audience:** people with little or no technical knowledge, and the owner (technical). Used by the owner only, for now.
 **Stack:** JavaScript and TypeScript web apps, in any layout and framework (see [Principles](#principles)).
@@ -20,12 +17,12 @@ Imagineer makes AI-built software trustworthy without the user having to trust t
 
 ## How each part is started
 
-The user types four commands. Everything else is internal.
+The user types three commands. Everything else is internal.
 
 | Part | Started by | How |
 |---|---|---|
-| Skills: `inspect`, `build`, `status`, `feedback` | The user | `/imagineer:inspect`, `/imagineer:build`, `/imagineer:status`, `/imagineer:feedback`. Inspect and Build set `disable-model-invocation: true`, so they run only when asked |
-| Agents: `architect`, `dev`, `qa`, Inspect's researchers | The Lead | The skill tells the Lead when to spawn each one. The user sees their results, never calls them |
+| Skills: `inspect`, `status`, `feedback` | The user | `/imagineer:inspect`, `/imagineer:status`, `/imagineer:feedback`. Inspect sets `disable-model-invocation: true`, so it runs only when asked |
+| Agents: `attacker`, `verifier` | The Lead | The skill tells the Lead when to spawn each one. The user sees their results, never calls them |
 | The mod | Claude Code, at session start | Always on while the plugin is installed. It reacts to events and the user uses what it draws |
 
 When a command runs, Claude Code fires a `command.run` event before the skill does anything. The mod uses it in two ways:
@@ -33,21 +30,21 @@ When a command runs, Claude Code fires a `command.run` event before the skill do
 | Command | The mod | The skill reaches Claude |
 |---|---|---|
 | `/imagineer:status` | Answers it: opens the grade pane | No: no turn, no cost |
-| `/imagineer:inspect`, `/imagineer:build` | Watches it: shows the band, then passes the command on. Opens the pane too only when the user turned on the plugin setting **Open the pane when Inspect or Build runs** (off by default) | Yes |
+| `/imagineer:inspect` | Watches it: shows the band, then passes the command on. Opens the pane too only when the user turned on the plugin setting **Open the pane when Inspect runs** (off by default) | Yes |
 
 ## Principles
 
 - **Evidence over claims.** A report written by an agent is not proof. Tests that are seen failing and then passing, tool results, and the user's answers are.
 - **Separation of duties.** Whoever writes code does not write its tests, and whoever writes tests does not write code.
 - **The user decides intent.** Agents never guess what the user meant when they can ask.
-- **Read the project; never assume it.** Imagineer works on any project in its stacks, whatever its layout, framework, package manager or CI. Every run starts from a scan of the project's structure, and each later step plans from what the scan found, never from a fixed folder, file name or tool. Where the scan cannot tell, Imagineer asks the user once and keeps the answer for that project. A default is used only when it is shown to the user as a default (like the 80% thresholds); it is never applied silently. *Planned:* the scan records a layout and every step reads it ([#29](https://github.com/thuannguyen13/imagineer/issues/29)).
-- **Leave no trace unless asked.** Inspect does not add files, dependencies or config to the user's repo, and never writes in its `.git`. Its own files live under `.claude/imagineer/`, kept out of git by a `.gitignore` inside that folder.
-- **The project's code runs without the user's credentials, and never against a database nobody set up for it.** Inspect and Build run the project's install, tests and attacks with only what tools need from the environment. A proof or an attack starts a test runner with no shell, in the run's own throwaway copy, and is refused when its command or its test names a database, an env file or the repository itself. The attacker runs only Imagineer's attack script and reads only the copy, its run folder and Imagineer's scripts. Env files in the copy keep their settings, with their database settings pointed nowhere. A test that did not run is neither a pass nor a break. Until Inspect starts a throwaway database of its own ([#32](https://github.com/thuannguyen13/imagineer/issues/32)), attacks that need one show as not attacked ([#26](https://github.com/thuannguyen13/imagineer/issues/26)).
+- **Read the project; never assume it.** Imagineer works on any project in its stacks, whatever its layout, framework, package manager or CI. Every run starts by reading how the project is set up, and each later step plans from what the scan found, never from a fixed folder, file name or tool. Where the scan cannot tell, Imagineer asks the user once and keeps the answer for that project. A default is used only when it is shown to the user as a default (like the 80% thresholds); it is never applied silently. *Since 0.5.0:* the scan records a layout from the committed files (the app, its source and tests, scripts by purpose, package manager, docs and agent files, CI) and Inspect's steps read it; the report and the pane name the layout used ([#29](https://github.com/thuannguyen13/imagineer/issues/29)).
+- **Leave no trace unless asked.** Inspect does not add files, dependencies or config to the user's repo, and never writes in its `.git`. Its own files live under `.claude/imagineer/`, kept out of git by a `.gitignore` inside that folder. *Since 0.5.0* this is held by a hook, not only by the skill's words: while a run is in progress, a write in the repository or a git command that changes it asks the user first (refused when no one is there), and the attacker cannot end a round without saying what it did not reach.
+- **The project's code runs without the user's credentials, and never against a database nobody set up for it.** Inspect runs the project's install, tests and attacks with only what tools need from the environment. A proof or an attack starts a test runner with no shell, in the run's own throwaway copy, and is refused when its command or its test names a database, an env file or the repository itself. The attacker runs only Imagineer's attack script and reads only the copy, its run folder and Imagineer's scripts. Env files in the copy keep their settings, with their database settings pointed nowhere. A test that did not run is neither a pass nor a break. Until Inspect starts a throwaway database of its own ([#32](https://github.com/thuannguyen13/imagineer/issues/32)), attacks that need one show as not attacked ([#26](https://github.com/thuannguyen13/imagineer/issues/26)).
   - *Not closed, and not closable by reading text:* a test that builds a path to the repository as it runs, code that falls back to a database of its own when a setting is absent, or a database on this machine that asks for no sign-in, reached by host and port. All need the project's code run with the file system and the network closed.
 
 ## `/inspect`
 
-**Goal:** keep trying to break the system, in every way Inspect knows, and turn what it finds into a grade that shows the owner where the codebase needs to improve. Along the way it asks the user what the app should do, until no question is left unresolved, because only the user can say whether a behaviour is a bug. The outcome is a stronger system with fewer hidden breaks, leaks and needlessly complex code, and a record of what the user wants that the next round, and Build, start from.
+**Goal:** keep trying to break the system, in every way Inspect knows, and turn what it finds into a grade that shows the user where the codebase needs to improve. Along the way it asks the user what the app should do, until no question is left unresolved, because only the user can say whether a behaviour is a bug. The outcome is a stronger system with fewer hidden breaks, leaks and needlessly complex code and a record of what the user wants that the next round starts from.
 
 ### Steps
 
@@ -55,15 +52,15 @@ When a command runs, Claude Code fires a `command.run` event before the skill do
 2. **Ask.** Turn every gap between what the code does and what it seems meant to do into a question for the user (format below).
 3. **Attack.** Try to break the system: permissions, data integrity, double submits, partial saves, errors, inputs. Every break that gets through becomes a question for the user and, once confirmed, a test that fails until it is fixed.
 4. **Repeat** from 2 until the finish thresholds are met.
-5. **Report, then offer Build.** Inspect never changes the code. At the end it lists the holes worth fixing and offers to start `/imagineer:build` for the ones the user picks; Build fixes them on a branch, with a pull request the user reviews. *Planned.*
+5. **Report.** Inspect never changes the code. At the end it lists the holes worth fixing, most consequential first, for the user or their developer to fix.
 
 ### Tools
 
 | Tool | Finds |
 |---|---|
 | Fallow | Duplicate code, dead code, complexity, circular dependencies |
-| Stryker | Mutation testing: code where a deliberate break is not caught by any test |
-| `npm audit` | Known-vulnerable packages the app ships with |
+| Stryker | Mutation testing: code where a planted bug is not caught by any test |
+| The package manager's audit (npm, pnpm, Yarn, Bun) | Known-vulnerable packages the app ships with |
 | *Planned:* gitleaks | Secrets in the files and in the git history: API keys, tokens, private keys, passwords. A pinned release, downloaded once into Imagineer's tools folder outside the repo and checked against its checksum, like Stryker |
 | *Planned:* fast-check | Property-based tests: many generated inputs, to prove an answer holds for every case, not a few picked ones |
 | *Planned:* c8 (Node's own coverage) | Code no test runs at all, as a second number beside test strength |
@@ -95,16 +92,18 @@ One section per area of the grade. *Today* is what Inspect does in 0.3.0; *Plann
 - *Today:* mutation testing with Stryker. Inspect plants small bugs in a throwaway copy (`>` becomes `>=`, a line is removed) and counts how many the tests catch. Coverage alone is not enough: a test can run every line and check nothing, which AI-written tests often do. Each user answer is proven by a test that must catch the planted bugs on the lines it is about.
 - *Planned:* property-based tests (fast-check) when proving answers, so "an expense needs a description" is tested against every kind of blank, not only `""`. Coverage (c8) as a second number that explains a low score: code no test even runs. Stryker's incremental mode, so a later run re-tests only what changed (the sales portal's run took 18 minutes).
 
-**Intention: does it do what the user meant?**
+**Matches your intent: does it do what the user meant?**
 
 - *Today:* a big-picture interview of up to 5 questions, then a question for each finding that matters, asked blind: the user says what should happen before seeing what the app does, and only a difference becomes "fix it or keep it?". Answers are kept, proven by tests, used by the attacks, and saved as docs when the repo has none.
+- *Since 0.5.0:* the big-picture questions are asked while test strength runs, when the user is most likely still there; and two kinds of place in the code seed blind questions, never graded: errors handled silently (dropped, only logged, or turned into an ordinary-looking answer) and rules stated only in comments (from Anthropic's pr-review-toolkit and code-modernization plugins).
 - *Planned:* **ask from more than one angle**, for answers about data, money and permissions, where a wrong guess costs most. The same intent is asked again later, from another side (another role, another example, the opposite case), to tell what the user really wants from an answer given in passing. Wording and general behaviour keep one question, so the user is not asked everything twice. Answers that disagree mark the intent as unclear: Inspect says so, asks once more, and writes no test on a guess until it is settled.
-- *Planned:* **a scaffold for repos with no docs**, filled in layer by layer (see [When the repo has no docs](#when-the-repo-has-no-docs)). Each round fills the gaps the last one left, and the confirmed picture is the foundation the next round of inspection, and Build, start from.
+- *Planned:* **a scaffold for repos with no docs**, filled in layer by layer (see [When the repo has no docs](#when-the-repo-has-no-docs)). Each round fills the gaps the last one left, and the confirmed picture is the foundation the next round of inspection starts from.
 
 **Security: can someone see or do what they shouldn't, or find what should stay secret?**
 
-- *Today:* Fallow's possible weaknesses, checked in the code or asked about; `npm audit`; attacks on permissions (a role doing what it must not, refusals that exist only in the interface).
+- *Today:* Fallow's possible weaknesses, checked in the code or asked about; the package manager's audit; attacks on permissions (a role doing what it must not, refusals that exist only in the interface). *Since 0.5.0:* the app's server entry points (API routes, route handlers, server actions, loaders, router routes) are listed from its code, and what the attacks reached is counted from the attack tests' code, so a way in no attack touched is shown, not taken on the attacker's word; the attacker's brief names where permission holes hide most often (every action on a record's ID, a check its neighbours have and it lacks, fields the caller must not choose). Both taken from Anthropic's security plugins. Each possible weakness and each attack that broke through is checked by a separate verifier agent before the user is asked, through three lenses (can an attacker reach it, what harm, what defence is in the way), citing lines of the copy that the script checks exist; a false alarm is set aside with its reason, a confirmed one becomes a question, and neither may rest on a defence nobody read (from Anthropic's code-review and security plugins: find, then verify separately). Also since 0.5.0: text in the project that gives orders to AI tools or reviewers ("ignore previous instructions", "skip this file", "verified secure") is listed and asked about, never followed: a planted line could otherwise close a question or steer an attack. The rule was taken from Anthropic's own security plugin, which reports such text as a finding; `bench/layouts/booby-trapped` holds the cases.
 - *Planned:* **secret scanning**, of the files and of the git history, since a key deleted last month is still in the history and still leaked. With gitleaks, run from Imagineer's tools folder, so nothing is installed in the repo or asked of the user; if it cannot be downloaded, the secret scan shows as not checked, with the reason, rather than a weaker scan. Also what those tools miss: committed `.env` files, secret-looking values in variables shipped to the browser (`NEXT_PUBLIC_`, `VITE_`), tokens written to logs, real credentials in test fixtures. Whether exposed on purpose or by accident, a found secret never appears in the pane, since the pane may be on a shared screen: the Security area shows At risk, and its evidence says only that a secret was found and to see Inspect's report. The report gives the file, the line and the kind of key, never the secret itself. Until this exists, Security reaches Weak at best.
+  - *How a found secret is handled* (decided 2026-11-15, from Anthropic's security and code-modernization plugins): the value is kept out by the scan's script, never by instruction: the evidence line of any finding of a hard-coded credential is blanked before it is written anywhere an agent or the pane reads. The report says what the key appears to unlock and whether it looks like a production or a test key, and recommends rotating it, since a key that reached the repository is already exposed, whatever the history says now. Test fixtures are in scope for this scan only (real keys end up there), while documented placeholders, local-development fallbacks (`process.env.KEY || 'dev-key'`) and analytics keys meant for the browser are not findings.
 
 **Data safety: could the user lose or mix up their data?**
 
@@ -114,7 +113,7 @@ One section per area of the grade. *Today* is what Inspect does in 0.3.0; *Plann
 **Code quality: is the code easy to change safely, and easy for a person to read?** (called Structure before 0.3.0)
 
 - *Today:* Fallow as one tool among several: dead code (unused files and exports, part of YAGNI), duplication (DRY), complexity, and its health score. Each finding is reviewed with the user or settled from the docs.
-- *Planned:* **readability as a main focus.** A code-review agent reads what tools cannot judge and explains each finding in plain words with a simpler shape: functions too long or too deeply nested, unclear names, clever code, abstractions with a single use, parameters never passed, options that never vary (the rest of YAGNI). ESLint's sonarjs rules give a second opinion on complexity. Inspect still changes no code: it reports, and the user, or Build, makes the change.
+- *Planned:* **readability as a main focus.** A code-review agent reads what tools cannot judge and explains each finding in plain words with a simpler shape: functions too long or too deeply nested, unclear names, clever code, abstractions with a single use, parameters never passed, options that never vary (the rest of YAGNI). ESLint's sonarjs rules give a second opinion on complexity. Inspect still changes no code: it reports, and the user makes the change.
 
 **Foundations: can someone else run and check it?**
 
@@ -191,14 +190,18 @@ Many repos built by prompting have no README, no CLAUDE.md and no docs. Then the
 4. **Never treat the code as intent.** Code written by prompting can be wrong, so documenting current behaviour as intended would bake in its bugs. Checks are asked blind for this reason: the user says what should happen before seeing what the code does.
 5. **Save what was confirmed.** With the user's agreement, asked once, Inspect writes the confirmed answers as short, plain docs in the repo: what the app is for, roles and permissions, the data model, and decisions. It adds a pointer in CLAUDE.md so later AI sessions read them. Anything not confirmed stays marked as inferred.
 
-The grade shows it: Matches your intent starts at ? Not checked, and Foundations is Weak until the docs exist. The docs Inspect writes are also what Build's Architect reads later.
+The grade shows it: Matches your intent starts at ? Not checked, and Foundations is Weak until the docs exist.
+
+### Run size
+
+*Since 0.5.0.* Most of a run's Claude usage is its agents' conversations, and people on smaller plans run out. The user chooses once, for every repository: **Quick check** (measure and the big-picture questions; no agents), **Standard** (questions, proofs and two attack rounds of four; the faster model by default), **Thorough** (up to four rounds of six; the strongest model by default). Unchosen, a run is Standard. Every size also wastes less: the scan works out how to run one test in the project and hands it to the attacker and to proofs, the first setup that ran an attack is reused by the rounds after, and a later run aims first at the ways in that changed since the last run that attacked, or were never reached. Planned: usage shown per round, with a limit the user sets.
 
 ### Finish thresholds
 
 Inspect is finished when all of these hold. They are Imagineer's suggestion, not a standard, and the pane says so:
 
 - Fallow reports no unresolved findings.
-- Stryker catches at least **80%** of breaks in the inspected code (the bench app is at 33%). 80% is a starting point, not a standard ([what it rests on](../research/grading.md#21b-what-the-80-rests-on-2026-11-07)): the user can set their own per repository, in words or with `--tests` and `--critical`, kept in `.claude/imagineer/settings.json` for Inspect and Build. The pane then says "the thresholds you set".
+- Stryker catches at least **80%** of breaks in the inspected code (the bench app is at 33%). 80% is a starting point, not a standard ([what it rests on](../research/grading.md#21b-what-the-80-rests-on-2026-11-07)): the user can set their own per repository, in words or with `--tests` and `--critical`, kept in `.claude/imagineer/settings.json` for that repository. The pane then says "the thresholds you set".
 - **2** attack rounds in a row find nothing new.
 - In code the user confirms as critical (money, data, permissions), every surviving mutant is killed by a test or explained in a recorded answer.
 
@@ -220,7 +223,7 @@ Imagineer is not marked validated until all of these hold, each with dated evide
 - Test strength measured on the sales portal: a real number, on its business-rule code, in reasonable time ([#28](https://github.com/thuannguyen13/imagineer/issues/28)).
 - A run with the database the project's tests expect, so test strength matches CI ([#32](https://github.com/thuannguyen13/imagineer/issues/32)).
 - A run the owner starts with `/imagineer:inspect` in their own project, from the released version.
-- Inspect fully measures several projects with different layouts, with no layout assumptions left ([#29](https://github.com/thuannguyen13/imagineer/issues/29)). This is also the condition for turning Build back on.
+- Inspect fully measures several projects with different layouts, with no layout assumptions left ([#29](https://github.com/thuannguyen13/imagineer/issues/29)).
 - The pane and band seen drawn in an interactive session in the Desktop app.
 
 ### Not planned
@@ -229,73 +232,20 @@ Imagineer is not marked validated until all of these hold, each with dated evide
 - A full architecture review on each change.
 - Copying each application's architecture into this repository.
 
-## `/build`
+## Build (removed)
 
-**Status:** turned off from 0.4.0 (decided 2026-11-08). Build stands on Inspect: it reads the project through Inspect's scan, learns intent from Inspect's questions and proves "done" with Inspect's test strength check. Until the scan reads any layout ([#29](https://github.com/thuannguyen13/imagineer/issues/29)) and test strength measures the right code in reasonable time ([#28](https://github.com/thuannguyen13/imagineer/issues/28)), Build cannot prove its work on projects like the sales portal. Its command and agents are kept in `docs/archive/build-parked/`, not installed; its script stays, because Inspect's attacker uses its model choice. Build comes back when Inspect fully measures several projects with different layouts (the bench app, the sales portal, a Vue or Svelte app, a monorepo) with no layout assumptions left.
-
-**Goal:** new or ongoing work that meets Inspect's thresholds from the start.
-
-| Role | Does | Never |
-|---|---|---|
-| **Lead** (the main session) | Talks to the user, runs the pipeline, keeps the records | Writes code or tests |
-| **Architect** | Reads the docs, the user's goal and the code. Designs ahead (data model, permissions, module boundaries) and specifies exact interfaces: names, routes, error codes | Asks Dev to build what is not needed yet |
-| **Dev** (one or more) | Implements to the Architect's spec, following known practice (no duplication, reuse shared code). Runs QA's tests | Writes or edits tests |
-| **QA** (one or more) | Writes tests from the Architect's spec, aiming to make Dev fail | Writes implementation code |
-
-### Models
-
-Claude only, for now. Each agent file sets its model with an alias (`opus`, `sonnet`), not an exact model ID, so agents move to new Claude releases without edits.
-
-| Role | Model | Why |
-|---|---|---|
-| Lead | The user's session | It is the main session, so no agent file sets it |
-| Architect | Opus | Its mistakes carry into every later step |
-| Dev | Sonnet; Opus for changes to data, money or permissions | Follows an exact spec; cheaper and faster when several run at once |
-| QA | Opus | The adversary: finding breaks takes the most reasoning |
-
-- **Dev and QA use different models**, so they share fewer blind spots.
-- **The report lists the model each agent used**, so runs can be compared on cost and quality.
-
-**The user chooses.** Cost depends on the user's Claude plan, so the table above is the default, not a rule. On the first `/build`, the Lead asks once, in plain language:
-
-```
-Which mix of models should Build use? You can change this any time.
-  1. Recommended: strongest models where mistakes cost the most (planning
-     and testing), a faster one for coding. Medium cost.
-  2. Budget: the faster model for every role. Lowest cost; the coder and
-     the tester share more blind spots, so expect more misses.
-  3. Maximum: the strongest model for every role. Highest cost and slowest.
-  Other: type your own, for example "Opus for planning, Sonnet for the rest".
-```
-
-| Preset | Architect | Dev | QA |
-|---|---|---|---|
-| Recommended | Opus | Sonnet (Opus for data, money, permissions) | Opus |
-| Budget | Sonnet | Sonnet | Sonnet |
-| Maximum | Opus | Opus | Opus |
-
-- The choice is saved **per user**, not per repo, because it follows the user's plan: a plugin user setting. A repo may suggest a preset, but the user's choice wins.
-- The Lead passes the chosen model when it spawns each agent; the agent files keep the Recommended model as their default.
-- If a chosen model is not available on the user's plan, the Lead uses the session's model for that role and says so in the report.
-
-### Rules
-
-- **Design ahead, build now.** The Architect shapes the parts that are expensive to change later, so future needs are easy to add; Dev builds only what is needed today.
-- **QA works from the spec, not the code**, so its tests cannot mirror the implementation. This needs the Architect's interfaces to be exact.
-- **Done** when QA's tests pass and the change meets Inspect's thresholds.
-- **No docs to read.** The Architect needs the user's intent. When the repo has no docs, Build first runs Inspect's big-picture interview and saves the answers, then plans. For a brand-new repo, that interview is the first step, and the Architect writes its decisions into the docs as it goes.
-- To keep the thresholds on every change, Build may offer to add the tools to the repo (dependency, config, CI check). Only with the user's agreement.
+`/imagineer:build`, which made new features with an Architect, Dev and QA agents to Inspect's thresholds, was turned off in 0.4.0 and removed on 2026-11-15 ([decisions](../decisions.md)). Its design and code are in the git history up to `v0.4.1`.
 
 ## Grade
 
-The user needs to see at a glance how trustworthy the repo is, and how that changes as Inspect and Build work. Imagineer shows it with a [mod](https://code.claude.com/docs/en/plugins/mods/overview): JavaScript in the plugin that Claude Code runs in its own process and that can draw in the interface.
+The user needs to see at a glance how trustworthy the repo is, and how that changes as Inspect works. Imagineer shows it with a [mod](https://code.claude.com/docs/en/plugins/mods/overview): JavaScript in the plugin that Claude Code runs in its own process and that can draw in the interface.
 
 ### The mod
 
 - **A pane beside the transcript** with two tabs, each with its own job. **Overview**: how the project is doing, the verdict and one row per area that opens to its evidence, plus a line when questions wait. **Questions**: what Imagineer still needs from the user (gaps first), and the record of their answers and what came of each. Readable without technical knowledge.
-- **A band above the prompt** with the one-line status while Inspect or Build runs, for example "Inspecting · round 2 · 3 questions waiting".
+- **A band above the prompt** with the one-line status while Inspect runs, for example "Inspecting · round 2 · 3 questions waiting".
 - **`/imagineer:status`** opens the pane at once, with no Claude turn and no usage spent. Mod command names cannot contain `:`, so the name comes from a small `status` skill in the plugin, and the mod answers that command before the skill reaches Claude (tested 2026-11-05: 0 turns, no cost). Where the mod cannot draw, such as a cloud session, it answers with the grade as text. If mods are turned off, the skill runs instead and reads the same results file.
-- **Data from a file, not from the agents' words.** Inspect and Build write each tool result and answer to a results file in the run folder; the mod reads that file and redraws. The mod never computes or invents a grade itself.
+- **Data from a file, not from the agents' words.** Inspect writes each tool result and answer to a results file in the run folder; the mod reads that file and redraws. The mod never computes or invents a grade itself.
 - **Questions drawn properly.** A mod can restyle the dialog Claude asks questions in, so Imagineer's questions get their own calm line and the engineers' detail above the dialog, with the type-your-own field kept.
 - **Read only.** The mod reads files and draws. It does not approve tool calls, run processes or call models, so what it does can be checked with `claude plugin validate` before installing.
 
@@ -305,7 +255,7 @@ The user needs to see at a glance how trustworthy the repo is, and how that chan
 
 Decided 2026-11-05 from the research in [docs/research/grading.md](../research/grading.md).
 
-**Why not one number.** Fallow gives the bench app 81 (B), yet Stryker shows its tests catch 30% of deliberate breaks and dev-only sign-in has no test. A single score or letter reads as "fine".
+**Why not one number.** Fallow gives the bench app 81 (B), yet Stryker shows its tests catch 30% of planted bugs and dev-only sign-in has no test. A single score or letter reads as "fine".
 
 **Six dimensions in two groups.**
 
@@ -349,7 +299,7 @@ No headline number or letter. Numbers are one click down, for the owner.
 
 ### Findings (planned; approved 2026-11-07)
 
-Today each area carries a summary sentence and a few loose lines of evidence, written differently by each part of Inspect. Findings replace those lines with **one list of everything Inspect found**, each finding in one shape with a status, so the pane, the report, Build and the self-check all read the same thing, and nothing found is lost between them.
+Today each area carries a summary sentence and a few loose lines of evidence, written differently by each part of Inspect. Findings replace those lines with **one list of everything Inspect found**, each finding in one shape with a status, so the pane, the report and the self-check all read the same thing, and nothing found is lost between them.
 
 **What a finding is.** One problem, in plain words, grouped by behaviour rather than by line: twenty planted bugs that slip through the deal-scoping code are one finding, not twenty.
 
@@ -401,7 +351,6 @@ Suspected, measured and confirmed are **open**; proven safe and decided are **cl
 
 - **The pane:** each area's row says how many open findings it has ("3 findings"); opening it lists the open ones, most severe first, each with its status word (✕ Confirmed, ! Measured, ? Suspected) and title, and counts the closed ones ("and 4 closed") rather than listing them.
 - **The report:** confirmed problems first, then measured, then suspected, then what needs a decision, each with its impact and evidence; then what was not checked.
-- **Build:** "report, then offer Build" offers to fix the open high and medium findings the user picks.
 - **The self-check:** a finding closed as proven that an attack later breaks is the grade contradiction it already looks for.
 
 **Secrets** follow the earlier decision: a secret is a finding like any other, but its title in the pane is only "A secret was found: see Inspect's report", and only the report names the file and the kind of key, never the secret.
@@ -433,7 +382,7 @@ The mod watches each run and flags signs that Imagineer itself went wrong. It de
 
 | Kind | Detected when |
 |---|---|
-| Rule broken | Dev writes a test file, QA writes implementation code, or a review agent tries to commit or push |
+| Rule broken | An agent steps outside its role: the attacker runs anything but the attack script or reads outside the copy, or the verifier writes |
 | Stuck | The round limit is reached without progress, or the same finding is reopened twice |
 | Tool trouble | Fallow or Stryker fails to run, or defaults were used although the repo has its own config |
 | Grade contradiction | A dimension was Strong, then a later test in that area fails |
@@ -449,7 +398,7 @@ The user's way to tell Imagineer it got something wrong: a missed problem, a que
 
 Either way, the Lead writes a feedback record:
 
-- the kind (from the table above, or miss, false alarm, praise) and the area (Inspect, Build, grade, mod)
+- the kind (from the table above, or miss, false alarm, praise) and the area (Inspect, grade, mod)
 - what Imagineer said or did, and what actually happened, as behaviour, never the user's code
 - Imagineer's version, and a fingerprint (kind, area and rule) so repeats of the same problem can be grouped
 
@@ -513,6 +462,9 @@ Report ──▶ Issue ──▶ Triage agent ──▶ Owner: accept? ──▶
 
 **Built in pieces:** flag cards with Send (intake); then the triage routine; then the improver.
 
+
+*Ideas for when the improver is built* (from Anthropic's skill-creator and math-proof plugins, 2026-11-15): hold back part of the bench scenarios from the improver and keep a change by its score on those, so it does not tune Imagineer to the scenarios it sees; judge what code cannot (are the questions in plain words?) by a blind side-by-side review of two versions' output against a rubric; and keep the question ledger as a history that is only added to, an answer changed by a new entry rather than rewritten, so the self-check can see answers that moved.
+
 ## Versioning
 
 ### Why it matters now
@@ -533,9 +485,9 @@ Semantic versioning in `plugin.json`, bumped in the pull request that changes wh
 At first every new check or option raised `y` and every merged pull request was released on its own, so the version reached 0.10.0 in two days. Those releases were folded into one baseline, `0.2.0` (2026-11-06), and the rules above apply from there, with releases batched (below).
 
 - `v0.1.0` is the three-skill plugin as it is on `main` today: tagged once, as the baseline the bench compares against.
-- `v0.2.0` is the baseline of the two-command design: Inspect, Build, the grade pane and Feedback, as validated by the first dry run (B6).
+- `v0.2.0` is the baseline of the two-command design: Inspect, Build (removed in 0.5.0), the grade pane and Feedback, as validated by the first dry run (B6).
 
-**From `1.0.0`**, after B6 validates Inspect and Build on a real project, the usual rules apply:
+**From `1.0.0`**, after Inspect is validated on real projects, the usual rules apply:
 
 | Bump | When |
 |---|---|
@@ -566,7 +518,3 @@ The mod needs Claude Code 2.1.287 or later. It checks the running version and, o
 
 - Health for Imagineer itself: proposed in [Improving Imagineer](#health-proposed-2026-11-14), with four decisions for the owner.
 
-- Who reviews Dev's code for design and duplication beyond Fallow. Proposed: the Architect reviews each round's diff against its own design, in a fresh spawn.
-- What decides when Dev runs on Opus. Proposed: the Architect marks each task that touches data, money or permissions.
-- How existing parts fold in. Proposed: forge's run folder, state file, finding IDs and reviewer hook into Build; ground's checklist and the Inspector idea into Inspect; guard's rules into Dev's practices. The old skills and agents were removed in 0.2.0; their text stays at tag `v0.1.0` for these phases to draw on.
-- When Build brings review agents back, a mod `tool.call` hook could replace the Python settings hook forge used up to 0.1.0 (`forge-reviewer-guard.py`, run on every Bash call), and give a destructive-command guard proceed and cancel buttons. A mod loads in every session once the plugin is installed, so an opt-in guard needs its own switch.

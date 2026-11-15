@@ -1,0 +1,7 @@
+{
+  "name": "@shop/ui",
+  "private": true,
+  "scripts": {
+    "test": "vitest run"
+  }
+}

@@ -14,7 +14,7 @@ Read `.claude/imagineer/results.json` in the repository root. Do not run any too
 - If its `schema` is not `1`, say which format it uses and that this version of Imagineer reads format 1, so the user should run `/imagineer:inspect` again.
 - Otherwise show, in plain language and in this order:
   1. The overall grade from `overall.state` and `overall.reason`.
-  2. Each dimension in `dimensions`: icon and word for its `state` (✓ Strong, ! Weak, ✕ At risk for `failing`, ? Not checked), its `name` and `summary`, how it was measured (`repo`: the repo's own setup, `default`: Imagineer's defaults, `none`: not measured), and "stale" or "claimed" when `stale` or `claimed` is true. Trust dimensions first, then care dimensions.
+  2. Each area (`dimensions` in the file): icon and word for its `state` (✓ Strong, ! Weak, ✕ At risk for `failing`, ? Not checked), its `name` and `summary`, how it was measured (`repo`: the repo's own setup, `default`: Imagineer's defaults, `none`: not measured), and "stale" or "claimed" when `stale` or `claimed` is true. Trust dimensions first, then care dimensions.
   3. How many questions are waiting (`questions.waiting`).
   4. The commit it was measured at (`run.commit`).
 
