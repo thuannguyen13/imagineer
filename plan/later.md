@@ -8,6 +8,12 @@ These are **candidates**, not commitments.
 - Full architecture review on each change.
 - Copying each application's architecture into this repository.
 
+## Health checks for Imagineer itself
+
+**Trigger:** met. Problems in Imagineer's own behaviour keep being found by the owner reading logs and by independent reviews, never by its own checks ([research](../docs/research/self-health.md), 2026-11-14).
+
+A regression suite for Inspect on the bench, vitals from every run, a wider self-check, and review as a rule with an end. Proposed in the design doc ([Health](../docs/proposals/inspect-and-build.md#health-proposed-2026-11-14)); it moves to Now when the owner has decided the budget, the models and where it runs.
+
 ## Destructive-command guard with buttons
 
 **Trigger:** users of Imagineer ask for protection against destructive commands (`rm -rf`, force pushes, database drops) in their own sessions.

@@ -393,6 +393,23 @@ Suspected, measured and confirmed are **open**; proven safe and decided are **cl
 
 Imagineer learns from its own runs, but never changes itself without review. Everything here is about Imagineer's own behaviour, never about the user's code.
 
+### Health (proposed 2026-11-14)
+
+*Proposed; the owner has not decided it.* The parts below learn from a problem after someone reports it. Health asks the earlier question: is Imagineer itself still doing its job, before a release and over time? Research, evidence and a trial of Claude Code's own plugin test runner: [self-health.md](../research/self-health.md).
+
+**Why.** So far the serious problems were found by the owner reading a run's log and by independent reviews, never by the self-check, the tests or the bench: attacks that ran against a real database ([#26](https://github.com/thuannguyen13/imagineer/issues/26)), a false 100% test strength, and about forty defects in the fix for #26 that its own tests passed. Imagineer's checks see only what Imagineer writes down about itself.
+
+**What, in this order:**
+
+1. **A regression suite for Inspect.** The bench, pointed at Inspect: small projects with one planted condition each (a clean one as the trap for false alarms, a permission hole, no tests, a tripwire env file, tests that skip without a database, another layout), run without a user before each release, each judged by a hidden check written as code that reads the run's results. A run that could not start is an error, never a result. It comes first: without it, neither the owner nor the improver below can show that a change is an improvement.
+2. **Vitals from every run.** A small record beside the results: time per step, attacker rounds and turns, attacks held, broken, not run and set aside, refusals, how questions were answered. A scorecard across runs answers, weakest first: does it run, is it honest, is it useful, is it affordable?
+3. **A wider self-check**, one flag for each failure already seen: every attack broke through; no attack ran; an agent ended without its report; nothing proven, or test strength not run, after several runs; most of an agent's turns refused.
+4. **Review as a rule, with an end.** A change to anything that guards the user's data or files is reviewed by a reviewer that has not seen the work, before it merges; stop after two rounds in a row with no finding about ordinary behaviour. At each release, read a sample of real transcripts, note the first failure in each, and turn a new kind of failure into a flag or a scenario.
+
+Claude Code's plugin test runner (`claude plugin eval`) started Inspect in a trial, but its sandbox has no working `git` and no network on the owner's machine, so it is not where the suite runs today. It may suit small checks later.
+
+**For the owner to decide:** a budget per release for the suite (about $15 to $25 for the scenarios above, by the cost of real runs so far), and whether a release waits for it; which models it runs on, pinned; where it runs; whether vitals can be shared as feedback records are, by the user's own hand.
+
 ### Self-check
 
 The mod watches each run and flags signs that Imagineer itself went wrong. It detects them from events and the results file, not from an agent's opinion:
@@ -440,6 +457,8 @@ No server, no background upload, nothing sent without the user seeing it.
 - **This was useful**, one click on a finished result, sends praise the same way; good results are evidence too.
 
 ### Triage and improvement (planned: automatic)
+
+*Waits for the regression suite in [Health](#health-proposed-2026-11-14):* the improver proves a change on the bench, and the bench has one Inspect scenario today.
 
 For the owner, in the Imagineer repository, not shipped in the plugin, so users never see it. It runs on its own as scheduled cloud agents (Claude Code routines), so it works while the owner's machine is off, and stops at two decisions that stay the owner's: which issues to act on, and which changes to merge.
 
@@ -519,6 +538,8 @@ At first every new check or option raised `y` and every merged pull request was 
 The mod needs Claude Code 2.1.287 or later. It checks the running version and, on an older one, falls back to text replies and says why.
 
 ## Open
+
+- Health for Imagineer itself: proposed in [Improving Imagineer](#health-proposed-2026-11-14), with four decisions for the owner.
 
 - Who reviews Dev's code for design and duplication beyond Fallow. Proposed: the Architect reviews each round's diff against its own design, in a fresh spawn.
 - What decides when Dev runs on Opus. Proposed: the Architect marks each task that touches data, money or permissions.
