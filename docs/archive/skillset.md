@@ -1,7 +1,7 @@
 # Imagineer Skillset — Proposal
 
 **Goal:** help people who build by prompting, and engineers, ground a product the way an experienced engineer would.
-**Status:** superseded on 2026-11-05 as the plugin's entry points by [inspect-and-build.md](inspect-and-build.md); the failure research in §1 still applies. Was: target design, decided 2026-10-28 (`plan/decisions.md`). `README.md` describes what exists today; work order is in `plan/now.md`.
+**Status:** superseded on 2026-11-05 as the plugin's entry points by [inspect-and-build.md](../proposals/inspect-and-build.md); the failure research in §1 still applies. Was: target design, decided 2026-10-28 (`plan/decisions.md`). `README.md` describes what exists today; work order is in `plan/now.md`.
 
 ---
 

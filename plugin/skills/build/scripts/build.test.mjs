@@ -93,7 +93,7 @@ test('the model choice covers Inspect\'s attacker, and a choice saved before it 
 test('the example question in the Architect\'s instructions passes Inspect\'s plain-language check', async () => {
   const { readFileSync } = await import('node:fs')
   const { addQuestions, emptyLedger } = await import('../../inspect/scripts/questions.mjs')
-  const text = readFileSync(new URL('../../../../parked/build/agents/architect.md', import.meta.url), 'utf8')
+  const text = readFileSync(new URL('../../../../docs/archive/build-parked/agents/architect.md', import.meta.url), 'utf8')
   const example = JSON.parse(text.match(/```json\n([\s\S]+?)\n```/)[1])
   assert.equal(addQuestions(emptyLedger(), [example]).questions[0].point, example.point)
 })
